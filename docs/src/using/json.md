@@ -1,11 +1,19 @@
 # JSON output
 
 `--format json` writes one object per lockfile, on one line, followed by a
-newline.
+newline. A directory holding both a `package-lock.json` and a `requirements.txt`
+produces two lines rather than an array, so the stream is newline-delimited JSON
+and a consumer reads it a line at a time:
 
 ```console
-$ ./target/release/stranger scan --format json fixtures/poisoned.package-lock.json
-{"source":"fixtures/poisoned.package-lock.json","ecosystem":"npm","packages":757,"direct":35,"transitive":722,"risk":75,"elapsed_ms":99,"findings":[{"rule":"slopsquat","severity":"critical","package":"chalck","version":"5.3.0","detail":"not in corpus · d=1 from \"chalk\" · root-only, no parent"},{"rule":"slopsquat","severity":"critical","package":"expres","version":"4.18.2","detail":"not in corpus · d=1 from \"express\" · root-only, no parent"},{"rule":"slopsquat","severity":"critical","package":"lodahs","version":"4.17.21","detail":"not in corpus · d=1 from \"lodash\" · root-only, no parent"}]}
+$ ./target/release/stranger scan --format json /tmp/mixed | jq -c '{source, packages, findings: (.findings|length)}'
+{"source":"/tmp/mixed/package-lock.json","packages":1,"findings":1}
+{"source":"/tmp/mixed/requirements.txt","packages":6,"findings":5}
+```
+
+```console
+$ ./target/release/stranger scan --format json fixtures/poisoned.requirements.txt
+{"source":"fixtures/poisoned.requirements.txt","ecosystem":"pypi","packages":6,"direct":6,"transitive":0,"risk":64,"elapsed_ms":27,"findings":[{"rule":"slopsquat","severity":"critical","package":"python-dateutils","version":"2.9.0","detail":"not in corpus · d=1 from \"python-dateutil\" · root-only, no parent"},{"rule":"slopsquat","severity":"critical","package":"requests-http","version":"1.0.2","detail":"not in corpus · d=2 from \"requests-html\" · root-only, no parent"},{"rule":"pinning","severity":"low","package":"flask","version":"","detail":"~=3.0 · capped at the major, still floats below the cap"},{"rule":"pinning","severity":"high","package":"numpy","version":"","detail":"no version specifier · resolves to whatever is newest at install time"},{"rule":"pinning","severity":"medium","package":"urllib3","version":"","detail":">=1.26 · a range, so the file does not say what installs"}]}
 ```
 
 ## The object
@@ -13,13 +21,17 @@ $ ./target/release/stranger scan --format json fixtures/poisoned.package-lock.js
 | field | type | what it is |
 |---|---|---|
 | `source` | string | the path as you gave it, not canonicalised |
-| `ecosystem` | string | `npm`, `pypi`, `crates.io` or `go`; only `npm` can appear today |
-| `packages` | number | entries in the lockfile, excluding the root project |
+| `ecosystem` | string | `npm`, `pypi`, `crates.io` or `go`; only the first two can appear today |
+| `packages` | number | third-party packages; workspace members are excluded |
 | `direct` | number | named by a manifest in this repository |
 | `transitive` | number | `packages - direct` |
 | `risk` | number | 0–100, weights summed and capped |
 | `elapsed_ms` | number | wall time for this scan, as the tool measured it |
-| `findings` | array | worst first, then alphabetical by package within a rule |
+| `findings` | array | worst rule first, then alphabetical by package within a rule |
+
+There is no workspace count in the JSON, though the human report prints one. It
+is recoverable from nothing else in the object, so a consumer that needs it needs
+the field added.
 
 ## A finding
 
@@ -28,23 +40,45 @@ $ ./target/release/stranger scan --format json fixtures/poisoned.package-lock.js
 | `rule` | string | `slopsquat`, `install-script`, `trivial`, `drift` or `pinning` |
 | `severity` | string | `low`, `medium`, `high` or `critical` |
 | `package` | string | the name as the lockfile spelled it |
-| `version` | string | may be empty, if the entry recorded none |
+| `version` | string | may be empty |
 | `detail` | string | why this fired, in the rule's own terms |
 
+`version` is empty in two cases that are worth knowing about. A `drift` finding
+is one per name across all its versions, so there is no single version to put
+there and the versions are in `detail` instead. A `pinning` finding on a
+requirement with no `==` has no resolved version to record at all — that is the
+finding.
+
+Findings are ordered by `rules::ORDER` — slopsquat, install-script, trivial,
+drift, pinning — and alphabetically by package inside each rule. The order is
+stable across runs, so a diff between two scans is a diff and not a reshuffle.
+
 `detail` is prose meant for a person. Its shape is stable enough to read and not
-stable enough to parse — if you need the distance or the nearest name as data,
-say so and they can become fields.
+stable enough to parse — if you need the edit distance, the nearest name or the
+drifted version list as data, say so and they can become fields.
 
-Only `slopsquat` produces findings in this build. The other four rule ids exist
-in the enum and their modules are placeholders; nothing emits them yet.
+## Everything is listed
 
-## Escaping
+`--format json` ignores the collapsing that the human report does. A rule that
+prints as `VERSION DRIFT 76` on a terminal emits all 76 objects here, whether or
+not you passed `-v`. Same for `-q`: it changes nothing about the JSON.
+
+```console
+$ ./target/release/stranger scan --format json fixtures/npm-xl.package-lock.json | jq '.findings | length'
+113
+```
+
+## Escaping and colour
 
 The writer escapes what RFC 8259 section 7 requires — `"`, `\`, the three
 whitespace shorthands, and anything below `U+0020` as `\uXXXX` — and nothing
-else. The `·` separators in `detail` go out as literal UTF-8, which is legal
-JSON and what every parser expects. Note the `\"` around `"chalk"` in the output
-above: that is a quoted name inside `detail`, correctly escaped.
+else. The `·` separators in `detail` go out as literal UTF-8, which is legal JSON
+and what every parser expects. Note the `\"` around `"python-dateutil"` above:
+that is a quoted name inside `detail`, correctly escaped.
+
+JSON is never coloured, under any combination of `CLICOLOR_FORCE`, `NO_COLOR` and
+TTY. It goes to a program, and a program that has to strip SGR codes out of a
+string field will not.
 
 ## No pretty-printer
 
@@ -52,5 +86,5 @@ There is none, and adding one would mean writing a second serialiser to check.
 Pipe it:
 
 ```console
-$ ./target/release/stranger scan --format json fixtures/poisoned.package-lock.json | jq '.findings[0]'
+$ ./target/release/stranger scan --format json fixtures/poisoned.requirements.txt | jq '.findings[0]'
 ```

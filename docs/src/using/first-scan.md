@@ -13,7 +13,13 @@ $ ./target/release/stranger scan fixtures/poisoned.package-lock.json
      expres@4.18.2            not in corpus · d=1 from "express" · root-only, no parent
      lodahs@4.17.21           not in corpus · d=1 from "lodash" · root-only, no parent
 
-  risk 75/100    54ms    third-party deps used to compute this: 0
+  ⚠  INSTALL SCRIPTS        3     arbitrary code at install time
+
+  ⚠  TRIVIAL                35    (4.6% of tree)
+
+  ⚠  VERSION DRIFT          55    same package at 2+ versions in one tree
+
+  risk 100/100    141ms    third-party deps used to compute this: 0
 ```
 
 ## The header
@@ -22,12 +28,70 @@ $ ./target/release/stranger scan fixtures/poisoned.package-lock.json
   poisoned.package-lock.json 757 packages   (35 direct · 722 transitive)
 ```
 
-*Direct* is the count of packages named by a manifest in this repository — the
-root `package.json`, and any workspace member's. *Transitive* is everything
-else: `packages.len() - direct`. The distinction is not cosmetic. It is the
-same split the detection rule runs on, and [Monorepos](../cookbook/monorepos.md)
-covers why a workspace member counts as "this repository" rather than as a
-dependency.
+The lead number counts third-party packages only. *Direct* is the count named by
+a manifest in this repository — the root `package.json`, and any workspace
+member's. *Transitive* is everything reached only through another package. A
+workspace member is neither, so it gets a third field of its own when there is
+one:
+
+```console
+$ ./target/release/stranger scan fixtures/npm-xl.package-lock.json
+
+  npm-xl.package-lock.json 1,376 packages   (150 direct · 1,226 transitive · 14 workspace)
+
+  ⚠  INSTALL SCRIPTS        8     arbitrary code at install time
+
+  ⚠  TRIVIAL                29    (2.1% of tree)
+
+  ⚠  VERSION DRIFT          76    same package at 2+ versions in one tree
+
+  risk 100/100    392ms    third-party deps used to compute this: 0
+```
+
+The file holds 1,390 entries. 14 of them are your own code, so the tree you got
+from strangers is 1,376. [Monorepos](../cookbook/monorepos.md) covers why that
+split is the same one the detection rule runs on.
+
+## Collapsed rules
+
+Critical findings are always listed. Everything else reports a count and what the
+count means, because a 1,390-package tree produces 76 drift findings and 29
+trivial ones, and printing all of them buries the three that matter under a
+hundred lines nobody scrolls back through.
+
+`-v` prints the lot:
+
+```console
+$ ./target/release/stranger scan -v fixtures/npm-xs.package-lock.json
+
+  npm-xs.package-lock.json 37 packages   (1 direct · 36 transitive)
+
+  ⚠  TRIVIAL                4     (10.8% of tree)
+     es-errors@1.3.0          one expression, one publisher · inlining it removes an account from your build
+     gopd@1.2.0               one expression, one publisher · inlining it removes an account from your build
+     has-symbols@1.1.0        predicate-shaped, resolves nothing · size not measured, see rule docs
+     hasown@2.0.4             one expression, one publisher · inlining it removes an account from your build
+
+  risk 4/100    13ms    third-party deps used to compute this: 0
+```
+
+`-q` drops the header and the risk line and prints findings only, which is the
+form to pipe into something:
+
+```console
+$ ./target/release/stranger scan -q fixtures/poisoned.package-lock.json
+
+  ⚠  HALLUCINATION RISK     3
+     chalck@5.3.0             not in corpus · d=1 from "chalk" · root-only, no parent
+     expres@4.18.2            not in corpus · d=1 from "express" · root-only, no parent
+     lodahs@4.17.21           not in corpus · d=1 from "lodash" · root-only, no parent
+
+  ⚠  INSTALL SCRIPTS        3     arbitrary code at install time
+
+  ⚠  TRIVIAL                35    (4.6% of tree)
+
+  ⚠  VERSION DRIFT          55    same package at 2+ versions in one tree
+```
 
 ## A finding
 
@@ -41,43 +105,72 @@ terms the rule actually used, so you can disagree with it:
 - **not in corpus** — `lodahs` is not one of the 140,066 npm names compiled into
   the binary.
 - **d=1 from "lodash"** — its Damerau-Levenshtein distance to `lodash` is 1. One
-  transposition. Under plain Levenshtein it would be 2, which is why the
-  distance function is the one it is.
+  transposition. Under plain Levenshtein it would be 2, which is why the distance
+  function is the one it is.
 - **root-only, no parent** — nothing else in these 757 packages depends on it.
 
 All three have to hold. [The co-occurrence rule](../detection/rule.md) is why.
 
+Every rule writes its own `detail` in its own terms. The other four are
+[install scripts](../rules/install-scripts.md),
+[version drift](../rules/drift.md), [trivial packages](../rules/trivial.md) and
+[unpinned requirements](../rules/pinning.md).
+
+## Colour
+
+Findings are coloured by the worst severity in their block: red for critical,
+orange for high, yellow for medium, dim for low. Sixteen-colour SGR only, so it
+renders the way your theme intends rather than the way the author's monitor
+looked.
+
+Four inputs decide whether escapes are emitted, highest priority first:
+
+1. `--no-color` — you said so, out loud, this run.
+2. `NO_COLOR` — off regardless of TTY.
+3. `CLICOLOR_FORCE` — on regardless of TTY.
+4. stdout is a TTY.
+
+Off beats on at every tie, so a stray `CLICOLOR_FORCE` in a CI image cannot spray
+escapes into a log that asked for none. Both variables count only when present
+*and* non-empty, so `NO_COLOR=` means nothing was said rather than "off".
+
+A pipe is not a TTY, so piped output is plain bytes you can grep:
+
+```console
+$ ./target/release/stranger scan fixtures/poisoned.package-lock.json | cat -v | head -4
+
+  poisoned.package-lock.json 757 packages   (35 direct M-BM-7 722 transitive)
+
+  M-bM-^ZM-   HALLUCINATION RISK     3
+```
+
+The `M-BM-7` is the UTF-8 middle dot, not an escape code. `--format json` never
+carries colour under any setting: a program that has to strip SGR codes out of a
+string field will not.
+
 ## The footer
 
 ```text
-  risk 75/100    54ms    third-party deps used to compute this: 0
+  risk 100/100    141ms    third-party deps used to compute this: 0
 ```
 
 The risk number is severity weights summed and capped at 100: critical 25, high
-10, medium 3, low 1. Three criticals is 75. It is not calibrated against
-anything and there is nothing honest to calibrate it against — it exists so that
-two scans of the same project can be compared. The findings are the output; the
-score is a handle.
+10, medium 3, low 1. It saturates easily — three criticals and three highs is
+already 105 — and it is not calibrated against anything, because there is nothing
+honest to calibrate it against. It exists so two scans of the same project can be
+compared. The findings are the output; the score is a handle.
 
 The milliseconds are wall time for that run, measured by the tool. It moves
-around: the same file scanned three times in a row on this machine reported
-53 ms, 53 ms and 54 ms, but the 1,390-package `npm-xl` fixture consistently
-takes about 380 ms because it has more names that miss the corpus and each miss
-costs a linear scan.
+around. `make bench` runs the largest fixture fifty times:
 
-## A clean file
-
-```console
-$ ./target/release/stranger scan fixtures/npm-xl.package-lock.json
-
-  npm-xl.package-lock.json 1,390 packages   (150 direct · 1,240 transitive)
-
-  no findings
-  risk 0/100    396ms    third-party deps used to compute this: 0
+```text
+Benchmark 1: target/release/stranger scan fixtures/npm-xl.package-lock.json
+  Time (mean ± σ):     413.0 ms ±  82.5 ms    [User: 404.8 ms, System: 3.4 ms]
+  Range (min … max):   371.2 ms … 660.2 ms    50 runs
 ```
 
-Five clean npm fixtures, 3,168 real packages, zero findings between them.
+Most of that is the nearest-neighbour scan for names that miss the corpus.
 
 ```console
-$ ./target/release/stranger scan fixtures/npm-m.package-lock.json
+$ ./target/release/stranger scan -v fixtures/npm-m.package-lock.json
 ```

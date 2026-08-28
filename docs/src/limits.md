@@ -1,141 +1,147 @@
 # Limits
 
-What this tool does not do, stated plainly. A hidden limitation reads as an
-oversight.
+What this tool does not do. A hidden limitation reads as an oversight; a named one
+reads as judgement.
 
-## Integrity hashes are never verified
+The four that matter most are argued in full in the LIMITS section of the
+[README](https://github.com/keirsalterego/stranger#limits), which is the canonical
+home for them. Restated here in one line each so this page is not misleading by
+omission, and then the rest, which the README does not carry.
 
-Every npm entry carries an `integrity` field:
+## The headline four
 
-```console
-$ jq -r '.packages | to_entries[] | select(.value.integrity != null) | "\(.key) \(.value.integrity)"' fixtures/poisoned.package-lock.json | head -1
-node_modules/@alloc/quick-lru sha512-UrcABB+4bUrFABwbluTIBErXwvbsU/V7TZWfmbgJfbkwiBuziS9gxdODUyuiecfdGQ85jglMW6juS3+z5TsKLw==
-```
+**Integrity hashes are never verified.** Rust's standard library has no
+cryptography of any kind, so the reader records whether an `integrity` field is
+present and never whether it is correct.
 
-Rust's standard library contains no cryptography — no SHA-512, no SHA-256, no
-hashing primitive suitable for this at all. Implementing SHA-512 by hand to
-compare against a hash whose subject is a tarball the tool never downloads would
-be theatre.
+**`hasInstallScript` is a bare boolean.** Code runs at install time; what that code
+is lives in a tarball on the registry, and `stranger` does not fetch. See
+[Install scripts](rules/install-scripts.md).
 
-So the reader records whether an `integrity` field is *present*, never whether it
-is correct. Today nothing even reports the presence: `has_integrity` is parsed
-and no rule consumes it. A clean scan says nothing whatsoever about whether the
-bytes you are about to install match the hash beside them.
+**No Go corpus.** `proxy.golang.org` publishes no ranked list and module paths are
+domains, so the corpus is empty on purpose and the detection rule can never fire
+on a Go module. `tests/corpus.rs` asserts that emptiness so it stays intentional.
 
-This is first on the page because it is the limitation most likely to be
-misread as a guarantee.
+**Flat formats have no graph.** `requirements.txt` records no dependency edges, so
+clause 3 is vacuous and the detection rule runs on two clauses. See
+[pip](formats/pip.md) and, for it costing a real false positive,
+[False positives](detection/false-positives.md).
 
-## `hasInstallScript` is a bare boolean
+## Two formats, five rules, and not every pair is real
 
-lockfileVersion 3 records that code runs at install time. It does not record
-what that code is, where it comes from, or what it touches:
+`package-lock.json` at lockfileVersion 2 or 3, and `requirements.txt`. That is the
+whole list. The repository carries Cargo, poetry, uv and pnpm fixtures; none of
+them has a reader.
 
-```console
-$ jq '.packages["node_modules/esbuild"] | {version, hasInstallScript}' fixtures/npm-xl.package-lock.json
-{
-  "version": "0.28.1",
-  "hasInstallScript": true
-}
-```
+Of the five rules, only two can fire on both formats:
 
-`npm-xl` has 8 such entries out of 1,390, excluding the root project's own,
-which is your build rather than a supply-chain signal. The flag is parsed and
-stored. No rule consumes it in this build — `Rule::InstallScript` exists in the
-enum and `src/rules/scripts.rs` is a placeholder — so install scripts never
-appear in output at all.
+| rule | npm | pip |
+|---|---|---|
+| slopsquat | yes | yes, weakened |
+| install-script | yes | never — the format records nothing equivalent |
+| trivial | yes | effectively never — the name list is npm micro-packages |
+| drift | yes | not on a well-formed file |
+| pinning | never — every entry is exactly pinned | yes |
 
-## One rule, one format
+A clean npm scan means: no name is absent-from-corpus-and-near-a-real-one-and-
+unvouched-for, nothing declares an install script, nothing appears at two
+versions, and nothing is a known micro-package. It is not an audit.
 
-`slopsquat` is the only rule implemented. `trivial`, `install-script`, `drift`
-and `pinning` are declared in the rule enum with report headings and ids, and
-their modules are one-line placeholders. They emit nothing.
+## The corpus is a snapshot, and it lists existence, not safety
 
-`package-lock.json` at lockfileVersion 2 or 3 is the only format read. The
-repository carries Cargo, poetry, uv, pnpm and pip fixtures; none of them have a
-reader in this build.
+140,066 npm names, 15,000 PyPI, 5,000 crates.io, fetched on 2026-08-28 in one
+pass. A package published after that date is indistinguishable to clause 1 from a
+package that does not exist. The [ablation table](detection/ablation.md) measures
+how fast that ages.
 
-A clean scan therefore means one thing: no name in this lockfile is absent from
-the corpus, close to a corpus name, and unvouched-for. It is not an audit.
+The corpus is also a list of names that *exist*, harvested from the registries. A
+typosquat that actually got registered is in the corpus, passes clause 1, and is
+never reported.
 
-## No Go corpus
+## The trivial rule measures nothing
 
-`proxy.golang.org` publishes no ranked list of module paths, and module paths are
-domains — `github.com/spf13/cobra`, not `cobra`. Edit distance over a domain is a
-different problem with different failure modes, and a corpus assembled by
-guessing would produce confident nonsense.
+Named here because it is the loudest rule and the least trustworthy. It has no
+access to file sizes, line counts or export lists — none of that is in a lockfile
+— so it recognises names, using a hand-written list of two dozen and a shape
+heuristic. `is-callable` and `is-docker` are both reported and neither is a
+one-liner. [Trivial packages](rules/trivial.md) has the argument.
 
-So the Go corpus is empty, deliberately, and the detection rule can never fire on
-a Go module. `tests/corpus.rs` asserts that emptiness so it stays intentional.
+## Discovery is one directory deep
 
-## Flat formats have no graph
+`stranger scan <dir>` looks for exactly `package-lock.json` and `requirements.txt`
+directly inside `<dir>`. It does not recurse, on purpose — a walk that descends
+into `node_modules` and audits four hundred vendored lockfiles is worse than no
+walk.
 
-`requirements.txt` records package names and version constraints. It records no
-dependency edges at all. Every package in one trivially has in-degree 0, so
-clause 3 is vacuous there and the rule degenerates to distance-alone — which the
-[ablation table](detection/ablation.md) shows is worth about 0.03 precision once
-the corpus starts thinning.
-
-No flat-format reader ships in this build. The point is that when one lands, the
-rule that works on npm does not carry over intact, and pretending otherwise would
-be the more comfortable lie.
-
-## The corpus is a snapshot
-
-140,066 npm names fetched on 2026-08-28, in one pass. npm accepts thousands of
-new names a day. A package published after that date is indistinguishable to
-clause 1 from a package that does not exist. See
-[False positives](detection/false-positives.md) for what that costs and
-[the ablation table](detection/ablation.md) for how it decays.
-
-The corpus is also a list of names that *exist*, harvested from the registry. It
-is not a list of names that are *safe*. A typosquat that actually got registered
-is in the corpus, passes clause 1, and is never reported.
-
-## The risk score is not a measurement
-
-Severity weights summed and capped at 100: critical 25, high 10, medium 3, low
-1. It is not calibrated against anything, because there is nothing honest to
-calibrate it against. Comparing two scans of the same project is meaningful.
-Comparing two projects is not.
-
-## Flags that do less than they say
-
-`--no-color` parses and the help text mentions `NO_COLOR`, but this build emits
-no colour at all — the output above is plain UTF-8 with no escape sequences in
-it. The flag is accepted and changes nothing.
-
-`-q` / `--quiet` currently suppresses only the "no lockfile" message. The header
-and footer of a normal report are printed regardless.
-
-## Discovery is one filename, one directory deep
-
-`stranger scan <dir>` looks for exactly `package-lock.json` directly inside
-`<dir>`. It does not recurse, on purpose — a walk that descends into
-`node_modules` and audits four hundred vendored lockfiles is worse than no walk.
-The consequence is that the fixtures directory in this repository scans as empty,
+`src/walk.rs` implements the recursive version properly: a skip list for
+`node_modules`, `target`, `.venv` and nine more, a depth cap of 6, deterministic
+sorted order, and no symlink following. It has eight tests. It is not wired into
+the binary. Until it is, the fixtures directory in this repository scans as empty,
 because its lockfiles are all renamed:
 
 ```console
 $ ./target/release/stranger scan fixtures
 
   no lockfile in fixtures
-  looked for: package-lock.json
+  looked for: package-lock.json, requirements.txt
 ```
 
 Point at the file to scan a renamed one.
 
+## Code that exists and is not used
+
+`src/toml.rs` is a TOML subset reader with 26 tests. `src/semver.rs` is a semver
+comparator with 13, including the prerelease precedence rules from section 11 that
+most implementations get wrong. `src/walk.rs` is above. None of the three is
+reachable from `main`.
+
+They are honest as libraries and they are not features. Nothing in this book
+describes behaviour they provide, because they do not provide any yet.
+
+## Numbers that do not quite line up
+
+The trivial rule's percentage divides by every entry in the lockfile, including
+workspace members, while the header's package count excludes them. On `npm-m` that
+is 17/582 rather than 17/576, printed as 2.9% where the other denominator gives
+3.0%. Under a tenth of a point on every fixture here, and still two different
+denominators in one line of output.
+
+The JSON object has no workspace count, though the human report prints one, and it
+is not recoverable from the other fields.
+
+## The risk score is not a measurement
+
+Severity weights summed and capped at 100: critical 25, high 10, medium 3, low 1.
+It saturates on any real tree — every fixture here with more than one rule firing
+scores 100 — and it is not calibrated against anything. Comparing two scans of the
+same project is meaningful. Comparing two projects is not.
+
 ## Parser details worth knowing
 
-JSON numbers are parsed as `f64`. RFC 8259 puts no limit on magnitude or
-precision and `f64` does; nothing in a lockfile is a number this tool does
-arithmetic on, so the lossy case is unreachable in practice rather than handled.
+JSON numbers are parsed as `f64`. RFC 8259 puts no limit on magnitude or precision
+and `f64` does; nothing in a lockfile is a number this tool does arithmetic on, so
+the lossy case is unreachable in practice rather than handled.
 
-Duplicate object keys resolve last-one-wins, which RFC 8259 declines to specify.
+Duplicate JSON object keys resolve last-one-wins, which RFC 8259 declines to
+specify.
 
 Nesting deeper than 128 levels is an error rather than a stack overflow. Real
-lockfiles nest about ten deep; the deepest thing in the largest fixture here is
-7.
+lockfiles nest about ten deep; the deepest thing in the largest fixture here is 7.
+
+The pip reader does not follow `-r` includes and drops `--index-url` lines, which
+is the more interesting of the two omissions — an extra index is the
+dependency-confusion vector. [pip](formats/pip.md) explains why there is nowhere
+honest to put it yet.
+
+## Column widths assume ASCII names
+
+Cell width is one column per Unicode scalar, which is wrong for East Asian wide
+forms, combining marks and emoji ZWJ sequences. Registry names are ASCII in
+practice — npm permits only URL-safe characters, PyPI normalises to `[a-z0-9.-]`,
+crates.io to `[A-Za-z0-9_-]` — so it is exact for every name a lockfile can hand
+over, and a name with an accent in it still lines up. If a registry that permits
+CJK identifiers turns up, this needs a generated width table.
 
 ```console
-$ ./target/release/stranger scan fixtures/npm-xl.package-lock.json
+$ ./target/release/stranger scan -v fixtures/npm-xl.package-lock.json
 ```

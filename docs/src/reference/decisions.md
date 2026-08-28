@@ -1,136 +1,68 @@
 # Decision log
 
-Choices that were not obvious, and what they cost.
+The argued version lives at the repository root, in
+[DECISIONS.md](https://github.com/keirsalterego/stranger/blob/main/DECISIONS.md).
+This page is the index, so the two cannot drift into disagreeing with each other:
+if a decision is described in both places, the root file is the one that is right.
 
-## No dependencies, including dev
+## What is in DECISIONS.md
 
-Three empty tables in `Cargo.toml` and one package in `Cargo.lock`. The
-dev-dependency table is empty too, which people miss — Rust ships a test
-harness, so there is no need for one, and "zero dependencies except for testing"
-is the sort of claim that quietly becomes false.
+| section | the question it answers |
+|---|---|
+| One crate, not a workspace | why the layout is flat |
+| Skipping the Single File bonus, on purpose | what was traded for readability |
+| The corpus is data, and it is compiled in | why 2.9 MB of names is in the binary |
+| Why the in-degree clause exists | the reasoning behind the third clause |
+| The refinement the fixtures forced | why a workspace member's edges are not evidence |
+| Measuring the idea instead of asserting it | why there is an ablation at all |
+| The TOML subset | what is accepted, what is refused, and why |
+| What the xorshift is for | deterministic thinning, and the RNG std does not ship |
+| Reading files that other tools produced | the FAQ ruling and its two conditions |
 
-The cost is a JSON parser, an argument parser, an edit distance and a report
-writer written by hand. About 900 lines. The benefit is that the tool's central
-claim — no network, nothing third-party — is enforced by the manifest rather
-than by discipline, and the build works offline on a cold machine.
+It ends with a **Defence** section — nine questions written as if by a hostile
+reviewer, each answered against the code:
 
-## The corpus is compiled in
+- Walk me through how your JSON parser handles a lone high surrogate.
+- Why Damerau and not plain Levenshtein? Show me a case where it matters.
+- Which clause carries the most signal, and how do you know?
+- Where does this tool give a wrong answer, and what would you do about it with a
+  week?
+- Why zero unsafe — was that hard, or free?
+- You read `integrity` fields but never check them. Why?
+- Isn't reading npm's lockfile just shelling out to npm with extra steps?
 
-`include_str!` over three text files, 2.9 MB, resolved at compile time into a
-3.4 MiB binary. The alternative is a data file next to the binary or downloaded
-on first run.
+Plus a **Cuts** section: what was deliberately not built.
 
-Compiling it in removes a whole class of failure: no cache directory, no
-first-run download, no "corpus not found", no version skew between binary and
-data. It is why the tool works on a plane. The cost is binary size and the fact
-that refreshing the corpus means rebuilding.
+## What is in STDLIB.md
 
-The lists are stored pre-sorted in byte order because that is the order Rust's
-`str: Ord` uses and therefore what `binary_search` needs. `LC_ALL=C sort`
-produces it; a locale-sensitive `sort` produces something else and breaks
-lookups silently, which is why `tests/corpus.rs` asserts sortedness instead of
-trusting whoever last regenerated the files.
+The crate-by-crate accounting of what the standard library replaced, with download
+counts and an honest note on what was given up in each case:
+`serde_json`, `clap`, `anyhow`, `thiserror`, `toml`, `strsim`, `semver`, `itoa`,
+`walkdir`, `glob`, `once_cell`, `rand`, `owo-colors`, `comfy-table`,
+`is-terminal`.
 
-## Damerau-Levenshtein, unrestricted
+It also carries the disclosure of data that is not code — the corpus and the
+fixture lockfiles — which is one of the two conditions attached to the FAQ ruling
+that lets this tool read lockfiles at all.
 
-The variant is Lowrance-Wagner, not the optimal string alignment version that
-most libraries ship under the name "Damerau-Levenshtein". OSA refuses to edit
-inside a span it has already transposed, so it scores `CA` against `ABC` as 3
-when the true distance is 2, and it fails the triangle inequality — it is not a
-metric.
+## What is in this book instead
 
-Nothing here currently needs the triangle inequality. The honest version cost
-about fifteen extra lines, and a distance function that quietly is not a metric
-is fine right up until somebody indexes with it. `tests/distance.rs` has the
-counterexample and a 20,000-case property test that OSA would fail.
+Decisions that are about *using* the tool rather than about building it live on
+the pages they affect, because that is where somebody meets them:
 
-## Threshold 2
-
-At 3, `lodash` matches `logass`, `nodash`, `loda` and about forty other real
-registry entries, and precision on the fixtures collapses. At 2 every
-single-character slip is still caught — deletion, insertion, substitution,
-transposition — and that is the entire population of typos a model produces.
-
-## The in-degree clause is a flag
-
-`slopsquat::Config::require_no_parent` can be turned off. That is not a supported
-mode of the tool; it exists so `tests/ablation.rs` can measure what the clause is
-worth. `Config::corpus` is a parameter for the same reason: the corpus is this
-rule's largest assumption, and an assumption you cannot vary is one you cannot
-measure.
-
-## Edges out of first-party manifests are not edges
-
-They go into `roots`. A dependency edge is evidence a package is real only when a
-stranger drew it, and the root `package.json` — plus every workspace member's —
-is the thing under audit. Without this, a hallucinated name added to
-`apps/desktop/package.json` arrives with in-degree 1 and is never examined.
-
-Both monorepo fixtures here keep almost nothing in the root manifest, so this is
-the common case rather than an edge case. See [Monorepos](../cookbook/monorepos.md).
-
-## `peerDependencies` counts as an edge
-
-A peer dependency is a real maintainer writing down a real name, which is
-exactly the evidence the rule wants. Counting it can only suppress a finding,
-never invent one, so including it moves the rule in the conservative direction.
-
-## Clause order is 1, 3, 2
-
-Clause 1 is a binary search and eliminates all but a couple of dozen names.
-Clause 3 is one array index. Clause 2 is a linear scan of 140,066 names. Running
-the cheap eliminator first and the expensive test last is why `npm-xl` takes
-380 ms instead of considerably longer.
-
-The linear scan looks wrong and is not: it only ever runs for names that already
-failed clause 1, and the length filter inside the distance function rejects most
-of the corpus before any table is allocated. If the not-in-corpus set ever gets
-large, bucket the corpus by length — the ordering by name does no work for that
-query.
-
-## Exit 2 for broken, 1 for findings
-
-A CI gate that cannot tell a usage mistake from a finding is a CI gate somebody
-turns off. So a bad flag, a missing file and an unreadable lockfile all exit 2,
-and only a finding at or above `--fail-on` exits 1.
-
-## lockfileVersion 1 is refused by name
-
-Version 1 has no `packages` map. A reader that looked for one and found nothing
-would report a clean project with zero dependencies — the worst possible output
-for an auditing tool. Refusing it with an error that says how to upgrade the file
-beats mis-reading it.
-
-## A hand-written argument parser
-
-Flags, one subcommand and three exit codes do not need a parser generator, and
-this is a repository with no dependency budget anyway. The hand-written version
-also gives better errors: it can say what it expected at this position rather
-than printing a grammar.
-
-```text
-stranger: --format takes `human` or `json`, not `yaml`
-```
-
-## Parser positions from `substr_range`
-
-The JSON parser keeps the original input next to the unconsumed remainder and
-asks the standard library where one sits inside the other. There is no cursor
-struct threaded through thirty functions and no line counter to keep in sync —
-the cursor *is* the remainder. Line and column get computed only when an error is
-actually being built, which is the one path where rescanning the consumed prefix
-does not matter.
-
-## `panic = "abort"`
-
-In the release profile. There is nothing to unwind into; a panic in a
-single-shot CLI is a bug, not a condition to recover from.
-
-## Discovery is not recursive
-
-A walk that descends into `node_modules` and audits four hundred vendored
-lockfiles is worse than no walk at all. One filename, one directory. Point at a
-file to scan anything else.
+| decision | page |
+|---|---|
+| why exit 2 is separate from exit 1 | [Exit codes](../using/exit-codes.md) |
+| why non-critical rules collapse to a count | [Your first scan](../using/first-scan.md) |
+| the colour precedence order | [Your first scan](../using/first-scan.md) |
+| why clause order is 1, 3, 2 | [The co-occurrence rule](../detection/rule.md) |
+| why distance 2 and not 3 | [The co-occurrence rule](../detection/rule.md) |
+| why each rule has the severity it has | its own page under Other rules |
+| why versions are compared for equality only | [Version drift](../rules/drift.md) |
+| why the trivial list is hand-written | [Trivial packages](../rules/trivial.md) |
+| why `--index-url` is dropped | [pip](../formats/pip.md) |
+| why discovery does not recurse | [Limits](../limits.md) |
+| the three reproducible-build settings | [Reproducible builds](reproducible-builds.md) |
 
 ```console
 $ ./target/release/stranger scan --format yaml fixtures/poisoned.package-lock.json; echo $?
