@@ -18,7 +18,7 @@
 //! one carries most of the signal. `tests/ablation.rs` measures how much.
 
 use crate::corpus;
-use crate::lock::Tree;
+use crate::lock::{Origin, Tree};
 use crate::rules::{Finding, Rule, Severity};
 
 #[derive(Debug, Clone, Copy)]
@@ -56,6 +56,15 @@ pub fn scan(tree: &Tree, cfg: Config<'_>) -> Vec<Finding> {
     for (i, pkg) in tree.packages.iter().enumerate() {
         // Somebody in this repo wrote it. Not a stranger.
         if pkg.first_party {
+            continue;
+        }
+        // The corpus is a sample of one public registry. A package pulled from
+        // git, a private index or a direct URL never passed through it, so its
+        // absence from the list is not evidence of anything — the list was
+        // never asked. The Cargo reader found this the hard way: `slint` and
+        // `sg` in the cargo-m fixture are real crates fetched from git, and
+        // all three clauses fired on both.
+        if pkg.origin == Origin::Elsewhere {
             continue;
         }
         // Clause one. Cheap, and it eliminates everything but a few dozen

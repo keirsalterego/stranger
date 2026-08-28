@@ -147,7 +147,7 @@ file is absent rather than being useless without it:
 $ stranger scan /tmp/empty-project
 
   no lockfile in /tmp/empty-project
-  looked for: package-lock.json
+  looked for: package-lock.json, Cargo.lock, requirements.txt
 ```
 
 Exit code 0. `stranger` never executes `npm`, `pip`, `cargo`, `git` or anything
@@ -205,6 +205,34 @@ runs code at install time and does not record what that code is. The tool can sa
 code runs. It cannot say what it does. Eight of the 1,390 entries in the largest
 fixture carry the flag.
 
+**`Cargo.lock` records no build scripts and no dev-dependencies.** Cargo runs
+`build.rs` at compile time — the same shape `hasInstallScript` flags — and the
+lockfile says nothing about which crates have one. It also does not mark
+dev-dependencies or optional ones. So `install_script`, `dev` and `optional` are
+`false` on every crate, and that is a blank rather than a measurement. Guessing
+from the name (`-sys`, say) would turn a blank into a confident wrong answer.
+
+**A git dependency cannot be in a registry corpus.** `Cargo.lock` records
+`source = "git+https://…#rev"` for a crate pulled straight from a repository. It
+never went through crates.io, so it is not in a list of crates.io names, and if
+only workspace members reference it then clause 3 passes too. Two of the three
+findings on `cargo-m` are exactly this:
+
+```
+$ stranger scan fixtures/cargo-m.Cargo.lock
+
+  ⚠  HALLUCINATION RISK     3
+     ksni@0.3.4               not in corpus · d=2 from "jni" · root-only, no parent
+     sg@0.4.0                 not in corpus · d=1 from "ug" · root-only, no parent
+     slint@1.16.0             not in corpus · d=2 from "mint" · root-only, no parent
+```
+
+All three are false positives. `slint` and `sg` are git dependencies; `ksni` is a
+real crates.io crate outside the top 5,000. The rule is asking a crates.io
+question about names that were never crates.io's to answer. Suppressing git-
+sourced entries needs a `source` field on `Package`, which is a change to every
+reader, not to this one.
+
 **No Go corpus.** `proxy.golang.org` publishes no ranked list of modules and
 module paths are domains, so edit distance over them is a different problem.
 Where `go.mod` parsing exists the tree is read correctly, but the hallucination
@@ -231,6 +259,18 @@ both fire. On an npm tree clause 3 would have had a chance to save it. On a
 
 The fix is a different file rather than a better reader: `poetry.lock` and
 `uv.lock` both record the resolved graph, and both are already in `fixtures/`.
+
+**A corpus can only speak about one registry.** A package pulled from git, a
+private index or a direct URL never passed through the public registry the corpus
+samples, so its absence from the list is not evidence of anything — the list was
+never asked. The Cargo reader found this the hard way: `slint` and `sg` in the
+`cargo-m` fixture are real crates fetched from git, and all three clauses fired on
+both. Packages are now tagged with an origin and the name rules stay quiet unless
+the lockfile says the package came from the registry.
+
+What that does *not* fix is a real registry package outside the corpus. `ksni` in
+the same fixture is a genuine crates.io crate that sits just below the top 5,000,
+and it is still reported. That one is corpus coverage, which is the next limit.
 
 **The corpus is a snapshot.** Taken 2026-08-28. A package published after that
 date looks exactly like a package that does not exist. The table above is, among

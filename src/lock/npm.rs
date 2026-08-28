@@ -13,7 +13,7 @@
 
 use crate::error::{Error, Result};
 use crate::json::{self, Value};
-use crate::lock::{Ecosystem, Package, Pin, Tree};
+use crate::lock::{Ecosystem, Origin, Package, Pin, Tree};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -77,6 +77,13 @@ pub fn read(path: &Path, src: &str) -> Result<Tree> {
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
             has_integrity: entry.get("integrity").is_some(),
+            origin: match entry.get("resolved").and_then(Value::as_str) {
+                Some(url) if url.starts_with("https://registry.npmjs.org/") => Origin::Registry,
+                // A private registry, a tarball URL, a github: spec, or no
+                // `resolved` at all (workspace links). The npm corpus is a
+                // sample of the public registry and knows nothing about these.
+                _ => Origin::Elsewhere,
+            },
             // The `^`s and `~`s live in package.json. A package-lock entry is
             // the resolver's answer, and the answer is one version.
             pinned: Pin::Exact,

@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 use std::time::Duration;
-use stranger::lock::{Ecosystem, Package, Pin, Tree};
+use stranger::lock::{Ecosystem, Origin, Package, Pin, Tree};
 use stranger::report;
 use stranger::rules::{Finding, Rule, Severity};
 use stranger::term::{self, Style, Term};
@@ -92,6 +92,7 @@ fn tree() -> Tree {
         install_script: false,
         has_integrity: true,
         pinned: Pin::Exact,
+        origin: Origin::Registry,
     };
     Tree {
         ecosystem: Ecosystem::Npm,
