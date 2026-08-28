@@ -14,3 +14,4 @@ pub mod json;
 pub mod lock;
 pub mod report;
 pub mod rules;
+pub mod semver;
