@@ -177,6 +177,30 @@ three corpora load through one each.
 thing, and people still reach for the crate out of habit. Another one the
 toolchain killed for free.
 
+### `rayon` — 516,056,344 all-time · 116,467,391 in 90 days
+### `crossbeam-channel` — 565,386,665 all-time · 110,054,999 in 90 days
+[`src/main.rs`](src/main.rs), `scan_all`. `std::thread::scope` and
+`std::sync::mpsc`.
+
+A directory scan is several independent lockfiles, and the slow part of each is
+the corpus search — pure CPU over a shared read-only slice. `thread::scope` is
+what makes that safe without `Arc`: the closures *borrow* the path slice rather
+than cloning into each thread, because the scope guarantees every thread is
+joined before it returns.
+
+**What I gave up:** `rayon`'s work-stealing scheduler and its parallel iterators.
+This spawns one thread per lockfile, which is wrong for four hundred files and
+right for the single digits the walk actually produces — `node_modules` is
+skipped, so a real repo has a handful. The `// ponytail:` marker names the
+upgrade: chunk across `available_parallelism()`. From `crossbeam-channel` I gave
+up `select!` and the multi-consumer end; one producer per thread into one
+consumer is all this needs.
+
+Results come back in path order rather than completion order, because two runs
+over one tree have to produce the same bytes or a diff between scans is noise.
+`tests/cli.rs::a_directory_scan_is_deterministic` runs the same scan five times
+and compares.
+
 ### `rand` — 1,605,926,795 all-time · 401,565,502 in 90 days
 [`tests/distance.rs`](tests/distance.rs) and [`tests/ablation.rs`](tests/ablation.rs).
 A five-line xorshift64\*, seeded from `SystemTime` nanoseconds and printed so a

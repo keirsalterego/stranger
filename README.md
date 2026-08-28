@@ -50,6 +50,21 @@ make bench       # timings, with a fallback when hyperfine is absent
 make proof       # regenerate deps-proof.txt
 ```
 
+## Point it at a repository
+
+```
+$ stranger scan .
+```
+
+The walk finds every lockfile under the directory and audits them on separate
+threads — five formats and four ecosystems in one pass, if that is what is there.
+It does not descend into `node_modules`, `target`, `.venv` or `dist`, because a
+populated `node_modules` holds hundreds of vendored lockfiles belonging to other
+people and auditing those is worse than auditing nothing.
+
+Results come out in path order rather than whichever thread finished first. Two
+runs over one tree produce the same bytes, so a diff between scans is a diff.
+
 ## What it looks for
 
 **Hallucinated names.** A model asked to write a `package.json` will occasionally
