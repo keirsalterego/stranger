@@ -75,3 +75,39 @@ impl Tree {
         self.packages.len() - self.roots.len()
     }
 }
+
+/// Lockfiles we know how to read, in the order we look for them.
+pub const KNOWN: &[&str] = &["package-lock.json"];
+
+/// Read one lockfile, dispatching on its name.
+pub fn read(path: &std::path::Path) -> crate::error::Result<Tree> {
+    let src = std::fs::read_to_string(path)
+        .map_err(|e| crate::error::Error::io(path.display().to_string(), e))?;
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or_default();
+    // Suffix rather than equality, so a file kept as `npm-xl.package-lock.json`
+    // still reads. Lockfiles get renamed the moment you collect more than one.
+    if name.ends_with("package-lock.json") {
+        npm::read(path, &src)
+    } else {
+        Err(crate::error::Error::usage(format!(
+            "{name}: not a lockfile stranger knows. It reads: {}",
+            KNOWN.join(", ")
+        )))
+    }
+}
+
+/// Every known lockfile directly inside `dir`.
+///
+/// Deliberately not recursive yet — a recursive walk that wanders into
+/// `node_modules` and audits four hundred vendored lockfiles is worse than no
+/// walk at all.
+pub fn discover(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+    KNOWN
+        .iter()
+        .map(|n| dir.join(n))
+        .filter(|p| p.is_file())
+        .collect()
+}
