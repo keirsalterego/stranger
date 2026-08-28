@@ -21,7 +21,7 @@ present is public.
 | `poetry-s.poetry.lock` | 54 | poetry |
 | `poetry-m.poetry.lock` | 233 | poetry |
 | `uv-m.uv.lock` | 250 | uv |
-| `reqs-xs.requirements.txt` | 11 | pip |
+| `reqs-xs.requirements.txt` | 12 | pip — every line a bare name, no constraint anywhere |
 | `reqs-s.requirements.txt` | 23 | pip |
 | `pnpm-l.pnpm-lock.yaml` | 850 | pnpm |
 
@@ -66,7 +66,11 @@ would expose anyway.
 
 ## Measured, not remembered
 
-Every count in the table above is `jq '.packages | length - 1'`, run against the
-file in this directory. They are here because the numbers in the README have to
-be reproducible by someone who is not me, and because the notes I collected
-before the window said npm-xl held 1,391 entries. It holds 1,390.
+Every npm count in the table above is `jq '.packages | length - 1'` and every pip
+count is `awk 'NF && $0 !~ /^[ \t]*#/'`, both run against the file in this
+directory. They are here because the numbers in the README have to be
+reproducible by someone who is not me, and because the notes I collected before
+the window said npm-xl held 1,391 entries. It holds 1,390.
+
+The same thing happened again with `reqs-xs`, which this table said held 11
+requirements until `tests/pip.rs` counted 12.
