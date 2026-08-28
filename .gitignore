@@ -1,0 +1,6 @@
+/target
+*.local.md
+.claude/
+.cursor/
+.specstory/
+.DS_Store
