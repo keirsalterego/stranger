@@ -10,7 +10,7 @@ use stranger::cli::{self, Command, Format, Options};
 use stranger::error::{Error, Result};
 use stranger::lock;
 use stranger::report;
-use stranger::rules::{Finding, Severity, slopsquat};
+use stranger::rules::{Finding, Severity, drift, scripts, slopsquat, trivial};
 
 fn main() -> ExitCode {
     match run() {
@@ -67,7 +67,12 @@ fn run() -> Result<ExitCode> {
     let mut worst: Option<Severity> = None;
     for path in &lockfiles {
         let tree = lock::read(path)?;
-        let findings = slopsquat::scan(&tree, slopsquat::Config::default());
+        // Called in `rules::ORDER`, so the JSON array comes out worst-first
+        // without a second sort. `pinning` is not wired here yet.
+        let mut findings = slopsquat::scan(&tree, slopsquat::Config::default());
+        findings.extend(scripts::scan(&tree));
+        findings.extend(trivial::scan(&tree));
+        findings.extend(drift::scan(&tree));
         worst = worst.max(findings.iter().map(|f| f.severity).max());
         emit(&mut out, &opts, &tree, &findings, started.elapsed())?;
     }
