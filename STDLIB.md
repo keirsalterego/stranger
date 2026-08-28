@@ -121,6 +121,23 @@ it because it is an honest substitution, not because it was hard.
 
 ---
 
+### `walkdir` — 588,096,443 all-time · 138,629,879 in 90 days
+### `glob` — 575,867,559 all-time · 119,415,458 in 90 days
+[`src/walk.rs`](src/walk.rs). An explicit stack over `std::fs::read_dir`, with a
+skip list, a depth bound, and sorted output.
+
+**What I gave up:** `walkdir`'s symlink-loop detection (mine simply does not
+follow symlinks, which is cruder and sufficient), its parallel bridge, and
+`glob`'s pattern language — there are no patterns here, only a list of filenames
+matched by suffix.
+
+Two things are not concessions but the reason it exists. `walkdir` would happily
+descend into `node_modules`, where a populated tree holds hundreds of other
+people's vendored lockfiles; the skip list is the whole point. And `read_dir`
+returns filesystem order, which on ext4 is hash order, so results are sorted —
+otherwise two scans of the same tree differ only in sequence and a diff between
+them is noise.
+
 ## State and concurrency
 
 ### `once_cell` — 1,187,857,958 all-time · 262,379,838 in 90 days
