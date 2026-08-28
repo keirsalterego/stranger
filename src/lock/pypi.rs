@@ -21,9 +21,24 @@
 //! Every entry is `[[package]]` with `name`, `version`, `optional`, poetry
 //! 2.x's `groups`, a `files` array of `{file, hash}`, and a repeated
 //! `[package.dependencies]` sub-table whose *keys* are the dependency names —
-//! 112 of those in poetry-m, 20 in poetry-s. `[package.extras]` is a
-//! different thing and is not read: an extra is a name the maintainer wrote
-//! down as *optional*, and it is not installed unless somebody asked for it.
+//! 112 of those in poetry-m, 20 in poetry-s.
+//!
+//! `[package.extras]` is not read, and uv's `[package.optional-dependencies]`
+//! is, which looks inconsistent and is not. uv's optional block holds
+//! *resolved* references: `davey` is in uv-m because somebody asked for
+//! `discord-py[voice]`, so that is a real install edge. poetry's extras block
+//! is the package's metadata copied verbatim whether anyone asked or not —
+//! 1,049 PEP 508 strings in poetry-m, of which 758 name packages that are not
+//! in the lock at all. Feeding the other 291 into `edges` would put
+//! non-install edges in the graph and collapse the in-degree derivation that
+//! `roots` depends on two paragraphs below: a package mentioned by somebody's
+//! unrequested `docs` extra would stop looking like a root, when it is one.
+//!
+//! ponytail: that costs the slopsquat rule 291 pieces of real "a maintainer
+//! has heard of this name" evidence in poetry-m, and losing evidence makes
+//! the rule fire *more*. The upgrade is a `mentioned` set on `Tree`, separate
+//! from `edges`, for clauses that want weaker evidence than an install edge —
+//! not a wider definition of `edges`.
 //!
 //! It does not record the root project. There is no `[[package]]` for the
 //! thing being locked, and its direct dependencies live in `pyproject.toml`,
