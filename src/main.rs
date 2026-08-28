@@ -6,11 +6,12 @@ use std::io::{self, Write};
 use std::process::ExitCode;
 use std::time::Instant;
 
-use stranger::cli::{self, Command, Format, Options};
+use stranger::cli::{self, Color, Command, Format, Options};
 use stranger::error::{Error, Result};
 use stranger::lock;
 use stranger::report;
 use stranger::rules::{Finding, Severity, slopsquat};
+use stranger::term::Term;
 
 fn main() -> ExitCode {
     match run() {
@@ -50,6 +51,9 @@ fn run() -> Result<ExitCode> {
         )));
     };
 
+    // Asked once, here. Nothing below this line reads the environment again.
+    let term = Term::detect(matches!(opts.color, Color::Never));
+
     let stdout = io::stdout();
     let mut out = stdout.lock();
 
@@ -69,7 +73,7 @@ fn run() -> Result<ExitCode> {
         let tree = lock::read(path)?;
         let findings = slopsquat::scan(&tree, slopsquat::Config::default());
         worst = worst.max(findings.iter().map(|f| f.severity).max());
-        emit(&mut out, &opts, &tree, &findings, started.elapsed())?;
+        emit(&mut out, &opts, term, &tree, &findings, started.elapsed())?;
     }
 
     Ok(match (opts.fail_on, worst) {
@@ -81,12 +85,13 @@ fn run() -> Result<ExitCode> {
 fn emit(
     out: &mut impl Write,
     opts: &Options,
+    term: Term,
     tree: &lock::Tree,
     findings: &[Finding],
     elapsed: std::time::Duration,
 ) -> Result<()> {
     let r = match opts.format {
-        Format::Human => report::human(out, tree, findings, elapsed),
+        Format::Human => report::human(out, term, tree, findings, elapsed),
         Format::Json => report::json(out, tree, findings, elapsed),
     };
     r.map_err(|e| Error::io("stdout", e))
