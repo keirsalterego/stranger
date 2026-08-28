@@ -11,13 +11,12 @@ pub enum Error {
     /// A parser rejected its input. Line and column are 1-based, and the
     /// column counts characters rather than bytes so that it lines up with
     /// what an editor shows.
-    Syntax {
-        what: String,
-        line: u32,
-        col: u32,
-    },
+    Syntax { what: String, line: u32, col: u32 },
     /// A file we were asked to read could not be read.
-    Io { path: String, source: std::io::Error },
+    Io {
+        path: String,
+        source: std::io::Error,
+    },
     /// The command line did not make sense. Exits 2, never 1 — a usage
     /// mistake is not a finding.
     Usage(String),
@@ -25,7 +24,10 @@ pub enum Error {
 
 impl Error {
     pub fn io(path: impl Into<String>, source: std::io::Error) -> Self {
-        Error::Io { path: path.into(), source }
+        Error::Io {
+            path: path.into(),
+            source,
+        }
     }
 
     pub fn usage(msg: impl Into<String>) -> Self {

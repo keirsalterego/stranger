@@ -71,7 +71,11 @@ impl Value {
 }
 
 pub fn parse(src: &str) -> Result<Value> {
-    let mut p = Parser { src, rest: src, depth: 0 };
+    let mut p = Parser {
+        src,
+        rest: src,
+        depth: 0,
+    };
     p.skip_ws();
     let v = p.value()?;
     p.skip_ws();
@@ -90,20 +94,28 @@ struct Parser<'a> {
 impl<'a> Parser<'a> {
     fn err(&self, what: impl Into<String>) -> Error {
         let (line, col) = self.position();
-        Error::Syntax { what: what.into(), line, col }
+        Error::Syntax {
+            what: what.into(),
+            line,
+            col,
+        }
     }
 
     /// Byte offset of the remainder inside the original input, converted to a
     /// 1-based line and character column. `substr_range` returns None only if
     /// `rest` is not derived from `src`, which cannot happen here.
     fn position(&self) -> (u32, u32) {
-        let offset = self.src.substr_range(self.rest).map_or(self.src.len(), |r| r.start);
+        let offset = self
+            .src
+            .substr_range(self.rest)
+            .map_or(self.src.len(), |r| r.start);
         let consumed = &self.src[..offset];
         let line = consumed.bytes().filter(|&b| b == b'\n').count() as u32 + 1;
         let col = match consumed.rfind('\n') {
             Some(nl) => consumed[nl + 1..].chars().count(),
             None => consumed.chars().count(),
-        } as u32 + 1;
+        } as u32
+            + 1;
         (line, col)
     }
 
@@ -249,7 +261,11 @@ impl<'a> Parser<'a> {
                 // way to notice you have been handed a truncated or binary file.
                 0x00..=0x1F => return Err(self.err("unescaped control character in string")),
                 _ => {
-                    let c = self.rest.chars().next().expect("peek said there was a byte");
+                    let c = self
+                        .rest
+                        .chars()
+                        .next()
+                        .expect("peek said there was a byte");
                     self.bump(c.len_utf8());
                     out.push(c);
                 }
@@ -314,7 +330,10 @@ impl<'a> Parser<'a> {
     }
 
     fn hex4(&mut self) -> Result<u16> {
-        let digits = self.rest.get(..4).ok_or_else(|| self.err("truncated \\u escape"))?;
+        let digits = self
+            .rest
+            .get(..4)
+            .ok_or_else(|| self.err("truncated \\u escape"))?;
         let mut n: u16 = 0;
         for b in digits.bytes() {
             let d = match b {
