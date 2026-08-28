@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use stranger::error::Error;
-use stranger::lock::{Ecosystem, Package, Pin, Tree, pnpm};
+use stranger::lock::{Ecosystem, Origin, Package, Pin, Tree, pnpm};
 
 const FIXTURE: &str = "pnpm-l.pnpm-lock.yaml";
 
@@ -146,6 +146,41 @@ fn integrity_is_recorded_for_every_package() {
 fn no_install_scripts_are_claimed() {
     let t = load();
     assert_eq!(t.packages.iter().filter(|p| p.install_script).count(), 0);
+}
+
+/// All 850 resolutions are `{integrity: …}` with nothing else in them, which
+/// is pnpm's shape for a registry tarball. A `tarball`, `repo` or `directory`
+/// key would mean the corpus has nothing useful to say about the name.
+#[test]
+fn origin_comes_from_the_resolution_shape() {
+    let t = load();
+    assert_eq!(
+        t.packages
+            .iter()
+            .filter(|p| p.origin == Origin::Registry)
+            .count(),
+        850
+    );
+
+    let src = "\
+lockfileVersion: '9.0'
+
+packages:
+
+  reg@1.0.0:
+    resolution: {integrity: sha512-rrr==}
+  tar@1.0.0:
+    resolution: {tarball: https://example.invalid/tar-1.0.0.tgz}
+  git@1.0.0:
+    resolution: {type: git, repo: git@example.invalid:x.git, commit: abc}
+  local@1.0.0:
+    resolution: {type: directory, directory: ../local}
+";
+    let t = read(src).expect("should read");
+    assert_eq!(find(&t, "reg").origin, Origin::Registry);
+    for name in ["tar", "git", "local"] {
+        assert_eq!(find(&t, name).origin, Origin::Elsewhere, "{name}");
+    }
 }
 
 /// A lockfile pins by definition. The `^5.8.3` lives in the importer's
