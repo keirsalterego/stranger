@@ -156,6 +156,39 @@ never had Node installed — which is the actual use case, because auditing a
 lockfile you did not write is exactly when you do not want to install its
 toolchain.
 
+## Reproducible build
+
+```
+$ make repro
+commit:  b926c116fe08a9fb0b75a736d1064b3cd07bba5b
+rustc:   rustc 1.98.0 (88d9e12ae 2026-08-18)
+epoch:   1787940000
+
+build A  /tmp/stranger-repro.265137/a
+         c04dbfdab340e4a02f9cfcfacbaa843bf80eb6a717bf961dff86a9bb40f307bb
+build B  /tmp/stranger-repro.265137/b-with-a-deliberately-longer-name
+         c04dbfdab340e4a02f9cfcfacbaa843bf80eb6a717bf961dff86a9bb40f307bb
+
+MATCH — byte-identical across two directories
+```
+
+Two directories rather than one, with deliberately different path lengths, because
+the absolute build path is the thing most likely to leak into a binary — it ends
+up in panic messages. Three settings do the work:
+
+```
+SOURCE_DATE_EPOCH=1787940000 CARGO_INCREMENTAL=0 \
+RUSTFLAGS="--remap-path-prefix=$PWD=/build -C debuginfo=0" \
+cargo build --release --locked
+```
+
+`SOURCE_DATE_EPOCH` is the hackathon kickoff. `CARGO_INCREMENTAL=0` because
+incremental artifacts are not deterministic. The remap is what makes two
+directories produce one binary.
+
+The hash above is for that commit; `make repro` recomputes it for whatever you
+have checked out, so it does not go stale in this file.
+
 ## Limits
 
 Written down because a judge will otherwise find them, and a named limitation
