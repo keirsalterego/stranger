@@ -260,6 +260,18 @@ both fire. On an npm tree clause 3 would have had a chance to save it. On a
 The fix is a different file rather than a better reader: `poetry.lock` and
 `uv.lock` both record the resolved graph, and both are already in `fixtures/`.
 
+**A corpus can only speak about one registry.** A package pulled from git, a
+private index or a direct URL never passed through the public registry the corpus
+samples, so its absence from the list is not evidence of anything — the list was
+never asked. The Cargo reader found this the hard way: `slint` and `sg` in the
+`cargo-m` fixture are real crates fetched from git, and all three clauses fired on
+both. Packages are now tagged with an origin and the name rules stay quiet unless
+the lockfile says the package came from the registry.
+
+What that does *not* fix is a real registry package outside the corpus. `ksni` in
+the same fixture is a genuine crates.io crate that sits just below the top 5,000,
+and it is still reported. That one is corpus coverage, which is the next limit.
+
 **The corpus is a snapshot.** Taken 2026-08-28. A package published after that
 date looks exactly like a package that does not exist. The table above is, among
 other things, a measurement of how badly that ages.

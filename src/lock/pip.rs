@@ -32,7 +32,7 @@
 //! `--index-url` is discussed at the point where it gets dropped.
 
 use crate::error::{Error, Result};
-use crate::lock::{Ecosystem, Package, Pin, Tree};
+use crate::lock::{Ecosystem, Origin, Package, Pin, Tree};
 use std::path::Path;
 
 pub fn read(path: &Path, src: &str) -> Result<Tree> {
@@ -215,6 +215,16 @@ fn requirement(logical: &str, line: u32, out: &mut Vec<Package>) -> Result<()> {
         // opt-in. Whether the digest matches is a different question, and
         // stranger does not download anything to answer it.
         has_integrity: hashed,
+        // A `pkg @ https://host/x.whl` direct reference bypasses PyPI, so the
+        // PyPI corpus has nothing to say about the name. Everything else in a
+        // requirements.txt resolves through an index, and this reader does not
+        // follow `--index-url`, so it cannot tell a private index from PyPI —
+        // said in the module doc rather than guessed at here.
+        origin: if spec.trim_start().starts_with('@') {
+            Origin::Elsewhere
+        } else {
+            Origin::Registry
+        },
         pinned,
     });
     Ok(())

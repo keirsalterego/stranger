@@ -250,3 +250,31 @@ fn dispatch_matches_the_suffix() {
     assert_eq!(t.ecosystem, Ecosystem::Crates);
     assert_eq!(t.packages.len(), 944);
 }
+
+/// Git dependencies are real packages that never went through crates.io, so a
+/// crates.io corpus cannot have heard of them. `slint` and `sg` in `cargo-m`
+/// are exactly that, and before `Origin` existed all three slopsquat clauses
+/// fired on both.
+#[test]
+fn git_dependencies_are_not_registry_packages() {
+    let t = load("cargo-m.Cargo.lock");
+    let git: Vec<&str> = t
+        .packages
+        .iter()
+        .filter(|p| p.origin == stranger::lock::Origin::Elsewhere && !p.first_party)
+        .map(|p| p.name.as_str())
+        .collect();
+    assert!(git.contains(&"slint"), "{git:?}");
+    assert!(git.contains(&"sg"), "{git:?}");
+
+    let found: Vec<String> = stranger::rules::slopsquat::scan(&t, Default::default())
+        .into_iter()
+        .map(|f| f.package)
+        .collect();
+    for name in &git {
+        assert!(
+            !found.contains(&name.to_string()),
+            "{name} came from git, the corpus never covered it"
+        );
+    }
+}

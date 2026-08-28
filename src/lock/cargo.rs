@@ -89,7 +89,7 @@
 //! no checksum, because a git revision is its own integrity claim.
 
 use crate::error::{Error, Result};
-use crate::lock::{Ecosystem, Package, Pin, Tree};
+use crate::lock::{Ecosystem, Origin, Package, Pin, Tree};
 use crate::toml::{self, Value};
 use std::collections::HashMap;
 use std::path::Path;
@@ -144,6 +144,14 @@ pub fn read(path: &Path, src: &str) -> Result<Tree> {
             first_party: source.is_none(),
             install_script: false,
             has_integrity: entry.get("checksum").is_some(),
+            // 689 registry against 19 git in cargo-m. The git ones are why
+            // this field exists: `slint` and `sg` are real crates that never
+            // went through crates.io, so a crates.io corpus cannot have heard
+            // of them and their absence proves nothing.
+            origin: match entry.get("source").and_then(Value::as_str) {
+                Some(src) if src.starts_with("registry+") => Origin::Registry,
+                _ => Origin::Elsewhere,
+            },
             pinned: Pin::Exact,
         });
     }
