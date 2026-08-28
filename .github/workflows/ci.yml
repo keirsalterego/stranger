@@ -1,0 +1,74 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # rust-toolchain.toml pins 1.98.0, and rustup honours it, so there is
+      # nothing to specify here. Pinning the version twice is one more place
+      # for the two to disagree.
+      - name: Toolchain
+        run: |
+          rustup show
+          rustc --version
+          cargo --version
+
+      # The claim the whole entry rests on. If this ever stops being one line,
+      # the build should fail before anything else runs.
+      - name: The manifest is empty
+        run: |
+          set -euo pipefail
+          test "$(cargo tree | wc -l)" -eq 1
+          test "$(grep -c '^\[\[package\]\]' Cargo.lock)" -eq 1
+          echo "one crate, one [[package]]"
+
+      - name: No unsafe
+        run: |
+          set -euo pipefail
+          # The naive grep matches the forbid attribute itself and returns 1,
+          # which is a ghost worth not chasing.
+          if grep -rn '\bunsafe\b' src/ | grep -v 'forbid(unsafe_code)'; then
+            echo "unexpected unsafe" >&2
+            exit 1
+          fi
+          echo "none"
+
+      - name: No shelling out
+        run: |
+          set -euo pipefail
+          if grep -rn 'Command::new' src/; then
+            echo "stranger reads files; it does not run programs" >&2
+            exit 1
+          fi
+          echo "none"
+
+      - name: Format
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test
+
+      - name: Build offline
+        run: CARGO_NET_OFFLINE=true cargo build --release --locked --offline
+
+      # Not `cargo test --include-ignored` — the ablation scans six fixtures
+      # against a 140,000-name corpus ten times and takes about two minutes.
+      # It runs here because the README quotes its numbers.
+      - name: Ablation
+        run: cargo test --release --test ablation -- --include-ignored
+
+      - name: Reproducible build
+        run: ./scripts/repro.sh
