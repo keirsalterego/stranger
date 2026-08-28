@@ -2,8 +2,9 @@
 //!
 //! The lists are compiled into the binary with `include_str!`. That is the
 //! whole reason `stranger` works on a plane: there is no fetch, no cache
-//! directory, and no "corpus not found" failure mode. It costs about 1.5 MB
-//! of binary and buys the tool's central claim.
+//! directory, and no "corpus not found" failure mode. The three lists are
+//! 2,960,053 bytes of text in a 3.6 MB release binary — most of the binary is
+//! corpus — and that buys the tool's central claim.
 //!
 //! Names are stored pre-normalised and pre-sorted in *byte* order, because
 //! that is the order `str`'s `Ord` uses and therefore the order

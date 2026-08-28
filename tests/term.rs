@@ -121,6 +121,7 @@ fn render(color: bool, findings: &[Finding]) -> String {
         findings,
         Duration::from_millis(7),
         false,
+        false,
     )
     .unwrap();
     String::from_utf8(buf).unwrap()

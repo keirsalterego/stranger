@@ -16,6 +16,13 @@ use stranger::term::Term;
 fn main() -> ExitCode {
     match run() {
         Ok(code) => code,
+        // `stranger scan . | head` closes the pipe as soon as head has what it
+        // wants, and every write after that is EPIPE. That is the shell
+        // working correctly, not a failure, so it exits 0 and says nothing —
+        // the alternative is an error message on every piped invocation.
+        Err(Error::Io { source, .. }) if source.kind() == io::ErrorKind::BrokenPipe => {
+            ExitCode::SUCCESS
+        }
         Err(e) => {
             eprintln!("stranger: {e}");
             // A usage mistake or an unreadable file is not a finding, and a CI
@@ -97,7 +104,9 @@ fn emit(
     elapsed: std::time::Duration,
 ) -> Result<()> {
     let r = match opts.format {
-        Format::Human => report::human(out, term, tree, findings, elapsed, opts.verbose),
+        Format::Human => {
+            report::human(out, term, tree, findings, elapsed, opts.verbose, opts.quiet)
+        }
         Format::Json => report::json(out, tree, findings, elapsed),
     };
     r.map_err(|e| Error::io("stdout", e))

@@ -1,4 +1,4 @@
-.PHONY: all test bench proof clean fmt lint
+.PHONY: all test bench proof clean fmt lint ablation repro docs
 
 all:
 	cargo build --release --locked
