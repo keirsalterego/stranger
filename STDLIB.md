@@ -93,6 +93,23 @@ What I did give up is `strsim`'s other seven algorithms — Jaro, Jaro-Winkler,
 Sørensen-Dice — which I would want if the corpus matching ever needed a
 similarity ratio rather than an edit count.
 
+### `semver` — 945,451,453 all-time · 198,517,936 in 90 days
+[`src/semver.rs`](src/semver.rs). Parsing, precedence, and the caret and tilde
+operators.
+
+**What I gave up:** multi-comparator ranges. `semver` handles `>=1.2, <1.5` and
+`1.2.x || 2.x`; mine handles one operator at a time, because one operator is what
+a lockfile pin and a `requirements.txt` line contain. Compound npm ranges from
+`package.json` would need more.
+
+The part I did not give up is prerelease precedence, which is where
+implementations usually go wrong. `1.0.0-beta.11 > 1.0.0-beta.2` requires numeric
+segments to compare as numbers rather than strings; `1.0.0-1 < 1.0.0-alpha`
+requires numeric to sort *below* alphanumeric; and `1.0.0-rc.1 < 1.0.0` requires
+the empty prerelease list to be the largest rather than the smallest, which
+inverts the usual intuition. `tests/semver.rs` runs the exact ordering table from
+semver.org section 11, both pairwise and as a sort.
+
 ### `itoa` — 1,265,455,201 all-time · 292,076,583 in 90 days
 [`src/report.rs`](src/report.rs), `thousands()`. `core::fmt::NumBuffer` plus
 `format_into`, stable in 1.98, writes digits into a stack buffer with no
