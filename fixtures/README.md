@@ -12,9 +12,9 @@ present is public.
 |---|---|---|
 | `npm-xs.package-lock.json` | 37 | npm, lockfileVersion 3 |
 | `npm-s.package-lock.json` | 405 | npm, lockfileVersion 3 |
-| `npm-m.package-lock.json` | 579 | npm, lockfileVersion 3 |
+| `npm-m.package-lock.json` | 582 | npm, lockfileVersion 3 — 3 are `link: true` workspace members |
 | `npm-l.package-lock.json` | 754 | npm, lockfileVersion 3 |
-| `npm-xl.package-lock.json` | 1391 | npm, lockfileVersion 3 — the benchmark fixture |
+| `npm-xl.package-lock.json` | 1390 | npm, lockfileVersion 3 — 7 `link: true`, 184 nested, 9 install scripts. The benchmark fixture. |
 | `cargo-s.Cargo.lock` | 124 | cargo |
 | `cargo-m.Cargo.lock` | 723 | cargo |
 | `cargo-l.Cargo.lock` | 944 | cargo |
@@ -63,3 +63,10 @@ pip, in `poisoned.requirements.txt`:
 fire on. A hallucinated name that is not a near-miss of a real one is a different
 problem, and pretending one rule catches both would be a lie the ablation table
 would expose anyway.
+
+## Measured, not remembered
+
+Every count in the table above is `jq '.packages | length - 1'`, run against the
+file in this directory. They are here because the numbers in the README have to
+be reproducible by someone who is not me, and because the notes I collected
+before the window said npm-xl held 1,391 entries. It holds 1,390.
