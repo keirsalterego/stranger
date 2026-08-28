@@ -65,8 +65,18 @@ pub fn normalize(eco: Ecosystem, name: &str) -> String {
 }
 
 pub fn contains(eco: Ecosystem, name: &str) -> bool {
+    contains_in(names(eco), eco, name)
+}
+
+/// Membership against an explicit list.
+///
+/// The list is a parameter and not a global because the corpus is the rule's
+/// biggest assumption, and an assumption you cannot vary is one you cannot
+/// measure. `tests/ablation.rs` shrinks it deliberately to find out which
+/// clause is holding the rule up.
+pub fn contains_in(names: &[&str], eco: Ecosystem, name: &str) -> bool {
     let name = normalize(eco, name);
-    names(eco).binary_search(&name.as_str()).is_ok()
+    names.binary_search(&name.as_str()).is_ok()
 }
 
 /// The closest real name within `MAX_EDIT_DISTANCE`, if there is one.
@@ -78,8 +88,12 @@ pub fn contains(eco: Ecosystem, name: &str) -> bool {
 /// allocated. If the not-in-corpus set ever gets large, bucket the corpus by
 /// length — the ordering by name is not doing any work for this query.
 pub fn nearest(eco: Ecosystem, name: &str) -> Option<(&'static str, usize)> {
+    nearest_in(names(eco), eco, name)
+}
+
+pub fn nearest_in<'a>(names: &[&'a str], eco: Ecosystem, name: &str) -> Option<(&'a str, usize)> {
     let query = normalize(eco, name);
-    names(eco)
+    names
         .iter()
         .filter_map(|&candidate| {
             distance::within(&query, candidate, MAX_EDIT_DISTANCE).map(|d| (candidate, d))

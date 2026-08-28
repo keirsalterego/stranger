@@ -1,0 +1,22 @@
+[book]
+title = "stranger"
+description = "Audit a dependency tree without installing, resolving, or phoning anything"
+authors = ["keirsalterego"]
+language = "en"
+src = "src"
+
+[output.html]
+site-url = "/stranger/"
+git-repository-url = "https://github.com/keirsalterego/stranger"
+edit-url-template = "https://github.com/keirsalterego/stranger/edit/main/docs/{path}"
+default-theme = "rust"
+preferred-dark-theme = "ayu"
+no-section-label = false
+
+[output.html.fold]
+enable = true
+level = 1
+
+[output.html.search]
+enable = true
+limit-results = 20

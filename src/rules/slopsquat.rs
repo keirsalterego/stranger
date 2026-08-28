@@ -22,22 +22,34 @@ use crate::lock::Tree;
 use crate::rules::{Finding, Rule, Severity};
 
 #[derive(Debug, Clone, Copy)]
-pub struct Config {
+pub struct Config<'a> {
     /// The third clause. Off is not a supported mode of the tool — it exists
     /// so the ablation can measure what the clause is worth, and so the claim
     /// in the README is a number rather than an assertion.
     pub require_no_parent: bool,
+    /// The name list to check against. `None` means the corpus compiled in for
+    /// this ecosystem, which is what the binary always passes.
+    ///
+    /// It is a parameter because the corpus is this rule's largest assumption
+    /// and an assumption you cannot vary is one you cannot measure. Every
+    /// corpus is also incomplete — npm takes thousands of new names a day and
+    /// mine is a snapshot from one afternoon — so the interesting question is
+    /// not how the rule behaves with a perfect list. It is how it behaves when
+    /// clause one starts failing, which is the condition it will actually meet.
+    pub corpus: Option<&'a [&'a str]>,
 }
 
-impl Default for Config {
+impl Default for Config<'_> {
     fn default() -> Self {
         Config {
             require_no_parent: true,
+            corpus: None,
         }
     }
 }
 
-pub fn scan(tree: &Tree, cfg: Config) -> Vec<Finding> {
+pub fn scan(tree: &Tree, cfg: Config<'_>) -> Vec<Finding> {
+    let names = cfg.corpus.unwrap_or_else(|| corpus::names(tree.ecosystem));
     let in_degree = tree.in_degree();
     let mut findings = Vec::new();
 
@@ -48,7 +60,7 @@ pub fn scan(tree: &Tree, cfg: Config) -> Vec<Finding> {
         }
         // Clause one. Cheap, and it eliminates everything but a few dozen
         // names, which is what makes clause two affordable.
-        if corpus::contains(tree.ecosystem, &pkg.name) {
+        if corpus::contains_in(names, tree.ecosystem, &pkg.name) {
             continue;
         }
         // Clause three, checked before clause two because it is a vector
@@ -57,7 +69,7 @@ pub fn scan(tree: &Tree, cfg: Config) -> Vec<Finding> {
             continue;
         }
         // Clause two.
-        let Some((nearest, distance)) = corpus::nearest(tree.ecosystem, &pkg.name) else {
+        let Some((nearest, distance)) = corpus::nearest_in(names, tree.ecosystem, &pkg.name) else {
             continue;
         };
 

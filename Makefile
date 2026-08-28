@@ -21,3 +21,6 @@ lint:
 
 clean:
 	cargo clean
+
+ablation:
+	cargo test --release --test ablation -- --nocapture --include-ignored
