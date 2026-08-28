@@ -147,7 +147,7 @@ file is absent rather than being useless without it:
 $ stranger scan /tmp/empty-project
 
   no lockfile in /tmp/empty-project
-  looked for: package-lock.json
+  looked for: package-lock.json, Cargo.lock, requirements.txt
 ```
 
 Exit code 0. `stranger` never executes `npm`, `pip`, `cargo`, `git` or anything
@@ -171,6 +171,34 @@ the event, so it is here rather than buried.
 runs code at install time and does not record what that code is. The tool can say
 code runs. It cannot say what it does. Eight of the 1,390 entries in the largest
 fixture carry the flag.
+
+**`Cargo.lock` records no build scripts and no dev-dependencies.** Cargo runs
+`build.rs` at compile time — the same shape `hasInstallScript` flags — and the
+lockfile says nothing about which crates have one. It also does not mark
+dev-dependencies or optional ones. So `install_script`, `dev` and `optional` are
+`false` on every crate, and that is a blank rather than a measurement. Guessing
+from the name (`-sys`, say) would turn a blank into a confident wrong answer.
+
+**A git dependency cannot be in a registry corpus.** `Cargo.lock` records
+`source = "git+https://…#rev"` for a crate pulled straight from a repository. It
+never went through crates.io, so it is not in a list of crates.io names, and if
+only workspace members reference it then clause 3 passes too. Two of the three
+findings on `cargo-m` are exactly this:
+
+```
+$ stranger scan fixtures/cargo-m.Cargo.lock
+
+  ⚠  HALLUCINATION RISK     3
+     ksni@0.3.4               not in corpus · d=2 from "jni" · root-only, no parent
+     sg@0.4.0                 not in corpus · d=1 from "ug" · root-only, no parent
+     slint@1.16.0             not in corpus · d=2 from "mint" · root-only, no parent
+```
+
+All three are false positives. `slint` and `sg` are git dependencies; `ksni` is a
+real crates.io crate outside the top 5,000. The rule is asking a crates.io
+question about names that were never crates.io's to answer. Suppressing git-
+sourced entries needs a `source` field on `Package`, which is a change to every
+reader, not to this one.
 
 **No Go corpus.** `proxy.golang.org` publishes no ranked list of modules and
 module paths are domains, so edit distance over them is a different problem.
