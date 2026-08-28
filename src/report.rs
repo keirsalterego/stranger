@@ -2,8 +2,16 @@
 
 use crate::lock::Tree;
 use crate::rules::{Finding, ORDER, Severity};
+use crate::term::{self, Style, Term};
 use std::io::{self, Write};
 use std::time::Duration;
+
+/// Column floors, not fixed widths — `term::column` grows past them when a
+/// name needs the room. They exist because a scan with three short names
+/// should not collapse into a cramped pair of columns, and because holding
+/// them steady keeps two scans of the same project diffable.
+const NAME_MIN: usize = 24;
+const HEAD_MIN: usize = 22;
 
 /// Severity weights, capped at 100.
 ///
@@ -44,6 +52,7 @@ pub fn thousands(n: u64) -> String {
 
 pub fn human(
     w: &mut impl Write,
+    t: Term,
     tree: &Tree,
     findings: &[Finding],
     elapsed: Duration,
@@ -56,8 +65,8 @@ pub fn human(
     writeln!(w)?;
     writeln!(
         w,
-        "  {:<24} {} packages   ({} direct · {} transitive)",
-        file,
+        "  {} {} packages   ({} direct · {} transitive)",
+        term::pad(&file, NAME_MIN),
         thousands(tree.packages.len() as u64),
         thousands(tree.direct() as u64),
         thousands(tree.transitive() as u64),
@@ -68,19 +77,36 @@ pub fn human(
         writeln!(w, "  no findings")?;
     }
 
+    // Measured across every finding rather than per rule block, so the detail
+    // column is one column down the whole report and not a staircase.
+    let labels: Vec<String> = findings.iter().map(label).collect();
+    let name_w = term::column(labels.iter().map(String::as_str), NAME_MIN);
+    let head_w = term::column(
+        ORDER
+            .iter()
+            .filter(|r| findings.iter().any(|f| f.rule == **r))
+            .map(|r| r.heading()),
+        HEAD_MIN,
+    );
+
     for &rule in ORDER {
         let hits: Vec<&Finding> = findings.iter().filter(|f| f.rule == rule).collect();
         if hits.is_empty() {
             continue;
         }
-        writeln!(w, "  ⚠  {:<22} {}", rule.heading(), hits.len())?;
+        let style = style_of(hits.iter().fold(Severity::Low, |s, f| s.max(f.severity)));
+        // Pad first, paint second. The escape codes are bytes in the string,
+        // and a column measured over a painted cell is a column measured over
+        // eight characters nobody can see.
+        writeln!(
+            w,
+            "  {}  {} {}",
+            t.paint(style, "⚠"),
+            t.paint(style, &term::pad(rule.heading(), head_w)),
+            hits.len()
+        )?;
         for f in hits {
-            let name = if f.version.is_empty() {
-                f.package.clone()
-            } else {
-                format!("{}@{}", f.package, f.version)
-            };
-            writeln!(w, "     {:<24} {}", name, f.detail)?;
+            writeln!(w, "     {} {}", term::pad(&label(f), name_w), f.detail)?;
         }
         writeln!(w)?;
     }
@@ -95,6 +121,25 @@ pub fn human(
     Ok(())
 }
 
+fn label(f: &Finding) -> String {
+    if f.version.is_empty() {
+        f.package.clone()
+    } else {
+        format!("{}@{}", f.package, f.version)
+    }
+}
+
+fn style_of(sev: Severity) -> Style {
+    match sev {
+        Severity::Critical => Style::Red,
+        Severity::High => Style::Orange,
+        Severity::Medium => Style::Yellow,
+        Severity::Low => Style::Dim,
+    }
+}
+
+/// No `Term` here, deliberately. JSON goes to a program, and a program that
+/// has to strip SGR codes out of a string field will not.
 pub fn json(
     w: &mut impl Write,
     tree: &Tree,

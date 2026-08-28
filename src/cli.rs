@@ -18,7 +18,7 @@ options:
   --format <human|json>          output format (default: human)
   --fail-on <level>              exit 1 when a finding is at or above
                                  low | medium | high | critical
-  --no-color                     never colour output (NO_COLOR is also honoured)
+  --no-color                     never colour output (NO_COLOR, CLICOLOR_FORCE)
   -q, --quiet                    findings only, no summary lines
   -h, --help                     this
   -V, --version                  version
