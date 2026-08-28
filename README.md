@@ -182,6 +182,23 @@ triggers.
 all, so every package trivially has in-degree 0 and clause 3 is vacuous there. The
 rule falls back to two clauses on those files and is correspondingly weaker.
 
+Here is that costing a false positive, on a real fixture:
+
+```
+$ stranger scan fixtures/reqs-xs.requirements.txt
+
+  ⚠  HALLUCINATION RISK     1
+     tensorflow-gpu           not in corpus · d=1 from "tensorflow-cpu" · root-only, no parent
+```
+
+`tensorflow-gpu` is a real PyPI package. It is deprecated and absent from the
+top-15,000 corpus, and it is one edit from `tensorflow-cpu`, so clauses 1 and 2
+both fire. On an npm tree clause 3 would have had a chance to save it. On a
+`requirements.txt` there is no clause 3 to have the chance.
+
+The fix is a different file rather than a better reader: `poetry.lock` and
+`uv.lock` both record the resolved graph, and both are already in `fixtures/`.
+
 **The corpus is a snapshot.** Taken 2026-08-28. A package published after that
 date looks exactly like a package that does not exist. The table above is, among
 other things, a measurement of how badly that ages.

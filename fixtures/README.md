@@ -55,14 +55,23 @@ pip, in `poisoned.requirements.txt`:
 | line | nearest real name | note |
 |---|---|---|
 | `python-dateutils==2.9.0` | `python-dateutil` | one insertion |
-| `requests-http==1.0.2` | — | not close to anything; caught as unpinned/unknown, not as a typo |
+| `requests-http==1.0.2` | `requests-html` | two edits — see the correction below |
 | `urllib3>=1.26` | — | unpinned, which is its own finding |
 | `numpy` | — | no constraint at all |
 
-`requests-http` is in there deliberately as a name the typo rule should **not**
-fire on. A hallucinated name that is not a near-miss of a real one is a different
-problem, and pretending one rule catches both would be a lie the ablation table
-would expose anyway.
+`requests-http` was put in as a name the typo rule should **not** fire on — the
+theory being that a hallucinated name which is not a near-miss of a real one is a
+different problem, and one rule should not pretend to catch both.
+
+**That was wrong, and the tool found the error.** `requests-http` is two edits
+from `requests-html`, which is a real PyPI package with about 14,000 lines of
+README behind it. So the rule fires, and it is *right* to fire: `requests-http`
+does not exist and never has. The finding is a true positive. What was wrong was
+my reasoning about why it would stay quiet — I had not checked whether a real
+neighbour existed, and it does.
+
+Left in place, reclassified, because a fixture that corrected a claim in its own
+documentation is worth more than one that confirmed it.
 
 ## Measured, not remembered
 
