@@ -3,6 +3,7 @@
 pub mod cargo;
 pub mod npm;
 pub mod pip;
+pub mod pnpm;
 pub mod pypi;
 
 use std::path::PathBuf;
@@ -142,6 +143,7 @@ impl Tree {
 /// Lockfiles we know how to read, in the order we look for them.
 pub const KNOWN: &[&str] = &[
     "package-lock.json",
+    "pnpm-lock.yaml",
     "Cargo.lock",
     "requirements.txt",
     "poetry.lock",
@@ -160,10 +162,12 @@ pub fn read(path: &std::path::Path) -> crate::error::Result<Tree> {
     // still reads. Lockfiles get renamed the moment you collect more than one.
     //
     // Suffix matching only stays unambiguous while no known name is a suffix
-    // of another. None of these three is, so the arm order is documentation
-    // rather than precedence — but check it before adding a fourth.
+    // of another. None of these six is, so the arm order is documentation
+    // rather than precedence — but check it before adding a seventh.
     if name.ends_with("package-lock.json") {
         npm::read(path, &src)
+    } else if name.ends_with("pnpm-lock.yaml") {
+        pnpm::read(path, &src)
     } else if name.ends_with("Cargo.lock") {
         cargo::read(path, &src)
     } else if name.ends_with("requirements.txt") {

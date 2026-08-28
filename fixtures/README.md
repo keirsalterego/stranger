@@ -23,7 +23,7 @@ present is public.
 | `uv-m.uv.lock` | 250 | uv |
 | `reqs-xs.requirements.txt` | 12 | pip — every line a bare name, no constraint anywhere |
 | `reqs-s.requirements.txt` | 23 | pip |
-| `pnpm-l.pnpm-lock.yaml` | 850 | pnpm |
+| `pnpm-l.pnpm-lock.yaml` | 850 | pnpm, lockfileVersion 9 — one importer, 850 snapshots, 1,851 edges, 42 `hasBin`, 3 `deprecated` |
 
 Names describe shape, not origin. A directory called `some-company-console/` in a
 public repo publishes what someone's private product is built on; `npm-m` does not.
