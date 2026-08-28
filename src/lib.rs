@@ -18,3 +18,4 @@ pub mod semver;
 pub mod term;
 pub mod toml;
 pub mod walk;
+pub mod yaml;
