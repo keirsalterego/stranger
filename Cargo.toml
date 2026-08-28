@@ -1,0 +1,18 @@
+[package]
+name = "stranger"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Audit a dependency tree without installing, resolving, or phoning anything."
+repository = "https://github.com/keirsalterego/stranger"
+
+# The rulebook. These three stay empty for the life of this repo.
+# Rust ships its own test harness, so there is no dev-dependency escape hatch in use either.
+[dependencies]
+
+[dev-dependencies]
+
+[build-dependencies]
+
+[profile.release]
+panic = "abort"
