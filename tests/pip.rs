@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use stranger::lock::{Ecosystem, Pin, Tree, pip};
+use stranger::rules::{Rule, Severity, pinning};
 
 fn load(name: &str) -> Tree {
     let path: PathBuf = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -244,4 +245,81 @@ fn dispatch_by_suffix() {
     let t = stranger::lock::read(&path).unwrap();
     assert_eq!(t.ecosystem, Ecosystem::PyPi);
     assert_eq!(t.packages.len(), 6);
+}
+
+// ---------------------------------------------------------------- pinning
+
+fn unpinned(t: &Tree) -> Vec<(String, Severity)> {
+    pinning::scan(t)
+        .into_iter()
+        .inspect(|f| assert_eq!(f.rule, Rule::Pinning))
+        .map(|f| (f.package, f.severity))
+        .collect()
+}
+
+/// The poisoned fixture line by line. Three of its six requirements name a
+/// version and three do not, and the three that do have to stay silent — a
+/// rule that flags `requests==2.31.0` is a rule people turn off.
+#[test]
+fn poisoned_unpinned_only() {
+    let found = unpinned(&load("poisoned.requirements.txt"));
+    assert_eq!(
+        found,
+        vec![
+            ("flask".to_string(), Severity::Low),
+            ("numpy".to_string(), Severity::High),
+            ("urllib3".to_string(), Severity::Medium),
+        ]
+    );
+    for pinned in ["requests", "python-dateutils", "requests-http"] {
+        assert!(
+            !found.iter().any(|(name, _)| name == pinned),
+            "{pinned} names a version and must not be flagged"
+        );
+    }
+}
+
+/// The detail quotes the file rather than paraphrasing it, or there is no way
+/// to disagree with a finding without opening the file yourself.
+#[test]
+fn detail_quotes_the_specifier() {
+    let findings = pinning::scan(&load("poisoned.requirements.txt"));
+    let detail = |name: &str| {
+        findings
+            .iter()
+            .find(|f| f.package == name)
+            .unwrap_or_else(|| panic!("no {name}"))
+            .detail
+            .clone()
+    };
+    assert!(
+        detail("urllib3").starts_with(">=1.26 "),
+        "{}",
+        detail("urllib3")
+    );
+    assert!(detail("flask").starts_with("~=3.0 "), "{}", detail("flask"));
+    // Nothing to quote for a bare name, so it must not invent a specifier.
+    assert!(!detail("numpy").contains('='), "{}", detail("numpy"));
+}
+
+/// Every line in `reqs-s` is a `==` pin and every line in `reqs-xs` is a bare
+/// name. The two fixtures are this rule's floor and ceiling.
+#[test]
+fn fixture_extremes() {
+    assert!(unpinned(&load("reqs-s.requirements.txt")).is_empty());
+    let xs = unpinned(&load("reqs-xs.requirements.txt"));
+    assert_eq!(xs.len(), 12);
+    assert!(xs.iter().all(|(_, s)| *s == Severity::High));
+}
+
+/// A lockfile resolves one version per entry, so there is never anything to
+/// report. Bailing on the ecosystem rather than scanning it is what keeps that
+/// true if some future reader gets `pinned` wrong.
+#[test]
+fn other_ecosystems_are_silent() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("fixtures")
+        .join("npm-xs.package-lock.json");
+    let t = stranger::lock::read(&path).unwrap();
+    assert!(pinning::scan(&t).is_empty());
 }
