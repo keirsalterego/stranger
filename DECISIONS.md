@@ -11,7 +11,7 @@ scores accordingly.
 
 ## One crate, not a workspace
 
-`stranger` is eleven modules in one crate. It could be `stranger-json`,
+`stranger` is twenty-five source files in one crate. It could be `stranger-json`,
 `stranger-toml`, `stranger-lock` and so on, and that would look more serious.
 
 A workspace here would be an abstraction with one consumer. None of these modules
@@ -25,7 +25,7 @@ if `json.rs` broke `npm.rs`.
 
 ## Skipping the Single File bonus, on purpose
 
-There is a +5 bonus for shipping as one file. Eleven modules crushed into one
+There is a +5 bonus for shipping as one file. Twenty-five files crushed into one
 `main.rs` trades a 25% criterion for a 5% bonus, and the 25% one is Code Quality
 judged by a Rust reviewer who will not enjoy scrolling past a JSON parser to reach
 an argument parser.
@@ -98,10 +98,47 @@ cannot measure.
 
 ## The TOML subset
 
-*(This section is filled in as `src/toml.rs` lands — the honest version names the
-exact productions supported and what happens on the rest. Refusing an unsupported
-construct with a positioned error beats mis-parsing it into a plausible-looking
-wrong answer.)*
+One parser reads `Cargo.lock`, `poetry.lock` and `uv.lock`. Three ecosystems for
+the price of one, which made it the highest-leverage module after JSON.
+
+**Accepted:** `key = value` at top level and inside tables; `[table]` and
+`[dotted.table]` headers; `[[array.of.tables]]`, which is `[[package]]` and the
+whole reason the module exists; basic strings with `\b \t \n \f \r \" \\ \uXXXX
+\UXXXXXXXX`; literal strings; multi-line `"""…"""` and `'''…'''` including the
+line-ending backslash fold; decimal integers with `_` separators and an optional
+sign; `true`/`false`; arrays over any number of lines with a trailing comma
+allowed; single-line inline tables; `#` comments.
+
+**Refused, each with a line and column:** floats, dates, times and date-times as
+bare values; hex, octal and binary integers; dotted keys (`a.b = 1`) outside a
+table header; inline tables spread over several lines, which is TOML 1.1;
+duplicate keys; and a `[table]` header that reopens a table already defined.
+
+Refusing beats guessing. A parser that improvises at a construct it does not know
+produces a plausible wrong answer, and a plausible wrong answer in a security
+tool is worse than an error — an error you investigate, a wrong answer you act on.
+
+Three things the fixtures taught that guessing would have missed:
+
+- **The subset is only sufficient because `uv.lock` writes timestamps as
+  strings** — `upload-time = "2026-03-26T01:21:00.379Z"`. Had it used TOML
+  datetimes, this parser would refuse the file rather than misread it. The only
+  bare integers across all six fixtures are `version` and `revision`: 1, 3, 4.
+- **poetry writes quoted keys containing dots**: `"jaraco.classes" = "*"`. That
+  is one key whose name contains a dot, not a dotted key. Quoting is what
+  decides, not the dot; conflating them silently invents a `jaraco` table.
+- **No triple-quoted string appears anywhere in the corpus.** Not one, across six
+  real lockfiles, contrary to what I assumed going in — I had expected poetry to
+  use them for descriptions. They are implemented anyway, because a lockfile is
+  permitted to contain one and mis-reading it would be worse than refusing it,
+  but nothing in the corpus exercises that path.
+
+The same reasoning governs `src/yaml.rs`, where the stakes are higher. YAML 1.1
+implicit typing turns `no`, `on`, `off` and `y` into booleans — and all four are
+real npm package names. A reader that turned the key `no@1.0.0` into a boolean
+would drop a package out of an audit without a word, so exactly two tokens are
+typed (lowercase `true` and `false`, which `pnpm-lock.yaml` needs) and everything
+else stays a string.
 
 ## What the xorshift is for
 
