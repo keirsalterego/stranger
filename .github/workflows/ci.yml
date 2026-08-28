@@ -35,13 +35,18 @@ jobs:
       - name: No unsafe
         run: |
           set -euo pipefail
-          # The naive grep matches the forbid attribute itself and returns 1,
-          # which is a ghost worth not chasing.
-          if grep -rn '\bunsafe\b' src/ | grep -v 'forbid(unsafe_code)'; then
+          # The attribute is what actually enforces this — the compiler rejects
+          # any unsafe underneath it, so check the attribute is still there.
+          grep -q '^#!\[forbid(unsafe_code)\]' src/lib.rs
+          grep -q '^#!\[forbid(unsafe_code)\]' src/main.rs
+          # The grep is belt and braces, and has to match the *syntax* rather
+          # than the word. Matching the word fails on every comment explaining
+          # why something avoids unsafe, which is how this check first broke.
+          if grep -rnE '\bunsafe\s*(\{|fn\b|impl\b|trait\b|extern\b)' src/; then
             echo "unexpected unsafe" >&2
             exit 1
           fi
-          echo "none"
+          echo "none, and forbidden at both crate roots"
 
       - name: No shelling out
         run: |

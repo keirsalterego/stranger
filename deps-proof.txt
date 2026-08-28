@@ -1,5 +1,5 @@
 stranger — dependency proof
-generated 2026-08-28T18:49:44Z by scripts/proof.sh
+generated 2026-08-28T19:16:44Z by scripts/proof.sh
 
 rustc: rustc 1.98.0 (88d9e12ae 2026-08-18)
 cargo: cargo 1.98.0 (797e8a9bc 2026-08-05)
@@ -23,9 +23,13 @@ $ grep -A2 "^\[dependencies\]" Cargo.toml
 $ CARGO_NET_OFFLINE=true cargo build --release --locked --offline
 OK
 
-$ grep -rn "unsafe" src/ | grep -v "forbid(unsafe_code)"
-(no output — zero unsafe blocks; the crate root forbids them outright)
+$ grep -q "forbid(unsafe_code)" src/lib.rs src/main.rs
+src/lib.rs: forbidden
+src/main.rs: forbidden
 
-release binary: 3602672 bytes
+$ grep -rnE "\bunsafe\s*(\{|fn|impl|trait|extern)" src/
+(no output — zero unsafe blocks, functions, impls or externs)
+
+release binary: 3676440 bytes
   most of that is the 140,066-name corpus, compiled in with include_str!
   so the tool needs no network and no cache directory at runtime.
