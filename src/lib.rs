@@ -10,3 +10,4 @@ pub mod distance;
 pub mod error;
 pub mod json;
 pub mod lock;
+pub mod toml;
