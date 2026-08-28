@@ -157,3 +157,58 @@ fn help_and_version() {
     // No arguments is help, not an error.
     assert_eq!(run(&[]).status.code(), Some(0));
 }
+
+/// A directory scan walks, finds several lockfiles across several ecosystems,
+/// and audits them on separate threads. Output order is the sorted path order
+/// rather than whichever thread finished first — two runs over one tree have
+/// to produce the same bytes or a diff between scans is noise.
+#[test]
+fn a_directory_scan_is_deterministic() {
+    let strip_timing = |s: String| {
+        s.lines()
+            .map(|l| {
+                if l.contains("risk ") {
+                    "risk".to_string()
+                } else {
+                    l.to_string()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let once = strip_timing(stdout(&run(&["scan", "fixtures"])));
+    for _ in 0..4 {
+        assert_eq!(strip_timing(stdout(&run(&["scan", "fixtures"]))), once);
+    }
+    // Every format, in sorted order.
+    let order: Vec<&str> = once
+        .lines()
+        .filter(|l| l.contains(" packages   ("))
+        .map(|l| l.trim().split_whitespace().next().unwrap())
+        .collect();
+    assert!(order.len() >= 15, "{order:?}");
+    let mut sorted = order.clone();
+    sorted.sort_unstable();
+    assert_eq!(order, sorted, "results come out in path order");
+    assert!(order.iter().any(|f| f.ends_with("Cargo.lock")));
+    assert!(order.iter().any(|f| f.ends_with("uv.lock")));
+    assert!(order.iter().any(|f| f.ends_with("requirements.txt")));
+}
+
+/// The walk must not wander into a vendored `node_modules` and audit four
+/// hundred lockfiles belonging to other people.
+#[test]
+fn a_directory_scan_skips_vendored_lockfiles() {
+    let root = Path::new(env!("CARGO_TARGET_TMPDIR")).join("cli_vendored");
+    let nested = root.join("node_modules/some-dep");
+    std::fs::create_dir_all(&nested).unwrap();
+    let real = std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/npm-xs.package-lock.json"),
+    )
+    .unwrap();
+    std::fs::write(root.join("package-lock.json"), &real).unwrap();
+    std::fs::write(nested.join("package-lock.json"), &real).unwrap();
+
+    let out = stdout(&run(&["scan", root.to_str().unwrap()]));
+    assert_eq!(out.matches(" packages   (").count(), 1, "{out}");
+}

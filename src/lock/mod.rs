@@ -180,15 +180,11 @@ pub fn read(path: &std::path::Path) -> crate::error::Result<Tree> {
     }
 }
 
-/// Every known lockfile directly inside `dir`.
+/// Every known lockfile under `dir`.
 ///
-/// Deliberately not recursive yet — a recursive walk that wanders into
-/// `node_modules` and audits four hundred vendored lockfiles is worse than no
-/// walk at all.
+/// The walk is what makes this usable on a monorepo, and the skip list in
+/// `crate::walk` is what keeps it from wandering into `node_modules` and
+/// auditing four hundred vendored lockfiles belonging to other people.
 pub fn discover(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
-    KNOWN
-        .iter()
-        .map(|n| dir.join(n))
-        .filter(|p| p.is_file())
-        .collect()
+    crate::walk::lockfiles(dir, KNOWN)
 }
