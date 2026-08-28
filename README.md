@@ -255,11 +255,21 @@ The fix is a different file rather than a better reader, and it has landed:
 `poetry.lock` and `uv.lock` both record the resolved graph, and `stranger` now
 reads both. Point it at one of those instead and clause 3 has something to work
 with — 283 edges across 233 packages in `poetry-m.poetry.lock`, 476 across 250
-in `uv-m.uv.lock`. Thin the corpus by a tenth, which is the honest way to ask
-what a clause is worth, and clause 3 removes 6 of the 10 candidates on
-`poetry-m` and 6 of 11 on `uv-m`; on every `requirements.txt` at every corpus
-size it removes exactly zero, because there is no edge in the file for it to
-read. `tests/pypi.rs` pins that asymmetry.
+in `uv-m.uv.lock`.
+
+Thin the corpus, which is the honest way to ask what a clause is worth, and the
+asymmetry is the whole argument:
+
+| corpus kept | candidates clause 3 removes on `poetry-m` | on `uv-m` | on any `requirements.txt` |
+|---|---|---|---|
+| 90% | 6 of 10 | 6 of 11 | **0** |
+| 70% | 18 of 31 | 24 of 32 | **0** |
+| 50% | 22 of 39 | 27 of 35 | **0** |
+| 25% | 30 of 49 | 34 of 45 | **0** |
+
+Sixty to seventy-five per cent of the candidates on a file with a graph, and
+exactly zero on a flat file at every corpus size, because there is no edge in the
+file to read. `tests/pypi.rs` pins that asymmetry.
 
 **A corpus can only speak about one registry.** A package pulled from git, a
 private index or a direct URL never passed through the public registry the corpus
