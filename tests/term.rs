@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 use std::time::Duration;
-use stranger::lock::{Ecosystem, Package, Tree};
+use stranger::lock::{Ecosystem, Package, Pin, Tree};
 use stranger::report;
 use stranger::rules::{Finding, Rule, Severity};
 use stranger::term::{self, Style, Term};
@@ -91,6 +91,7 @@ fn tree() -> Tree {
         first_party: false,
         install_script: false,
         has_integrity: true,
+        pinned: Pin::Exact,
     };
     Tree {
         ecosystem: Ecosystem::Npm,
@@ -119,6 +120,7 @@ fn render(color: bool, findings: &[Finding]) -> String {
         &tree(),
         findings,
         Duration::from_millis(7),
+        false,
     )
     .unwrap();
     String::from_utf8(buf).unwrap()
