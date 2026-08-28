@@ -1,0 +1,31 @@
+stranger — dependency proof
+generated 2026-08-28T18:49:44Z by scripts/proof.sh
+
+rustc: rustc 1.98.0 (88d9e12ae 2026-08-18)
+cargo: cargo 1.98.0 (797e8a9bc 2026-08-05)
+
+$ cargo tree
+stranger v0.1.0 (/home/keir/stranger)
+
+lines of cargo tree output: 1
+  (one line means one crate: this one)
+
+$ grep -c "^\[\[package\]\]" Cargo.lock
+1
+  (one [[package]] block means nothing was resolved but us)
+
+$ grep -A2 "^\[dependencies\]" Cargo.toml
+[dependencies]
+
+[dev-dependencies]
+
+--- the strongest one: it builds with the network unavailable ---
+$ CARGO_NET_OFFLINE=true cargo build --release --locked --offline
+OK
+
+$ grep -rn "unsafe" src/ | grep -v "forbid(unsafe_code)"
+(no output — zero unsafe blocks; the crate root forbids them outright)
+
+release binary: 3602672 bytes
+  most of that is the 140,066-name corpus, compiled in with include_str!
+  so the tool needs no network and no cache directory at runtime.
