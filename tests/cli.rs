@@ -184,7 +184,7 @@ fn a_directory_scan_is_deterministic() {
     let order: Vec<&str> = once
         .lines()
         .filter(|l| l.contains(" packages   ("))
-        .map(|l| l.trim().split_whitespace().next().unwrap())
+        .map(|l| l.split_whitespace().next().unwrap())
         .collect();
     assert!(order.len() >= 15, "{order:?}");
     let mut sorted = order.clone();

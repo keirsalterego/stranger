@@ -15,8 +15,17 @@ $ stranger scan fixtures/poisoned.package-lock.json
      expres@4.18.2            not in corpus · d=1 from "express" · root-only, no parent
      lodahs@4.17.21           not in corpus · d=1 from "lodash" · root-only, no parent
 
-  risk 75/100    53ms    third-party deps used to compute this: 0
+  ⚠  INSTALL SCRIPTS        3     arbitrary code at install time
+
+  ⚠  TRIVIAL                35    (4.6% of tree)
+
+  ⚠  VERSION DRIFT          55    same package at 2+ versions in one tree
+
+  risk 100/100    143ms    third-party deps used to compute this: 0
 ```
+
+Critical findings get their lines. The rest are a count and what the count means,
+until you ask with `-v`.
 
 That last number is the point. `stranger` is written for the Zero Dependency
 hackathon in Rust with the standard library and nothing else.

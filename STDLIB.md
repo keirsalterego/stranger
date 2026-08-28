@@ -221,6 +221,27 @@ verifies no signatures, and has no key material.
 
 ---
 
+### `serde_yaml` — 383,697,832 all-time · 88,928,764 in 90 days
+[`src/yaml.rs`](src/yaml.rs). A subset sufficient for `pnpm-lock.yaml` v9.
+
+Accepted: block mappings nested by indentation, block sequences, plain scalars,
+single- and double-quoted scalars, single-line flow collections, comments, a
+leading BOM, CRLF.
+
+**What I gave up:** anchors, aliases, tags, directives, block scalars,
+multi-line quoted scalars, multiple documents, and mappings inside sequence
+items. Each is refused *by name at the indicator* rather than by falling through
+— the plain-scalar scanner would otherwise read `&anchor 1` as the string
+`"&anchor 1"` and be silently, plausibly wrong.
+
+The decision worth defending is implicit typing. YAML 1.1 turns `no`, `on`,
+`off` and `y` into booleans, which is the famous Norway problem. Exactly two
+tokens are typed here — lowercase `true` and lowercase `false` — and everything
+else stays a string, because **`no`, `on`, `y` and `off` are all real npm
+package names**. A reader that turned the key `no@1.0.0` into a boolean would
+drop a package out of a supply-chain audit without a word. `null`, `~`, `Yes`,
+`010` and `1e3` all stay strings for the same reason.
+
 ## Terminal
 
 ### `owo-colors` — 156,700,441 all-time · 32,842,569 in 90 days
