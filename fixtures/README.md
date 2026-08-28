@@ -15,9 +15,9 @@ present is public.
 | `npm-m.package-lock.json` | 582 | npm, lockfileVersion 3 — 3 are `link: true` workspace members |
 | `npm-l.package-lock.json` | 754 | npm, lockfileVersion 3 |
 | `npm-xl.package-lock.json` | 1390 | npm, lockfileVersion 3 — 7 `link: true`, 184 nested, 9 install scripts. The benchmark fixture. |
-| `cargo-s.Cargo.lock` | 124 | cargo |
-| `cargo-m.Cargo.lock` | 723 | cargo |
-| `cargo-l.Cargo.lock` | 944 | cargo |
+| `cargo-s.Cargo.lock` | 124 | cargo v4 — 1 workspace member, 8 version-qualified dependency strings |
+| `cargo-m.Cargo.lock` | 723 | cargo v3 — 15 workspace members, 19 git dependencies, 500 version-qualified |
+| `cargo-l.Cargo.lock` | 944 | cargo v4 — 93 workspace members, 597 version-qualified. The workspace fixture. |
 | `poetry-s.poetry.lock` | 54 | poetry |
 | `poetry-m.poetry.lock` | 233 | poetry |
 | `uv-m.uv.lock` | 250 | uv |
@@ -75,8 +75,9 @@ documentation is worth more than one that confirmed it.
 
 ## Measured, not remembered
 
-Every npm count in the table above is `jq '.packages | length - 1'` and every pip
-count is `awk 'NF && $0 !~ /^[ \t]*#/'`, both run against the file in this
+Every npm count in the table above is `jq '.packages | length - 1'`, every cargo
+count is `grep -c '^\[\[package\]\]'`, and every pip count is
+`awk 'NF && $0 !~ /^[ \t]*#/'`, all run against the file in this
 directory. They are here because the numbers in the README have to be
 reproducible by someone who is not me, and because the notes I collected before
 the window said npm-xl held 1,391 entries. It holds 1,390.
