@@ -11,12 +11,11 @@ cargo build --release --locked
     Finished `release` profile [optimized] target(s) in 1.32s
 ```
 
-A cold build of the whole thing takes under two seconds, because there is
-nothing to compile except this crate.
+Under two seconds cold, because there is nothing to compile except this crate.
 
-`make` is `cargo build --release --locked`. The `--locked` matters even with an
-empty manifest: it makes Cargo refuse to write `Cargo.lock`, so a build that
-somehow needed a dependency would fail rather than quietly acquire one.
+The `--locked` matters even with an empty manifest. It makes Cargo refuse to
+write `Cargo.lock`, so a build that somehow needed a dependency fails instead of
+quietly acquiring one.
 
 The compiler is pinned in `rust-toolchain.toml`:
 
