@@ -24,3 +24,6 @@ clean:
 
 ablation:
 	cargo test --release --test ablation -- --nocapture --include-ignored
+
+repro:
+	@./scripts/repro.sh
