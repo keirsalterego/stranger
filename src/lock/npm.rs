@@ -13,7 +13,7 @@
 
 use crate::error::{Error, Result};
 use crate::json::{self, Value};
-use crate::lock::{Ecosystem, Package, Tree};
+use crate::lock::{Ecosystem, Package, Pin, Tree};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -77,6 +77,9 @@ pub fn read(path: &Path, src: &str) -> Result<Tree> {
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
             has_integrity: entry.get("integrity").is_some(),
+            // The `^`s and `~`s live in package.json. A package-lock entry is
+            // the resolver's answer, and the answer is one version.
+            pinned: Pin::Exact,
         });
     }
 
