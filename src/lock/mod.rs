@@ -1,5 +1,6 @@
 //! What every lockfile reader produces, regardless of ecosystem.
 
+pub mod cargo;
 pub mod npm;
 pub mod pip;
 
@@ -101,7 +102,7 @@ impl Tree {
 }
 
 /// Lockfiles we know how to read, in the order we look for them.
-pub const KNOWN: &[&str] = &["package-lock.json", "requirements.txt"];
+pub const KNOWN: &[&str] = &["package-lock.json", "Cargo.lock", "requirements.txt"];
 
 /// Read one lockfile, dispatching on its name.
 pub fn read(path: &std::path::Path) -> crate::error::Result<Tree> {
@@ -113,8 +114,14 @@ pub fn read(path: &std::path::Path) -> crate::error::Result<Tree> {
         .unwrap_or_default();
     // Suffix rather than equality, so a file kept as `npm-xl.package-lock.json`
     // still reads. Lockfiles get renamed the moment you collect more than one.
+    //
+    // Suffix matching only stays unambiguous while no known name is a suffix
+    // of another. None of these three is, so the arm order is documentation
+    // rather than precedence — but check it before adding a fourth.
     if name.ends_with("package-lock.json") {
         npm::read(path, &src)
+    } else if name.ends_with("Cargo.lock") {
+        cargo::read(path, &src)
     } else if name.ends_with("requirements.txt") {
         pip::read(path, &src)
     } else {
