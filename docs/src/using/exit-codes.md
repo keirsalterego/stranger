@@ -4,7 +4,7 @@ Three of them, and the split between 1 and 2 is the point.
 
 | code | meaning |
 |---|---|
-| 0 | clean, or findings below the `--fail-on` threshold, or no lockfile found |
+| 0 | clean, findings below the `--fail-on` threshold, or no lockfile found |
 | 1 | a finding at or above the threshold |
 | 2 | bad usage, or a file that could not be read or parsed |
 
@@ -28,23 +28,44 @@ fail by default would mean everyone learns to write `|| true`.
 
 ## With `--fail-on`
 
+The threshold is compared against the worst severity seen. Levels order
+`low < medium < high < critical`, and the five rules occupy four different
+levels, so the choice matters.
+
+| rule | severity |
+|---|---|
+| slopsquat | critical |
+| install-script | high |
+| pinning | high, medium or low, depending on the specifier |
+| drift | medium |
+| trivial | low |
+
+`npm-xl` has install scripts, drift and trivial findings but no hallucinated
+names, which makes it a clean demonstration of the threshold actually doing
+something:
+
 ```console
-$ ./target/release/stranger scan --fail-on critical fixtures/poisoned.package-lock.json > /dev/null
+$ ./target/release/stranger scan --fail-on critical fixtures/npm-xl.package-lock.json > /dev/null
 $ echo $?
-1
+0
 
 $ ./target/release/stranger scan --fail-on high fixtures/npm-xl.package-lock.json > /dev/null
 $ echo $?
-0
+1
 ```
 
-The threshold is compared against the worst severity seen. Levels order
-`low < medium < high < critical`, so `--fail-on low` fails on anything at all
-and `--fail-on critical` fails only on the top level.
+`npm-xs` has nothing but four trivial findings, so it separates `low` from
+`medium`:
 
-Today every finding the tool can produce is `critical`, so all four thresholds
-behave identically. That will stop being true when a second rule lands. Pick the
-level you mean now rather than the level that happens to work.
+```console
+$ ./target/release/stranger scan --fail-on low fixtures/npm-xs.package-lock.json > /dev/null
+$ echo $?
+1
+
+$ ./target/release/stranger scan --fail-on medium fixtures/npm-xs.package-lock.json > /dev/null
+$ echo $?
+0
+```
 
 ## Exit 2
 
@@ -60,7 +81,7 @@ $ echo $?
 2
 
 $ ./target/release/stranger scan fixtures/cargo-s.Cargo.lock
-stranger: cargo-s.Cargo.lock: not a lockfile stranger knows. It reads: package-lock.json
+stranger: cargo-s.Cargo.lock: not a lockfile stranger knows. It reads: package-lock.json, requirements.txt
 $ echo $?
 2
 ```
@@ -70,13 +91,28 @@ before anything is written, a `--format json` run that exits 2 has printed
 nothing to stdout — a downstream parser gets an empty stream and a non-zero
 status rather than half an object.
 
+## A closed pipe is not an error
+
+```console
+$ ./target/release/stranger scan fixtures/poisoned.package-lock.json | head -3
+
+  poisoned.package-lock.json 757 packages   (35 direct · 722 transitive)
+
+$ echo $?
+0
+```
+
+`head` closes the pipe as soon as it has what it wants, and every write after
+that fails with EPIPE. That is the shell working correctly, so it exits 0 and
+says nothing. The alternative is an error message on every piped invocation.
+
 ## No lockfile is not an error
 
 ```console
 $ ./target/release/stranger scan /tmp/empty
 
   no lockfile in /tmp/empty
-  looked for: package-lock.json
+  looked for: package-lock.json, requirements.txt
 
 $ echo $?
 0
@@ -87,5 +123,5 @@ red on the directories it has nothing to say about. See
 [A project whose toolchain you do not have](../cookbook/no-toolchain.md).
 
 ```console
-$ ./target/release/stranger scan --fail-on high fixtures/poisoned.package-lock.json; echo $?
+$ ./target/release/stranger scan --fail-on high fixtures/npm-xl.package-lock.json; echo $?
 ```
