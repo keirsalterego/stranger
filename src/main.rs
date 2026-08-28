@@ -96,7 +96,7 @@ fn emit(
     elapsed: std::time::Duration,
 ) -> Result<()> {
     let r = match opts.format {
-        Format::Human => report::human(out, term, tree, findings, elapsed),
+        Format::Human => report::human(out, term, tree, findings, elapsed, opts.verbose),
         Format::Json => report::json(out, tree, findings, elapsed),
     };
     r.map_err(|e| Error::io("stdout", e))

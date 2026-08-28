@@ -1,7 +1,7 @@
 //! Rendering a scan, for a person and for a machine.
 
 use crate::lock::Tree;
-use crate::rules::{Finding, ORDER, Severity};
+use crate::rules::{Finding, ORDER, Rule, Severity};
 use crate::term::{self, Style, Term};
 use std::io::{self, Write};
 use std::time::Duration;
@@ -50,12 +50,32 @@ pub fn thousands(n: u64) -> String {
     out
 }
 
+/// The tail of a rule's summary line, for rules that do not list every hit.
+///
+/// A 1,390-package tree produces 76 drift findings and 29 trivial ones. Printing
+/// all of them buries the three that matter under a hundred lines nobody scrolls
+/// back through, so only critical findings are listed by default and everything
+/// else reports a count and what the count means. `--verbose` prints the lot.
+fn note(rule: Rule, hits: usize, tree: &Tree) -> String {
+    match rule {
+        Rule::Slopsquat => String::new(),
+        Rule::Trivial => {
+            let pct = 100.0 * hits as f64 / tree.packages.len().max(1) as f64;
+            format!("({pct:.1}% of tree)")
+        }
+        Rule::InstallScript => "arbitrary code at install time".into(),
+        Rule::Drift => "same package at 2+ versions in one tree".into(),
+        Rule::Pinning => "no exact version recorded".into(),
+    }
+}
+
 pub fn human(
     w: &mut impl Write,
     t: Term,
     tree: &Tree,
     findings: &[Finding],
     elapsed: Duration,
+    verbose: bool,
 ) -> io::Result<()> {
     let file = tree.source.file_name().map_or_else(
         || tree.source.display().to_string(),
@@ -77,9 +97,12 @@ pub fn human(
         writeln!(w, "  no findings")?;
     }
 
-    // Measured across every finding rather than per rule block, so the detail
-    // column is one column down the whole report and not a staircase.
-    let labels: Vec<String> = findings.iter().map(label).collect();
+    // Measured across every finding that will actually be printed, rather than
+    // per rule block, so the detail column is one column down the whole report
+    // and not a staircase. Findings that stay collapsed do not get a vote —
+    // otherwise one long trivial-package name widens a column nobody sees.
+    let shown = |f: &Finding| verbose || f.rule == Rule::Slopsquat;
+    let labels: Vec<String> = findings.iter().filter(|f| shown(f)).map(label).collect();
     let name_w = term::column(labels.iter().map(String::as_str), NAME_MIN);
     let head_w = term::column(
         ORDER
@@ -98,15 +121,22 @@ pub fn human(
         // Pad first, paint second. The escape codes are bytes in the string,
         // and a column measured over a painted cell is a column measured over
         // eight characters nobody can see.
-        writeln!(
-            w,
-            "  {}  {} {}",
+        let count = hits.len();
+        let tail = note(rule, count, tree);
+        let line = format!(
+            "  {}  {} {:<5} {}",
             t.paint(style, "⚠"),
             t.paint(style, &term::pad(rule.heading(), head_w)),
-            hits.len()
-        )?;
-        for f in hits {
-            writeln!(w, "     {} {}", term::pad(&label(f), name_w), f.detail)?;
+            count,
+            tail,
+        );
+        writeln!(w, "{}", line.trim_end())?;
+        // Critical findings always get their lines — they are the answer, and
+        // there are never many. The rest are a count until asked.
+        if shown(hits[0]) {
+            for f in hits {
+                writeln!(w, "     {} {}", term::pad(&label(f), name_w), f.detail)?;
+            }
         }
         writeln!(w)?;
     }
