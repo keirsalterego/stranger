@@ -147,7 +147,7 @@ file is absent rather than being useless without it:
 $ stranger scan /tmp/empty-project
 
   no lockfile in /tmp/empty-project
-  looked for: package-lock.json
+  looked for: package-lock.json, requirements.txt, poetry.lock, uv.lock
 ```
 
 Exit code 0. `stranger` never executes `npm`, `pip`, `cargo`, `git` or anything
@@ -171,6 +171,12 @@ the event, so it is here rather than buried.
 runs code at install time and does not record what that code is. The tool can say
 code runs. It cannot say what it does. Eight of the 1,390 entries in the largest
 fixture carry the flag.
+
+**No install-script signal on Python at all.** Neither `poetry.lock` nor
+`uv.lock` records whether a package runs code at install time, and an sdist
+with no wheel is suggestive rather than the same claim, so `install_script` is
+`false` on every Python entry and the scripts rule never fires on one. A
+`setup.py` that phones home is invisible to this tool.
 
 **No Go corpus.** `proxy.golang.org` publishes no ranked list of modules and
 module paths are domains, so edit distance over them is a different problem.
@@ -196,8 +202,15 @@ top-15,000 corpus, and it is one edit from `tensorflow-cpu`, so clauses 1 and 2
 both fire. On an npm tree clause 3 would have had a chance to save it. On a
 `requirements.txt` there is no clause 3 to have the chance.
 
-The fix is a different file rather than a better reader: `poetry.lock` and
-`uv.lock` both record the resolved graph, and both are already in `fixtures/`.
+The fix is a different file rather than a better reader, and it has landed:
+`poetry.lock` and `uv.lock` both record the resolved graph, and `stranger` now
+reads both. Point it at one of those instead and clause 3 has something to work
+with — 283 edges across 233 packages in `poetry-m.poetry.lock`, 476 across 250
+in `uv-m.uv.lock`. Thin the corpus by a tenth, which is the honest way to ask
+what a clause is worth, and clause 3 removes 6 of the 10 candidates on
+`poetry-m` and 6 of 11 on `uv-m`; on every `requirements.txt` at every corpus
+size it removes exactly zero, because there is no edge in the file for it to
+read. `tests/pypi.rs` pins that asymmetry.
 
 **The corpus is a snapshot.** Taken 2026-08-28. A package published after that
 date looks exactly like a package that does not exist. The table above is, among
