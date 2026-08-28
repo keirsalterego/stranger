@@ -1,9 +1,9 @@
 # Audit a lockfile you did not write
 
-Somebody sends you a repository. A contractor's handover, a candidate's take-home,
-a dependency you are about to vendor, an npm package you are considering. You
-want to know what is in the tree before you type `npm install`, because
-`npm install` is the part that runs other people's code.
+Somebody sends you a repository. A contractor's handover, a candidate's
+take-home, a dependency you are about to vendor, an npm package you are
+considering. You want to know what is in the tree before you type `npm install`,
+because `npm install` is the part that runs other people's code.
 
 ```console
 $ ./target/release/stranger scan path/to/their/package-lock.json
@@ -14,21 +14,36 @@ registry is never contacted. The lockfile is read as text.
 
 ## Why the order matters
 
-The usual way to inspect a dependency tree is to install it first and then ask
-the installed tree questions. That is backwards for an unknown repository: the
-install is the risky operation. `hasInstallScript` on a package-lock entry means
-arbitrary code runs during that install, and you find out which packages carry
-it by installing them.
+The usual way to inspect a dependency tree is to install it first and then ask the
+installed tree questions. That is backwards for an unknown repository: the install
+is the risky operation.
 
-Reading the lockfile inverts that. The tool never executes anything from the
-tree, and it has nothing of its own to execute either — an empty dependency
-manifest means auditing a hostile lockfile cannot pull a hostile parser.
+That risk is measurable from the file itself, which is the point of the
+[install scripts](../rules/install-scripts.md) rule:
+
+```console
+$ ./target/release/stranger scan -v fixtures/npm-m.package-lock.json | head -8
+
+  npm-m.package-lock.json  576 packages   (20 direct · 556 transitive · 6 workspace)
+
+  ⚠  INSTALL SCRIPTS        4     arbitrary code at install time
+     esbuild@0.27.7                         runs code at install time · lockfile records the flag, not the script
+     fsevents@2.3.3                         runs code at install time · lockfile records the flag, not the script
+     sharp@0.34.5                           runs code at install time · lockfile records the flag, not the script
+     unrs-resolver@1.12.2                   runs code at install time · lockfile records the flag, not the script
+```
+
+Four packages whose code runs before yours does, named before you install any of
+them. Reading the lockfile inverts the order: the tool never executes anything
+from the tree, and it has nothing of its own to execute either — an empty
+dependency manifest means auditing a hostile lockfile cannot pull a hostile
+parser.
 
 ## On a file, not a directory
 
-Directory discovery looks for exactly `package-lock.json` in exactly that
-directory. Pointing at a file skips discovery, and the format match there is on
-suffix, so an archived or renamed lockfile still reads:
+Directory discovery looks for exactly `package-lock.json` and `requirements.txt`,
+in exactly that directory. Pointing at a file skips discovery, and the format
+match there is on suffix, so an archived or renamed lockfile still reads:
 
 ```console
 $ ./target/release/stranger scan fixtures/poisoned.package-lock.json
@@ -40,7 +55,13 @@ $ ./target/release/stranger scan fixtures/poisoned.package-lock.json
      expres@4.18.2            not in corpus · d=1 from "express" · root-only, no parent
      lodahs@4.17.21           not in corpus · d=1 from "lodash" · root-only, no parent
 
-  risk 75/100    54ms    third-party deps used to compute this: 0
+  ⚠  INSTALL SCRIPTS        3     arbitrary code at install time
+
+  ⚠  TRIVIAL                35    (4.6% of tree)
+
+  ⚠  VERSION DRIFT          55    same package at 2+ versions in one tree
+
+  risk 100/100    141ms    third-party deps used to compute this: 0
 ```
 
 One path per run. A second positional argument is a usage error rather than a
@@ -59,22 +80,24 @@ $ for f in */package-lock.json; do ./target/release/stranger scan "$f"; done
 
 ## Reading the result
 
-The header tells you the size of what you were about to install. `757 packages
-(35 direct · 722 transitive)` means 35 names somebody chose and 722 that came
-along.
+The header tells you the size of what you were about to install. `757 packages (35
+direct · 722 transitive)` means 35 names somebody chose and 722 that came along.
 
-A finding tells you a name has no evidence behind it. It does not tell you the
-package is malicious, and a clean scan does not tell you the tree is safe — one
-rule is implemented, and it only looks for names that resemble a real name.
-[Limits](../limits.md) is the honest list of what this does not check, and
-integrity hashes are at the top of it.
+Read the critical block first — it is listed in full because it is the answer.
+Then decide whether the counts underneath deserve a `-v`. On a tree you did not
+write, `INSTALL SCRIPTS` usually does.
+
+A finding tells you a name has no evidence behind it, or that a package runs code,
+or that something is installed twice. None of that says the package is malicious,
+and a clean scan does not say the tree is safe. [Limits](../limits.md) is the
+honest list of what is not checked, and integrity hashes are at the top of it.
 
 ## What it will not tell you
 
-Whether the `sha512-…` integrity fields are correct. Whether an install script
-is benign. Whether a package that genuinely exists is nonetheless hostile.
-Those need either cryptography or the network, and this binary has neither.
+Whether the `sha512-…` integrity fields are correct. Whether an install script is
+benign. Whether a package that genuinely exists is nonetheless hostile. Those need
+either cryptography or the network, and this binary has neither.
 
 ```console
-$ ./target/release/stranger scan fixtures/npm-xl.package-lock.json
+$ ./target/release/stranger scan -v fixtures/npm-xl.package-lock.json | head -14
 ```
