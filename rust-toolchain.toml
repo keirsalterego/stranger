@@ -1,0 +1,5 @@
+# Pinned, not "stable". The reproducible-build bonus needs a fixed compiler,
+# and 1.98 is where NumBuffer::format_into and substr_range landed.
+[toolchain]
+channel = "1.98.0"
+components = ["clippy", "rustfmt"]
