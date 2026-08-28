@@ -1,0 +1,19 @@
+## Requirements for DeepSentry
+
+# For text_autoencoder
+tensorflow-gpu
+six
+
+# For time_series_anomaly_det
+pandas
+numpy
+seaborn
+matplotlib
+h2o
+keras
+h5py
+scikit-learn
+
+# For DeepSentry
+pyyaml
+runstats
