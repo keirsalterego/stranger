@@ -3,6 +3,7 @@
 pub mod cargo;
 pub mod npm;
 pub mod pip;
+pub mod pypi;
 
 use std::path::PathBuf;
 
@@ -139,7 +140,13 @@ impl Tree {
 }
 
 /// Lockfiles we know how to read, in the order we look for them.
-pub const KNOWN: &[&str] = &["package-lock.json", "Cargo.lock", "requirements.txt"];
+pub const KNOWN: &[&str] = &[
+    "package-lock.json",
+    "Cargo.lock",
+    "requirements.txt",
+    "poetry.lock",
+    "uv.lock",
+];
 
 /// Read one lockfile, dispatching on its name.
 pub fn read(path: &std::path::Path) -> crate::error::Result<Tree> {
@@ -161,6 +168,10 @@ pub fn read(path: &std::path::Path) -> crate::error::Result<Tree> {
         cargo::read(path, &src)
     } else if name.ends_with("requirements.txt") {
         pip::read(path, &src)
+    } else if name.ends_with("poetry.lock") {
+        pypi::poetry(path, &src)
+    } else if name.ends_with("uv.lock") {
+        pypi::uv(path, &src)
     } else {
         Err(crate::error::Error::usage(format!(
             "{name}: not a lockfile stranger knows. It reads: {}",

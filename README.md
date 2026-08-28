@@ -147,7 +147,7 @@ file is absent rather than being useless without it:
 $ stranger scan /tmp/empty-project
 
   no lockfile in /tmp/empty-project
-  looked for: package-lock.json, Cargo.lock, requirements.txt
+  looked for: package-lock.json, Cargo.lock, requirements.txt, poetry.lock, uv.lock
 ```
 
 Exit code 0. `stranger` never executes `npm`, `pip`, `cargo`, `git` or anything
@@ -212,26 +212,20 @@ dev-dependencies or optional ones. So `install_script`, `dev` and `optional` are
 `false` on every crate, and that is a blank rather than a measurement. Guessing
 from the name (`-sys`, say) would turn a blank into a confident wrong answer.
 
-**A git dependency cannot be in a registry corpus.** `Cargo.lock` records
-`source = "git+https://…#rev"` for a crate pulled straight from a repository. It
-never went through crates.io, so it is not in a list of crates.io names, and if
-only workspace members reference it then clause 3 passes too. Two of the three
-findings on `cargo-m` are exactly this:
+**No install-script signal on Python at all.** Neither `poetry.lock` nor
+`uv.lock` records whether a package runs code at install time, and an sdist with
+no wheel is suggestive rather than the same claim. So `install_script` is `false`
+on every Python entry and the scripts rule never fires on one. A `setup.py` that
+phones home is invisible to this tool.
 
-```
-$ stranger scan fixtures/cargo-m.Cargo.lock
-
-  ⚠  HALLUCINATION RISK     3
-     ksni@0.3.4               not in corpus · d=2 from "jni" · root-only, no parent
-     sg@0.4.0                 not in corpus · d=1 from "ug" · root-only, no parent
-     slint@1.16.0             not in corpus · d=2 from "mint" · root-only, no parent
-```
-
-All three are false positives. `slint` and `sg` are git dependencies; `ksni` is a
-real crates.io crate outside the top 5,000. The rule is asking a crates.io
-question about names that were never crates.io's to answer. Suppressing git-
-sourced entries needs a `source` field on `Package`, which is a change to every
-reader, not to this one.
+**poetry does not record which dependencies are direct.** They live in
+`pyproject.toml`, which is not the lockfile. `roots` is derived instead — an
+entry nothing else depends on can only have arrived through the root's manifest —
+and that derivation is wrong in one direction: a direct dependency that something
+else also needs has an in-edge and drops out of the count. `uv.lock` quantifies
+the error, because it records the root explicitly: 91 real direct dependencies
+against the 60 the derivation would have found. So `poetry-m`'s reported 75
+direct is a floor, not a count.
 
 **No Go corpus.** `proxy.golang.org` publishes no ranked list of modules and
 module paths are domains, so edit distance over them is a different problem.
@@ -257,8 +251,15 @@ top-15,000 corpus, and it is one edit from `tensorflow-cpu`, so clauses 1 and 2
 both fire. On an npm tree clause 3 would have had a chance to save it. On a
 `requirements.txt` there is no clause 3 to have the chance.
 
-The fix is a different file rather than a better reader: `poetry.lock` and
-`uv.lock` both record the resolved graph, and both are already in `fixtures/`.
+The fix is a different file rather than a better reader, and it has landed:
+`poetry.lock` and `uv.lock` both record the resolved graph, and `stranger` now
+reads both. Point it at one of those instead and clause 3 has something to work
+with — 283 edges across 233 packages in `poetry-m.poetry.lock`, 476 across 250
+in `uv-m.uv.lock`. Thin the corpus by a tenth, which is the honest way to ask
+what a clause is worth, and clause 3 removes 6 of the 10 candidates on
+`poetry-m` and 6 of 11 on `uv-m`; on every `requirements.txt` at every corpus
+size it removes exactly zero, because there is no edge in the file for it to
+read. `tests/pypi.rs` pins that asymmetry.
 
 **A corpus can only speak about one registry.** A package pulled from git, a
 private index or a direct URL never passed through the public registry the corpus
