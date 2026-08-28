@@ -1,0 +1,66 @@
+//! What a scan produces.
+
+pub mod slopsquat;
+
+use std::fmt;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Severity {
+    Low,
+    Medium,
+    High,
+    Critical,
+}
+
+impl Severity {
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.to_ascii_lowercase().as_str() {
+            "low" => Some(Severity::Low),
+            "medium" => Some(Severity::Medium),
+            "high" => Some(Severity::High),
+            "critical" => Some(Severity::Critical),
+            _ => None,
+        }
+    }
+}
+
+impl fmt::Display for Severity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Severity::Low => "low",
+            Severity::Medium => "medium",
+            Severity::High => "high",
+            Severity::Critical => "critical",
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Rule {
+    Slopsquat,
+}
+
+impl Rule {
+    pub fn heading(self) -> &'static str {
+        match self {
+            Rule::Slopsquat => "HALLUCINATION RISK",
+        }
+    }
+
+    pub fn id(self) -> &'static str {
+        match self {
+            Rule::Slopsquat => "slopsquat",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Finding {
+    pub rule: Rule,
+    pub severity: Severity,
+    pub package: String,
+    pub version: String,
+    /// Rendered right of the package name. Says why this fired, in the terms
+    /// the rule actually used, so a reader can disagree with it.
+    pub detail: String,
+}
