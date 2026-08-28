@@ -75,6 +75,35 @@ position without parsing the message back out.
 
 ---
 
+### `toml` — 855,052,855 all-time · 201,425,545 in 90 days
+[`src/toml.rs`](src/toml.rs). A documented subset, sufficient for `Cargo.lock`,
+`poetry.lock` and `uv.lock` — three ecosystems for one parser.
+
+Supported: `key = value`, `[table]`, `[dotted.table]`, `[[array.of.tables]]`,
+basic strings with the full escape set including `\uXXXX` and `\UXXXXXXXX`,
+literal strings, multi-line strings with the line-ending fold, decimal integers
+with `_` separators, booleans, multi-line arrays with trailing commas, single-line
+inline tables, comments.
+
+**What I gave up:** floats, dates, times, date-times, hex/octal/binary integers,
+dotted keys outside a header, and multi-line inline tables. Every one of those is
+*refused with a line and column* rather than mis-parsed, which was the design rule
+— a parser that guesses at a construct it does not know produces a plausible wrong
+answer, and a plausible wrong answer in a security tool is worse than an error.
+
+The subset is only sufficient because `uv.lock` stores timestamps as strings
+(`upload-time = "2026-03-26T01:21:00.379Z"`). If it stored them as TOML datetimes
+this parser would refuse the file, loudly. The only bare integers in all six
+fixtures are `version` and `revision`.
+
+Two things the real files taught that guessing would have missed. poetry writes
+**quoted keys containing dots** — `"jaraco.classes" = "*"` — so quoting, not the
+dot, decides key-versus-path; treating that as a dotted key silently invents a
+`jaraco` table. And there are **no triple-quoted strings anywhere** in any of the
+six fixtures, contrary to what I assumed going in. They are implemented anyway,
+because mis-reading one is worse than refusing it, but nothing in the corpus
+exercises them.
+
 ## Text
 
 ### `strsim` — 1,024,185,642 all-time · 209,773,661 in 90 days
@@ -166,11 +195,41 @@ verifies no signatures, and has no key material.
 
 ---
 
+---
+
+## Terminal
+
+### `owo-colors` — 156,700,441 all-time · 32,842,569 in 90 days
+### `comfy-table` — 94,630,283 all-time · 17,750,081 in 90 days
+### `is-terminal` — 324,499,410 all-time · 56,521,071 in 90 days
+[`src/term.rs`](src/term.rs), 138 lines for all three.
+
+`is-terminal` is the interesting one. The traditional way to ask whether stdout is
+a terminal is an FFI call to `libc::isatty`, which needs an `unsafe` block —
+impossible under `#![forbid(unsafe_code)]`. `std::io::IsTerminal` has been stable
+since 1.70 and does it in safe code. That entire crate is now one line of std.
+
+`NO_COLOR`, `CLICOLOR_FORCE`, `--no-color` and the TTY check are resolved in one
+function that takes the environment as arguments rather than reading it, because
+`std::env::set_var` is `unsafe` in edition 2024 and a test that mutates the
+environment is therefore not writable in this crate at all.
+
+**What I gave up:** `owo-colors`' typed style combinators and its supports-color
+detection; `comfy-table`'s borders, spanning, wrapping and alignment. What is here
+computes column widths from content and pads. That is all the report needs.
+
+The width measurement is `chars().count()`, which is wrong for East Asian
+wide forms, combining marks and emoji ZWJ sequences. Correcting it means shipping
+a table generated from `EastAsianWidth.txt` and tracking a Unicode version, to
+align package names that npm, PyPI and crates.io all restrict to ASCII. Marked
+`// ponytail:` with that upgrade path named.
+
+---
+
 ## Not yet claimed
 
-Entries for `toml`, `serde_yaml`, `semver`, `owo-colors`, `comfy-table`,
-`is-terminal`, `walkdir`, `glob`, `indicatif`, `rayon` and `crossbeam-channel`
-land as their modules do. An unwritten module gets no entry.
+Entries for `serde_yaml`, `indicatif`, `rayon` and `crossbeam-channel` land if
+and only if their modules do. An unwritten module gets no entry.
 
 ---
 

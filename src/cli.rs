@@ -18,7 +18,8 @@ options:
   --format <human|json>          output format (default: human)
   --fail-on <level>              exit 1 when a finding is at or above
                                  low | medium | high | critical
-  --no-color                     never colour output (NO_COLOR is also honoured)
+  --no-color                     never colour output (NO_COLOR, CLICOLOR_FORCE)
+  -v, --verbose                  list every finding, not just the critical ones
   -q, --quiet                    findings only, no summary lines
   -h, --help                     this
   -V, --version                  version
@@ -51,6 +52,7 @@ pub enum Command {
 #[derive(Debug)]
 pub struct Options {
     pub path: PathBuf,
+    pub verbose: bool,
     pub format: Format,
     pub fail_on: Option<Severity>,
     pub color: Color,
@@ -81,6 +83,7 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Command> {
         fail_on: None,
         color: Color::Auto,
         quiet: false,
+        verbose: false,
     };
     let mut saw_path = false;
 
@@ -111,6 +114,7 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Command> {
                 })?);
             }
             "--no-color" => opts.color = Color::Never,
+            "-v" | "--verbose" => opts.verbose = true,
             "-q" | "--quiet" => opts.quiet = true,
             "-h" | "--help" => return Ok(Command::Help),
             other if other.starts_with('-') => {

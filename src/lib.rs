@@ -15,4 +15,6 @@ pub mod lock;
 pub mod report;
 pub mod rules;
 pub mod semver;
+pub mod term;
+pub mod toml;
 pub mod walk;

@@ -1,6 +1,7 @@
 //! What every lockfile reader produces, regardless of ecosystem.
 
 pub mod npm;
+pub mod pip;
 
 use std::path::PathBuf;
 
@@ -23,6 +24,28 @@ impl Ecosystem {
     }
 }
 
+/// How tightly the file constrains the version.
+///
+/// A lockfile answers this trivially — it records one resolved version, so
+/// every entry is `Exact`. A manifest that gets committed and treated as a
+/// lockfile does not, and `requirements.txt` is the one people commit.
+///
+/// The non-exact variants carry the specifier as written because the finding
+/// has to be arguable: "`>=1.26`" is something a reader can check against the
+/// file, "unpinned" is something they have to take on trust.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Pin {
+    /// One version, and it is the one in `Package::version`.
+    Exact,
+    /// `~=1.2`, or `==1.2.*`. Capped, and floats below the cap.
+    Compatible(String),
+    /// `>=1.0`, `<2`, `!=1.5`, or several joined by commas. Open-ended in at
+    /// least one direction.
+    Range(String),
+    /// No specifier at all. Whatever the index serves that day.
+    Unconstrained,
+}
+
 #[derive(Debug, Clone)]
 pub struct Package {
     pub name: String,
@@ -43,6 +66,7 @@ pub struct Package {
     /// Whether an integrity field was recorded at all. Never whether it is
     /// correct — see README LIMITS.
     pub has_integrity: bool,
+    pub pinned: Pin,
 }
 
 #[derive(Debug)]
@@ -77,7 +101,7 @@ impl Tree {
 }
 
 /// Lockfiles we know how to read, in the order we look for them.
-pub const KNOWN: &[&str] = &["package-lock.json"];
+pub const KNOWN: &[&str] = &["package-lock.json", "requirements.txt"];
 
 /// Read one lockfile, dispatching on its name.
 pub fn read(path: &std::path::Path) -> crate::error::Result<Tree> {
@@ -91,6 +115,8 @@ pub fn read(path: &std::path::Path) -> crate::error::Result<Tree> {
     // still reads. Lockfiles get renamed the moment you collect more than one.
     if name.ends_with("package-lock.json") {
         npm::read(path, &src)
+    } else if name.ends_with("requirements.txt") {
+        pip::read(path, &src)
     } else {
         Err(crate::error::Error::usage(format!(
             "{name}: not a lockfile stranger knows. It reads: {}",
