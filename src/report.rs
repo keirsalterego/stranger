@@ -76,24 +76,31 @@ pub fn human(
     findings: &[Finding],
     elapsed: Duration,
     verbose: bool,
+    quiet: bool,
 ) -> io::Result<()> {
     let file = tree.source.file_name().map_or_else(
         || tree.source.display().to_string(),
         |n| n.to_string_lossy().into_owned(),
     );
 
-    writeln!(w)?;
-    writeln!(
-        w,
-        "  {} {} packages   ({} direct · {} transitive)",
-        term::pad(&file, NAME_MIN),
-        thousands(tree.packages.len() as u64),
-        thousands(tree.direct() as u64),
-        thousands(tree.transitive() as u64),
-    )?;
-    writeln!(w)?;
+    if !quiet {
+        let workspace = match tree.workspace_members() {
+            0 => String::new(),
+            n => format!(" · {} workspace", thousands(n as u64)),
+        };
+        writeln!(w)?;
+        writeln!(
+            w,
+            "  {} {} packages   ({} direct · {} transitive{workspace})",
+            term::pad(&file, NAME_MIN),
+            thousands(tree.third_party() as u64),
+            thousands(tree.direct() as u64),
+            thousands(tree.transitive() as u64),
+        )?;
+        writeln!(w)?;
+    }
 
-    if findings.is_empty() {
+    if findings.is_empty() && !quiet {
         writeln!(w, "  no findings")?;
     }
 
@@ -141,13 +148,15 @@ pub fn human(
         writeln!(w)?;
     }
 
-    writeln!(
-        w,
-        "  risk {}/100    {}ms    third-party deps used to compute this: 0",
-        risk(findings),
-        elapsed.as_millis(),
-    )?;
-    writeln!(w)?;
+    if !quiet {
+        writeln!(
+            w,
+            "  risk {}/100    {}ms    third-party deps used to compute this: 0",
+            risk(findings),
+            elapsed.as_millis(),
+        )?;
+        writeln!(w)?;
+    }
     Ok(())
 }
 
@@ -183,7 +192,7 @@ pub fn json(
     write!(
         w,
         ",\"packages\":{},\"direct\":{},\"transitive\":{},\"risk\":{},\"elapsed_ms\":{},\"findings\":[",
-        tree.packages.len(),
+        tree.third_party(),
         tree.direct(),
         tree.transitive(),
         risk(findings),

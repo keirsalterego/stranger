@@ -20,7 +20,7 @@ options:
                                  low | medium | high | critical
   --no-color                     never colour output (NO_COLOR, CLICOLOR_FORCE)
   -v, --verbose                  list every finding, not just the critical ones
-  -q, --quiet                    findings only, no summary lines
+  -q, --quiet                    findings only: no header, no risk line
   -h, --help                     this
   -V, --version                  version
 

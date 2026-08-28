@@ -14,7 +14,7 @@ use std::collections::BTreeMap;
 
 /// Deeper than this and we stop, rather than letting a hostile file walk the
 /// parser off the end of the stack. Real lockfiles nest about ten deep; the
-/// deepest thing in the 1,391-entry npm fixture is 7.
+/// deepest thing in the 1,390-entry npm fixture is 7.
 const MAX_DEPTH: u32 = 128;
 
 #[derive(Debug, Clone, PartialEq)]

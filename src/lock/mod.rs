@@ -95,8 +95,24 @@ impl Tree {
         self.roots.len()
     }
 
+    /// Packages reached only through another package.
+    ///
+    /// First-party entries are excluded from both ends of this. A workspace
+    /// member is neither a direct dependency nor a transitive one — it is your
+    /// own code, and counting the 14 in the npm-xl fixture as transitive
+    /// dependencies overstates the tree by 14 packages you wrote.
     pub fn transitive(&self) -> usize {
-        self.packages.len() - self.roots.len()
+        self.third_party().saturating_sub(self.roots.len())
+    }
+
+    /// How many packages came from somewhere else. This is the number the
+    /// report leads with, because it is the one the tool is about.
+    pub fn third_party(&self) -> usize {
+        self.packages.iter().filter(|p| !p.first_party).count()
+    }
+
+    pub fn workspace_members(&self) -> usize {
+        self.packages.len() - self.third_party()
     }
 }
 
