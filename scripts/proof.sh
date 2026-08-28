@@ -39,13 +39,22 @@ OUT=deps-proof.txt
   fi
   echo
 
-  echo '$ grep -rn "\bunsafe\b" src/ | grep -v "forbid(unsafe_code)"'
-  # The naive grep matches the forbid attribute itself, which is not unsafe code.
-  if grep -rn '\bunsafe\b' src/ | grep -v 'forbid(unsafe_code)'; then
-    echo "  ^ unexpected: the crate root forbids unsafe, so this should be empty"
+  echo '$ grep -q "forbid(unsafe_code)" src/lib.rs src/main.rs'
+  # The attribute is the enforcement: the compiler rejects any unsafe beneath
+  # it. Everything below is belt and braces.
+  grep -q '^#!\[forbid(unsafe_code)\]' src/lib.rs && echo "src/lib.rs: forbidden"
+  grep -q '^#!\[forbid(unsafe_code)\]' src/main.rs && echo "src/main.rs: forbidden"
+  echo
+
+  echo '$ grep -rnE "\\bunsafe\\s*(\\{|fn|impl|trait|extern)" src/'
+  # Matching the bare word instead of the syntax fails on every comment that
+  # explains why something avoids unsafe. That is a real ghost: it broke CI
+  # once, on a comment in term.rs saying the isatty FFI would need one.
+  if grep -rnE '\bunsafe\s*(\{|fn\b|impl\b|trait\b|extern\b)' src/; then
+    echo "  ^ unexpected" >&2
     exit 1
   else
-    echo "(no output — zero unsafe blocks; the crate root forbids them outright)"
+    echo "(no output — zero unsafe blocks, functions, impls or externs)"
   fi
   echo
 
