@@ -27,3 +27,7 @@ ablation:
 
 repro:
 	@./scripts/repro.sh
+
+docs:
+	@mdbook build docs
+	@./docs/check-links.py
