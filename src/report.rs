@@ -1,7 +1,7 @@
 //! Rendering a scan, for a person and for a machine.
 
 use crate::lock::Tree;
-use crate::rules::{Finding, Rule, Severity};
+use crate::rules::{Finding, ORDER, Severity};
 use std::io::{self, Write};
 use std::time::Duration;
 
@@ -68,7 +68,7 @@ pub fn human(
         writeln!(w, "  no findings")?;
     }
 
-    for rule in [Rule::Slopsquat] {
+    for &rule in ORDER {
         let hits: Vec<&Finding> = findings.iter().filter(|f| f.rule == rule).collect();
         if hits.is_empty() {
             continue;

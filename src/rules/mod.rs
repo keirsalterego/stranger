@@ -1,6 +1,10 @@
 //! What a scan produces.
 
+pub mod drift;
+pub mod pinning;
+pub mod scripts;
 pub mod slopsquat;
+pub mod trivial;
 
 use std::fmt;
 
@@ -38,18 +42,40 @@ impl fmt::Display for Severity {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Rule {
     Slopsquat,
+    Trivial,
+    InstallScript,
+    Drift,
+    Pinning,
 }
+
+/// Report order. Worst first, and stable, so a diff between two scans is a
+/// diff and not a reshuffle.
+pub const ORDER: &[Rule] = &[
+    Rule::Slopsquat,
+    Rule::InstallScript,
+    Rule::Trivial,
+    Rule::Drift,
+    Rule::Pinning,
+];
 
 impl Rule {
     pub fn heading(self) -> &'static str {
         match self {
             Rule::Slopsquat => "HALLUCINATION RISK",
+            Rule::Trivial => "TRIVIAL",
+            Rule::InstallScript => "INSTALL SCRIPTS",
+            Rule::Drift => "VERSION DRIFT",
+            Rule::Pinning => "UNPINNED",
         }
     }
 
     pub fn id(self) -> &'static str {
         match self {
             Rule::Slopsquat => "slopsquat",
+            Rule::Trivial => "trivial",
+            Rule::InstallScript => "install-script",
+            Rule::Drift => "drift",
+            Rule::Pinning => "pinning",
         }
     }
 }
