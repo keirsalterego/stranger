@@ -1,0 +1,9 @@
+# `fixtures/` holds real lockfiles used as test data, plus two poisoned by hand.
+# Their pins are the test. Dependabot opened a PR against
+# `poisoned.requirements.txt` within an hour of the repo going public, which
+# would have bumped `python-dateutils==2.9.0` — a name that does not exist —
+# and quietly broken the demo it was planted for.
+#
+# There is nothing here to update. stranger has no dependencies.
+version: 2
+updates: []
