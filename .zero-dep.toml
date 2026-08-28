@@ -1,0 +1,5 @@
+track = "A"
+name = "stranger"
+pitch = "Audits a dependency tree for hallucinated names, install-time code execution and version drift — reading lockfiles off disk, with zero dependencies and no network."
+language = "rust"
+repo = "https://github.com/keirsalterego/stranger"
