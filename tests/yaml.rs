@@ -204,6 +204,23 @@ fn comments() {
     assert_eq!(parse("a: x#y").get("a"), Some(&s("x#y")));
 }
 
+/// A lockfile checked out on Windows. `\r\n` is a line ending; a lone `\r` is
+/// not, and is refused rather than folded into the scalar before it.
+#[test]
+fn crlf_line_endings() {
+    let doc = parse("a:\r\n  b: 1\r\n  c: [x, y]\r\nd: 2\r\n");
+    assert_eq!(doc.get("a").and_then(|v| v.get("b")), Some(&s("1")));
+    assert_eq!(
+        doc.get("a")
+            .and_then(|v| v.get("c"))
+            .and_then(Value::as_sequence),
+        Some(&[s("x"), s("y")][..])
+    );
+    assert_eq!(doc.get("d"), Some(&s("2")));
+    assert_eq!(parse("a: 1\r\n\r\nb: 'q'\r\n").get("b"), Some(&s("q")));
+    reject("a: 1\rb: 2\r");
+}
+
 // -- refusals ---------------------------------------------------------------
 
 /// YAML forbids tabs in indentation, and an editor renders them as if they
