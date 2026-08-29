@@ -28,13 +28,13 @@
 //! *resolved* references: `davey` is in uv-m because somebody asked for
 //! `discord-py[voice]`, so that is a real install edge. poetry's extras block
 //! is the package's metadata copied verbatim whether anyone asked or not —
-//! 1,049 PEP 508 strings in poetry-m, of which 758 name packages that are not
-//! in the lock at all. Feeding the other 291 into `edges` would put
+//! 1,049 PEP 508 strings in poetry-m, of which 754 name packages that are not
+//! in the lock at all. Feeding the other 295 into `edges` would put
 //! non-install edges in the graph and collapse the in-degree derivation that
 //! `roots` depends on two paragraphs below: a package mentioned by somebody's
 //! unrequested `docs` extra would stop looking like a root, when it is one.
 //!
-//! ponytail: that costs the slopsquat rule 291 pieces of real "a maintainer
+//! ponytail: that costs the slopsquat rule 295 pieces of real "a maintainer
 //! has heard of this name" evidence in poetry-m, and losing evidence makes
 //! the rule fire *more*. The upgrade is a `mentioned` set on `Tree`, separate
 //! from `edges`, for clauses that want weaker evidence than an install edge —
