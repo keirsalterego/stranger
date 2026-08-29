@@ -28,7 +28,9 @@
 //! - hex, octal and binary integers
 //! - dotted keys (`a.b = 1`) outside a table header
 //! - inline tables spread over several lines (that is TOML 1.1)
-//! - duplicate keys, and a `[table]` header that reopens a defined table
+//! - duplicate keys, and any header that reopens something already defined:
+//!   a `[table]` written twice, a `[[a]]` over an `a = […]`, an `[a]` over an
+//!   `a = { … }`
 //!
 //! # What the fixtures actually contain
 //!
@@ -137,6 +139,13 @@ pub fn parse(src: &str) -> Result<Value> {
     // Without the index every `[package.dependencies]` after the first would
     // look like a redefinition.
     let mut defined: HashSet<String> = HashSet::new();
+    // The same paths, for keys defined with `=`. TOML calls what a `=`
+    // defines an immutable namespace, and the distinction is not pedantry:
+    // `a = [1]` is an array of *values*, which `[[a]]` may not push onto, and
+    // `a = {b = 1}` is closed by its own brace, which `[a]` may not reopen.
+    // Nothing in the tree records which of the two built a table, so it has
+    // to be recorded here.
+    let mut immutable: HashSet<String> = HashSet::new();
     let mut path: Vec<String> = Vec::new();
     let mut canon = String::new();
 
@@ -146,7 +155,7 @@ pub fn parse(src: &str) -> Result<Value> {
             break;
         }
         if p.peek() == Some(b'[') {
-            path = p.header(&mut root, &mut defined)?;
+            path = p.header(&mut root, &mut defined, &immutable)?;
             continue;
         }
 
@@ -167,6 +176,11 @@ pub fn parse(src: &str) -> Result<Value> {
         if table.insert(key.clone(), value).is_some() {
             return Err(p.err_at(key_at, format!("duplicate key `{key}`")));
         }
+        if !canon.is_empty() {
+            canon.push('.');
+        }
+        canon.push_str(&key);
+        immutable.insert(canon.clone());
     }
 
     Ok(Value::Table(root))
@@ -334,6 +348,7 @@ impl<'a> Parser<'a> {
         &mut self,
         root: &mut BTreeMap<String, Value>,
         defined: &mut HashSet<String>,
+        immutable: &HashSet<String>,
     ) -> Result<Vec<String>> {
         let at = self.rest;
         self.bump(1);
@@ -368,6 +383,21 @@ impl<'a> Parser<'a> {
                 .expect("the loop above pushes at least one key");
             let parent = descend(root, parents, &mut canon)
                 .ok_or_else(|| self.err_at(at, "this header sits under a non-table"))?;
+            if !canon.is_empty() {
+                canon.push('.');
+            }
+            canon.push_str(last);
+            // `a = [1]` then `[[a]]` used to append a table to the value
+            // array, producing `[1, {…}]` — a mixed array TOML has no way to
+            // write down, and, for `package = []`, a lockfile that reads as
+            // one package here and zero everywhere else. The `else` below only
+            // catches the case where `a` is a table.
+            if immutable.contains(&canon) {
+                return Err(self.err_at(
+                    at,
+                    format!("`{last}` is already defined as a value, not an array of tables"),
+                ));
+            }
             let slot = parent
                 .entry(last.clone())
                 .or_insert_with(|| Value::Array(Vec::new()));
@@ -375,10 +405,6 @@ impl<'a> Parser<'a> {
                 return Err(self.err_at(at, format!("`{last}` is already a table, not an array")));
             };
             items.push(Value::Table(BTreeMap::new()));
-            if !canon.is_empty() {
-                canon.push('.');
-            }
-            canon.push_str(last);
             canon.push('[');
             canon.push_str(&(items.len() - 1).to_string());
             canon.push(']');
@@ -386,7 +412,10 @@ impl<'a> Parser<'a> {
         } else {
             descend(root, &path, &mut canon)
                 .ok_or_else(|| self.err_at(at, "this header sits under a non-table"))?;
-            if !defined.insert(canon) {
+            // An inline table reaches `descend` as an ordinary table, so
+            // without the second set `a = {b = 1}` followed by `[a]` would
+            // quietly grow a key TOML says cannot be added.
+            if immutable.contains(&canon) || !defined.insert(canon) {
                 let name = path.join(".");
                 return Err(self.err_at(at, format!("table `{name}` is defined twice")));
             }

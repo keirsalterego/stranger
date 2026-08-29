@@ -280,6 +280,32 @@ fn unclosed_and_mismatched() {
     assert!(why("[p]\nx = 1\n[[p]]\n").contains("already a table"));
 }
 
+/// What `=` defines is closed. `[[a]]` over a value array used to append a
+/// table to it and hand back `[1, {b = 2}]`, which is not a value TOML can
+/// represent; `package = []` followed by `[[package]]` read as a lockfile
+/// with one package in it.
+#[test]
+fn a_header_cannot_reopen_what_an_equals_defined() {
+    assert!(
+        why("a = [1]\n[[a]]\nb = 2\n").contains("already defined as a value"),
+        "{}",
+        why("a = [1]\n[[a]]\nb = 2\n")
+    );
+    assert_eq!(at("a = [1]\n[[a]]\nb = 2\n"), (2, 1));
+    assert!(
+        why("package = []\n[[package]]\nname = \"x\"\n").contains("already defined as a value")
+    );
+    // An inline table is closed by its own brace, so a later header may not
+    // extend it either.
+    assert!(why("a = { b = 1 }\n[a]\nc = 2\n").contains("defined twice"));
+    // Under an array element, where the canonical path carries an index.
+    assert!(why("[[p]]\nd = [1]\n[[p.d]]\nx = 1\n").contains("already defined as a value"));
+    // And the legal shapes still are: two `[[p]]` are two elements, and a
+    // key named after a *different* element's key is not a redefinition.
+    parse("[[p]]\nd = [1]\n[[p]]\nd = [2]\n");
+    parse("[[p]]\nname = \"one\"\n[p.src]\nurl = \"a\"\n");
+}
+
 #[test]
 fn junk_after_a_value() {
     reject("a = 1 2");
