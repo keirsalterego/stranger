@@ -183,9 +183,20 @@ a model actually produces.
 
 Transposition is why the distance function is Damerau and not plain Levenshtein.
 `lodahs` is one transposition from `lodash`: Damerau distance 1, Levenshtein
-distance 2. Under Levenshtein it would sit in the same bucket as a large
-population of legitimate siblings, and the threshold that catches it catches half
-the registry with it.
+distance 2.
+
+This paragraph used to end "under Levenshtein it would sit in the same bucket as a
+large population of legitimate siblings, and the threshold that catches it catches
+half the registry with it". That is backwards, and the inequality says so:
+Levenshtein permits a strict subset of Damerau's edits, so Levenshtein-at-k is
+always the *tighter* filter, never the looser one. At the threshold that ships,
+plain Levenshtein returns one candidate for `lodahs` and Damerau returns three.
+
+What Damerau buys is the reported distance, the tie-break below, and the threshold
+the rule could drop to — at k = 1 Damerau finds `lodash` and Levenshtein finds
+nothing. What it does not buy is a different set of findings at k = 2, where the
+two metrics agree on every name in every fixture. The full argument is in
+[DECISIONS.md](https://github.com/keirsalterego/stranger/blob/main/DECISIONS.md).
 
 When several corpus names are within range, ties go to the shorter one. `asn1s` is
 one edit from both `asn1` and `asn1js`, and the finding names `asn1`. That is a

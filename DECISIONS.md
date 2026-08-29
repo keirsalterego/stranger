@@ -189,7 +189,14 @@ digits to be a low surrogate in `0xDC00..=0xDFFF`, then combines them:
 `0x10000 + ((hi - 0xD800) << 10) + (lo - 0xDC00)`.
 
 A high surrogate followed by nothing, or by a non-surrogate, or a low surrogate
-standing alone, is `Error::Syntax` with the line and column of the escape.
+standing alone, is `Error::Syntax`. The position is where the parser *discovered*
+the problem, which is one past the escape rather than at its backslash: on
+`{"a":"\uD800x"}` it says `high surrogate not followed by a low surrogate at
+1:13`, and the `\u` starts at column 7. That is the honest description of what the
+column means — this file said "the line and column of the escape" for most of the
+weekend, which is six columns off. Pointing at the backslash would be friendlier
+and would mean carrying the escape's start through `unicode_escape`; it is a
+papercut, not a defect, and it is written down here rather than rounded off.
 
 The alternative was substituting U+FFFD, which is what a lot of parsers do. That
 would have been wrong here specifically: this parser's output feeds package-name
@@ -204,14 +211,48 @@ become a different name.
 `lodahs` against `lodash`. It is a transposition — the `h` and `s` swapped —
 which is Damerau distance 1 and Levenshtein distance 2.
 
-That gap decides the threshold. At distance 2 under plain Levenshtein, `lodash`
-also matches `logash`, `nodash`, `lodas`, `loash` and a long tail of real registry
-entries, so the threshold that catches the typo drags in everything else with it.
-At distance 1 under Damerau, the transposition sits alone.
+**The answer this file gave until the last day was wrong, and wrong in the
+flattering direction.** It said that at distance 2 plain Levenshtein "also matches
+`logash`, `nodash`, `lodas`, `loash` and a long tail of real registry entries", so
+the threshold that catches the typo drags in everything else. Every clause of that
+is false. None of those four names is in `corpus/npm.txt`, so none of them is a
+real registry entry the rule could drag in. All four are at distance **1** from
+`lodash`, not 2. And `lodash` has exactly the same neighbour count under both
+metrics at every threshold that matters — 1, 6 and 49 at k = 1, 2 and 3.
 
-Transposition is also the most common typo a human or a model actually produces,
-so getting it for free at distance 1 is the single highest-value part of the
-metric.
+The arithmetic makes the old claim impossible, which is the part worth admitting.
+Levenshtein is pointwise **greater than or equal to** Damerau, because Damerau
+permits every edit Levenshtein does plus transposition. So Damerau-at-k is always
+the *more permissive* of the two. It can never be the tighter filter, and an
+argument that it is has the inequality backwards. At the shipped threshold of 2,
+plain Levenshtein returns **1** candidate for `lodahs` and Damerau returns **3**
+(`lodash`, `loadjs`, `loodash`).
+
+**So here is the case where it actually matters.** At k = 1 the two metrics
+disagree completely: Damerau finds `lodash`, Levenshtein finds nothing at all.
+Everything Damerau buys is on that side of the line —
+
+- **The reported distance.** The finding says `d=1 from "lodash"` rather than
+  `d=2`, which is the difference between "somebody fat-fingered lodash" and "this
+  is two edits from something, like a hundred other names are".
+- **The tie-break.** `nearest_in` sorts on `(distance, name length)`, so a metric
+  that scores the transposition 1 puts the real parent first instead of leaving it
+  tied with whatever else is at 2.
+- **The threshold you could drop to.** If the crates.io corpus were as complete as
+  the npm one — the real limit, measured in the ablation — k = 1 becomes arguable,
+  and at k = 1 Damerau is the only one of the two that still catches a
+  transposition. That is the upgrade path, and it is why the metric is the one
+  that is there.
+
+What it does **not** buy is extra detections at the threshold that ships. Measured
+across every name the rule fires on in every fixture, at k = 2 the two metrics
+fire on **exactly the same set**. `tests/distance.rs::
+damerau_changes_the_distance_not_which_names_fire` holds all of it, so the claim
+cannot rot back to the comfortable version.
+
+Transposition is the most common single-character slip a human or a model
+produces. Scoring it 1 is worth having. Claiming it changes what gets caught at
+k = 2 was worth checking, and it did not survive the check.
 
 There is a second decision inside this one. The implementation is *unrestricted*
 Damerau-Levenshtein (Lowrance-Wagner), not the optimal string alignment variant

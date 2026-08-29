@@ -327,10 +327,16 @@ the event, so it is here rather than buried.
 runs code at install time and does not record what that code is. The tool can say
 code runs. It cannot say what it does.
 
-Nine of the 1,391 entries in the largest fixture's `packages` map carry the flag
+Nine of the 1,391 keys in the largest fixture's `packages` map carry the flag
 and the tool reports eight. The ninth is the empty-string key — the root project —
-and its install script is your own build, not a stranger's. Dropping it is also
-why the tool reports 1,390 entries from a 1,391-entry map.
+and its install script is your own build, not a stranger's. Dropping that key is
+also why 1,391 keys are 1,390 entries.
+
+Those 1,390 then print as `1,376 packages … 14 workspace`, because the header
+counts third-party packages and sets your own code aside. Three numbers for one
+file, all of them right, and this paragraph names all three because a reader who
+sees 1,391 here and 1,376 on their terminal should not have to work out which of
+us is wrong.
 
 **`Cargo.lock` records no build scripts and no dev-dependencies.** Cargo runs
 `build.rs` at compile time — the same shape `hasInstallScript` flags — and the
@@ -373,6 +379,14 @@ they read, the trivial-package rule because its list is npm micro-packages, and
 this one by decision. What you get is the tree, the direct and transitive
 counts, and the package list under `--format json`. Saying that plainly beats
 shipping a rule that silently never triggers.
+
+**A path that is not valid UTF-8 is refused, not scanned.** On Linux a filename
+is arbitrary bytes. `std::env::args()` *panics* on one that is not UTF-8 — it
+took the process down at exit 134, before a line of this crate ran — so argv is
+read with `args_os` and a non-UTF-8 argument is a usage error with a message.
+Refused rather than handled: making it work end to end means `OsStr` through the
+walker, the readers and the report, which is a real change for a case no lockfile
+in the wild has produced. Named here rather than left as a surprise.
 
 **Flat formats have no graph.** `requirements.txt` and `go.mod` record no
 dependency edges at all, so every package trivially has in-degree 0 and clause 3
