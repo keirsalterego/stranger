@@ -62,6 +62,9 @@ fn fixture(name: &str) -> String {
 
 const POISONED: &str = "fixtures/poisoned.package-lock.json";
 const CLEAN: &str = "fixtures/npm-xs.package-lock.json";
+/// The same two files as arguments to `fixture`, which joins `fixtures/` itself.
+const POISONED_FILE: &str = "poisoned.package-lock.json";
+const CLEAN_FILE: &str = "npm-xs.package-lock.json";
 
 #[test]
 fn clean_scan_exits_zero() {
@@ -715,4 +718,234 @@ fn json_carries_the_integrity_count() {
         "json",
     ]));
     assert!(flat.contains("\"integrity\":0"), "{flat}");
+}
+
+/// chmod 000 does nothing to root, and an assertion that cannot fail is worse
+/// than no test. std has no `geteuid` and this crate forbids the `unsafe` an
+/// FFI one would need, so ask the filesystem: take the permissions away and
+/// see whether they went.
+#[cfg(unix)]
+fn lock_out(dir: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o000)).expect("chmod");
+    std::fs::read_dir(dir).is_err()
+}
+
+#[cfg(unix)]
+fn unlock(dir: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    let _ = std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o755));
+}
+
+/// The worst bug this tool could have: a directory it cannot enter, reported as
+/// clean. `read_dir` failing came back from the walk as an empty vec, which is
+/// the value an empty directory produces, so a poisoned lockfile behind a 000
+/// directory printed "no lockfile" and exited 0 under `--fail-on critical`.
+#[cfg(unix)]
+#[test]
+fn an_unreadable_root_exits_two() {
+    let dir = scratch("cli_locked_root");
+    write(&dir.join("package-lock.json"), &fixture(POISONED_FILE));
+    if !lock_out(&dir) {
+        return; // root reads anything
+    }
+
+    let o = run(&["scan", dir.to_str().unwrap(), "--fail-on", "critical"]);
+    let json = run(&["scan", dir.to_str().unwrap(), "--format", "json"]);
+    // Restored before the assertions, or a failing run leaves behind a
+    // directory the next `scratch` call cannot remove.
+    unlock(&dir);
+    let (out, json_out) = (stdout(&o), stdout(&json));
+
+    assert_eq!(o.status.code(), Some(2), "{out}");
+    assert!(out.contains("could not look inside"), "{out}");
+    assert!(
+        !out.contains("no lockfile"),
+        "an unopenable directory is not an empty one: {out}"
+    );
+    // Still one JSON object per line, and the object names the path.
+    assert_eq!(json.status.code(), Some(2));
+    let v = stranger::json::parse(json_out.trim()).expect("blind-spot line parses");
+    assert_eq!(
+        v.get("unreadable")
+            .and_then(stranger::json::Value::as_array)
+            .map(<[_]>::len),
+        Some(1),
+        "{json_out}"
+    );
+}
+
+/// An unreadable *subdirectory* is the judgement call, and it goes the same
+/// way. The sibling scanned fine and its findings still print; the code is
+/// still 2, because `--fail-on` is being asked about a list that is short by an
+/// unknown number of lockfiles and neither 0 nor 1 answers that honestly.
+#[cfg(unix)]
+#[test]
+fn an_unreadable_subdirectory_exits_two_beside_a_readable_sibling() {
+    let dir = scratch("cli_locked_subdir");
+    write(&dir.join("open/package-lock.json"), &fixture(CLEAN_FILE));
+    write(&dir.join("shut/package-lock.json"), &fixture(POISONED_FILE));
+    let shut = dir.join("shut");
+    if !lock_out(&shut) {
+        return;
+    }
+
+    let o = run(&["scan", dir.to_str().unwrap(), "--fail-on", "critical"]);
+    unlock(&shut);
+    let out = stdout(&o);
+
+    assert!(out.contains("could not look inside"), "{out}");
+    assert!(
+        out.contains("packages   ("),
+        "the sibling still gets reported: {out}"
+    );
+    assert_eq!(o.status.code(), Some(2), "{out}");
+}
+
+/// Eight lockfiles in a directory and stranger said "no lockfile in .". Naming
+/// a format it will not read is not reading it; it is the difference between a
+/// declared cut and a silent one, and the FAQ makes the declaration a condition
+/// of reading these files at all.
+#[test]
+fn lockfiles_with_no_reader_are_named_not_ignored() {
+    let dir = scratch("cli_unsupported");
+    for name in [
+        "yarn.lock",
+        "go.sum",
+        "Gemfile.lock",
+        "composer.lock",
+        "Pipfile.lock",
+        "pdm.lock",
+        "bun.lockb",
+        "gradle.lockfile",
+    ] {
+        write(&dir.join(name), "x");
+    }
+
+    let o = run(&["scan", dir.to_str().unwrap(), "--fail-on", "critical"]);
+    let out = stdout(&o);
+    assert_eq!(o.status.code(), Some(0), "{out}");
+    for named in ["yarn.lock", "go.sum", "gradle.lockfile", "bun.lockb"] {
+        assert!(out.contains(named), "{named} missing from:\n{out}");
+    }
+    assert!(out.contains("found but not read"), "{out}");
+
+    // JSON says the same thing on one parseable line rather than in prose.
+    let json = stdout(&run(&["scan", "--format", "json", dir.to_str().unwrap()]));
+    let v = stranger::json::parse(json.trim()).expect("parses");
+    assert_eq!(
+        v.get("unsupported")
+            .and_then(stranger::json::Value::as_array)
+            .map(<[_]>::len),
+        Some(8),
+        "{json}"
+    );
+}
+
+/// `walk::MAX_DEPTH`, thirteen skip-list names and every hidden directory are
+/// three silent blind spots. A lockfile in `.ci/` or under `dist/` was
+/// invisible, with `--fail-on critical` returning 0 and nothing said anywhere.
+#[test]
+fn verbose_names_the_directories_it_would_not_enter() {
+    let dir = scratch("cli_skipped");
+    write(&dir.join("package-lock.json"), &fixture(CLEAN_FILE));
+    write(&dir.join(".ci/package-lock.json"), &fixture(POISONED_FILE));
+    write(
+        &dir.join("dist/app/package-lock.json"),
+        &fixture(POISONED_FILE),
+    );
+
+    let quiet = stdout(&run(&["scan", dir.to_str().unwrap()]));
+    assert!(
+        !quiet.contains("not descended into"),
+        "policy stays behind -v: {quiet}"
+    );
+
+    let loud = stdout(&run(&["scan", "-v", dir.to_str().unwrap()]));
+    assert!(loud.contains("not descended into (2)"), "{loud}");
+    assert!(loud.contains(".ci") && loud.contains("hidden"), "{loud}");
+    assert!(
+        loud.contains("dist") && loud.contains("skip list"),
+        "{loud}"
+    );
+}
+/// A rule that could not fire is not the same claim as a rule that fired and
+/// found nothing, and both printed as silence. `install_script` is hardcoded
+/// false in the poetry, uv, Cargo and pnpm readers because those four files
+/// record no such flag, so `stranger scan poetry.lock` reported no install
+/// scripts on a question it had never asked — exit 0 at every level.
+#[test]
+fn a_rule_with_no_signal_in_this_format_says_so() {
+    let out = stdout(&run(&["scan", "fixtures/poetry-m.poetry.lock"]));
+    assert!(out.contains("no findings"), "{out}");
+    assert!(
+        out.contains("INSTALL SCRIPTS        — no signal in this format"),
+        "{out}"
+    );
+    // Go has no corpus, so the name rules cannot speak about a go.mod either.
+    let go = stdout(&run(&["scan", "fixtures/gomod-m.go.mod"]));
+    assert!(go.contains("HALLUCINATION RISK"), "{go}");
+    assert!(go.contains("no signal in this format"), "{go}");
+
+    // npm records the flag, so it must not be on the list there — a report
+    // that says "no signal" about everything says nothing.
+    let npm = stdout(&run(&["scan", "fixtures/npm-xs.package-lock.json"]));
+    assert!(!npm.contains("INSTALL SCRIPTS"), "{npm}");
+    assert!(
+        npm.contains("UNPINNED               — no signal in this format"),
+        "npm resolves every entry, so pinning has nothing to read: {npm}"
+    );
+
+    // Not a finding, and it must never become one: nothing here moves the exit
+    // code, because an unasked question is not evidence.
+    for level in ["low", "medium", "high", "critical"] {
+        assert_eq!(
+            run(&["scan", "fixtures/gomod-m.go.mod", "--fail-on", level])
+                .status
+                .code(),
+            Some(0),
+            "{level}"
+        );
+    }
+}
+
+/// The JSON half. A consumer reading `"findings": []` as "clean" is right about
+/// the rules that ran and wrong about the ones that could not, and it has no
+/// other way to find out.
+#[test]
+fn json_lists_the_rules_that_could_not_fire() {
+    let na = |fixture: &str| -> Vec<String> {
+        let out = stdout(&run(&["scan", fixture, "--format", "json"]));
+        stranger::json::parse(&out)
+            .expect("parses")
+            .get("not_applicable")
+            .and_then(stranger::json::Value::as_array)
+            .expect("not_applicable")
+            .iter()
+            .filter_map(|v| v.as_str().map(str::to_string))
+            .collect()
+    };
+    assert_eq!(
+        na("fixtures/poetry-m.poetry.lock"),
+        ["install-script", "pinning"]
+    );
+    assert_eq!(
+        na("fixtures/gomod-m.go.mod"),
+        ["slopsquat", "install-script", "pinning"]
+    );
+    assert_eq!(
+        na("fixtures/pnpm-l.pnpm-lock.yaml"),
+        ["install-script", "pinning"]
+    );
+    // requirements.txt is the one file here carrying a specifier rather than a
+    // resolution, so it is the only one `pinning` can speak about — and the
+    // only one whose list is a single entry.
+    assert_eq!(na("fixtures/reqs-s.requirements.txt"), ["install-script"]);
+    // package-lock.json is the only file that records install scripts, and it
+    // still cannot answer `pinning`: every entry resolves to one version.
+    assert_eq!(na("fixtures/npm-xs.package-lock.json"), ["pinning"]);
+    assert_eq!(
+        na("fixtures/cargo-s.Cargo.lock"),
+        ["install-script", "pinning"]
+    );
 }

@@ -75,10 +75,27 @@ pub struct Package {
     pub name: String,
     pub version: String,
     /// The lockfile's own key for this entry. For npm that is the install
-    /// path, which is what edge resolution scopes against; for flat formats
-    /// it is just the name.
+    /// path — `node_modules/a/node_modules/b`, the nesting that makes this a
+    /// second copy — for pnpm `name@version`, for Cargo `name version`, and
+    /// for the flat formats just the name.
+    ///
+    /// Not what edge resolution scopes against, which is what this comment
+    /// used to claim: `npm::resolve` walks the entries map by its keys and
+    /// never looks at this field. It is here for `stranger tree`, which prints
+    /// it when it says something the name and version do not.
     pub key: String,
+    /// Declared for development only.
+    ///
+    /// npm records it per entry and `poetry.lock` records it per group; pnpm
+    /// 9, Cargo.lock, requirements.txt and go.mod record nothing this maps
+    /// onto, and those readers leave it false rather than guessing. So `false`
+    /// means "not marked dev", never "not dev", and nothing aggregates it —
+    /// `stranger tree` prints the flag where a reader set it and says nothing
+    /// where none did, which is the only claim the four silent formats support.
     pub dev: bool,
+    /// Installed only if the platform or the peer graph allows it. npm records
+    /// it on the entry, pnpm on the snapshot; the same caveat as `dev` applies
+    /// to the four formats that record neither.
     pub optional: bool,
     /// A workspace member or path dependency. Not a stranger — somebody in
     /// this repo wrote it — so it is excluded from findings. Without this,
@@ -120,6 +137,21 @@ pub struct Tree {
 }
 
 impl Tree {
+    /// Which reader produced this.
+    ///
+    /// Derived from `source` rather than stored on the struct, because storing
+    /// it means a field every reader has to fill in and the readers belong to
+    /// other people this week. `None` is unreachable through `read`, which
+    /// only builds a `Tree` after `Format::of` said yes — a test constructing
+    /// one by hand can still get it, and gets a rule that declines to claim
+    /// anything rather than a panic.
+    pub fn format(&self) -> Option<Format> {
+        self.source
+            .file_name()
+            .and_then(|n| n.to_str())
+            .and_then(Format::of)
+    }
+
     pub fn in_degree(&self) -> Vec<u32> {
         let mut deg = vec![0u32; self.packages.len()];
         for &(_, to) in &self.edges {
@@ -180,39 +212,85 @@ pub const KNOWN: &[&str] = &[
     "go.mod",
 ];
 
+/// Which file this is, as opposed to which registry it points at.
+///
+/// `Ecosystem` cannot answer "could this rule have fired here". Two npm
+/// formats disagree about install scripts — `package-lock.json` records
+/// `hasInstallScript`, pnpm 9 dropped the field — and three PyPI formats
+/// disagree about pinning, since `requirements.txt` carries a specifier while
+/// `poetry.lock` and `uv.lock` carry a resolution. A rule that stays silent
+/// for the second reason has found nothing; a rule that stays silent for the
+/// first has been handed a file that cannot answer it. `rules::Rule::applies_to`
+/// is what tells those apart, and this is what it asks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Format {
+    Npm,
+    Pnpm,
+    Cargo,
+    Pip,
+    Poetry,
+    Uv,
+    GoMod,
+}
+
+impl Format {
+    /// The reader a filename selects, or `None` for a name no reader claims.
+    ///
+    /// Suffix rather than equality, so a file kept as
+    /// `npm-xl.package-lock.json` still reads — lockfiles get renamed the
+    /// moment you collect more than one. That only stays unambiguous while no
+    /// known name is a suffix of another. None of these seven is, so the arm
+    /// order is documentation rather than precedence; check it before adding
+    /// an eighth.
+    ///
+    /// The suffixes are `KNOWN` a second time, which is a duplication a test
+    /// keeps honest rather than machinery: deriving one from the other in a
+    /// const context costs more than `every_known_name_has_a_format` does.
+    pub fn of(name: &str) -> Option<Format> {
+        let table = [
+            ("package-lock.json", Format::Npm),
+            ("pnpm-lock.yaml", Format::Pnpm),
+            ("Cargo.lock", Format::Cargo),
+            ("requirements.txt", Format::Pip),
+            ("poetry.lock", Format::Poetry),
+            ("uv.lock", Format::Uv),
+            ("go.mod", Format::GoMod),
+        ];
+        table
+            .into_iter()
+            .find(|(suffix, _)| name.ends_with(suffix))
+            .map(|(_, format)| format)
+    }
+}
+
 /// Read one lockfile, dispatching on its name.
 pub fn read(path: &std::path::Path) -> crate::error::Result<Tree> {
     let src = std::fs::read_to_string(path)
         .map_err(|e| crate::error::Error::io(path.display().to_string(), e))?;
-    let name = path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or_default();
-    // Suffix rather than equality, so a file kept as `npm-xl.package-lock.json`
-    // still reads. Lockfiles get renamed the moment you collect more than one.
-    //
-    // Suffix matching only stays unambiguous while no known name is a suffix
-    // of another. None of these seven is, so the arm order is documentation
-    // rather than precedence — but check it before adding an eighth.
-    let tree = if name.ends_with("package-lock.json") {
-        npm::read(path, &src)
-    } else if name.ends_with("pnpm-lock.yaml") {
-        pnpm::read(path, &src)
-    } else if name.ends_with("Cargo.lock") {
-        cargo::read(path, &src)
-    } else if name.ends_with("requirements.txt") {
-        pip::read(path, &src)
-    } else if name.ends_with("poetry.lock") {
-        pypi::poetry(path, &src)
-    } else if name.ends_with("uv.lock") {
-        pypi::uv(path, &src)
-    } else if name.ends_with("go.mod") {
-        gomod::read(path, &src)
-    } else {
-        Err(crate::error::Error::usage(format!(
+    // Decided, not defaulted. This was `unwrap_or_default()`, which turned a
+    // filename that is not UTF-8 into the empty string and then rendered
+    // `: not a lockfile stranger knows` — an error message with nothing before
+    // the colon, about a file whose name the reader never got told. The walk
+    // cannot produce such a path (it matches on `to_str`), but `read` is public
+    // and a caller can hand it anything.
+    let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+        return Err(crate::error::Error::usage(format!(
+            "{}: filename is not valid UTF-8, so stranger cannot tell which format it is",
+            path.display()
+        )));
+    };
+    let tree = match Format::of(name) {
+        Some(Format::Npm) => npm::read(path, &src),
+        Some(Format::Pnpm) => pnpm::read(path, &src),
+        Some(Format::Cargo) => cargo::read(path, &src),
+        Some(Format::Pip) => pip::read(path, &src),
+        Some(Format::Poetry) => pypi::poetry(path, &src),
+        Some(Format::Uv) => pypi::uv(path, &src),
+        Some(Format::GoMod) => gomod::read(path, &src),
+        None => Err(crate::error::Error::usage(format!(
             "{name}: not a lockfile stranger knows. It reads: {}",
             KNOWN.join(", ")
-        )))
+        ))),
     };
     // The syntax errors arrive from a parser that was handed a string and
     // never learned where it came from, so this is the first frame that can
@@ -250,11 +328,43 @@ fn scrub(mut tree: Tree) -> Tree {
     tree
 }
 
-/// Every known lockfile under `dir`.
+/// Every known lockfile under `dir`, and everywhere the walk could not look.
 ///
 /// The walk is what makes this usable on a monorepo, and the skip list in
 /// `crate::walk` is what keeps it from wandering into `node_modules` and
-/// auditing four hundred vendored lockfiles belonging to other people.
-pub fn discover(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+/// auditing four hundred vendored lockfiles belonging to other people. What it
+/// skipped and what it could not open come back too — see `walk::Walk`.
+pub fn discover(dir: &std::path::Path) -> crate::walk::Walk {
     crate::walk::lockfiles(dir, KNOWN)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The two lists of suffixes have to name the same seven files. `KNOWN` is
+    /// what the walk matches on and what "looked for:" prints; `Format::of` is
+    /// what picks a reader. A name in one and not the other is either a
+    /// lockfile found and then refused, or one advertised and never seen.
+    #[test]
+    fn every_known_name_has_a_format() {
+        let mut formats: Vec<Format> = KNOWN
+            .iter()
+            .map(|k| Format::of(k).unwrap_or_else(|| panic!("{k} has no reader")))
+            .collect();
+        let seen = formats.len();
+        formats.dedup();
+        assert_eq!(formats.len(), seen, "two names picked the same reader");
+    }
+
+    /// Fixtures are kept as `npm-xl.package-lock.json`, so the match is on the
+    /// end of the name — and a name nothing claims stays unclaimed rather than
+    /// falling through to whichever arm is last.
+    #[test]
+    fn a_prefixed_fixture_still_picks_its_reader() {
+        assert_eq!(Format::of("npm-xl.package-lock.json"), Some(Format::Npm));
+        assert_eq!(Format::of("reqs-s.requirements.txt"), Some(Format::Pip));
+        assert_eq!(Format::of("yarn.lock"), None);
+        assert_eq!(Format::of("packages.lock.json"), None);
+    }
 }

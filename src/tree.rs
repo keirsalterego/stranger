@@ -358,6 +358,19 @@ fn block(w: &mut impl Write, t: Term, hit: &Hit<'_>, limit: usize, quiet: bool) 
             ),
         )?;
     }
+    // Printed where a reader set a flag and absent everywhere else, which is
+    // the whole shape of the claim: npm records both, `poetry.lock` records
+    // dev-ness and pnpm records optionality, and the other four formats record
+    // neither — those readers leave both false rather than guess. An absent
+    // line therefore means "nothing said so", never "not a dev dependency",
+    // and no count anywhere aggregates these for exactly that reason.
+    let flags: Vec<&str> = [(pkg.dev, "dev-only"), (pkg.optional, "optional")]
+        .into_iter()
+        .filter_map(|(set, name)| set.then_some(name))
+        .collect();
+    if !flags.is_empty() {
+        writeln!(w, "     {}", t.paint(Style::Dim, &flags.join(" · ")))?;
+    }
     writeln!(w)?;
 
     if !hit.tree.records_edges {

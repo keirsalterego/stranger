@@ -1,7 +1,7 @@
 //! Rendering a scan, for a person and for a machine.
 
 use crate::lock::Tree;
-use crate::rules::{Finding, Rule, Severity};
+use crate::rules::{self, Finding, Rule, Severity};
 use crate::term::{self, Style, Term};
 use std::io::{self, Write};
 use std::time::Duration;
@@ -158,7 +158,11 @@ pub fn human(
     let mut rules: Vec<Rule> = findings.iter().map(|f| f.rule).collect();
     rules.sort_unstable_by_key(|r| r.rank());
     rules.dedup();
-    let head_w = term::column(rules.iter().map(|r| r.heading()), HEAD_MIN);
+    // The rules this file cannot answer are printed below the ones that fired,
+    // and share their column — a heading in a different place would read as a
+    // different kind of thing, and it is the same list of rules either way.
+    let silent = rules::not_applicable(tree);
+    let head_w = term::column(rules.iter().chain(&silent).map(|r| r.heading()), HEAD_MIN);
 
     for rule in rules {
         // Never empty: `rules` was built from the findings themselves, so
@@ -192,6 +196,27 @@ pub fn human(
             for (f, label) in hits {
                 writeln!(w, "     {} {}", term::pad(label, name_w), f.detail)?;
             }
+        }
+        writeln!(w)?;
+    }
+
+    // Below the findings, because it is not one. `stranger scan poetry.lock`
+    // printed "no findings" over four rules, one of which had never been asked
+    // — the file records no install-script flag, so the rule was reading a
+    // column of `false` the reader invented. Silence about a question and
+    // silence about an answer look identical in a terminal, and the exit code
+    // is the same 0 either way; this line is the only thing that separates
+    // them. It is not a finding: nothing here moves `risk` or `--fail-on`,
+    // because an unasked question is not evidence.
+    if !quiet && !silent.is_empty() {
+        for rule in &silent {
+            let line = format!(
+                "  {}  {} {}",
+                t.paint(Style::Dim, "·"),
+                t.paint(Style::Dim, &term::pad(rule.heading(), head_w)),
+                t.paint(Style::Dim, "— no signal in this format"),
+            );
+            writeln!(w, "{line}")?;
         }
         writeln!(w)?;
     }
@@ -280,6 +305,18 @@ pub fn json(w: &mut impl Write, tree: &Tree, findings: &[Finding]) -> io::Result
         string(w, &f.detail)?;
         write!(w, "}}")?;
     }
+    // The half of the answer an empty `findings` array cannot carry. A
+    // consumer that treats `[]` as "clean" is right about the rules that ran
+    // and wrong about the ones that could not, and on `poetry.lock` that is
+    // two of the five. Always emitted, empty array included, so nobody has to
+    // handle a missing key to find out whether the question was asked.
+    write!(w, "],\"not_applicable\":[")?;
+    for (i, rule) in rules::not_applicable(tree).into_iter().enumerate() {
+        if i > 0 {
+            write!(w, ",")?;
+        }
+        string(w, rule.id())?;
+    }
     writeln!(w, "]}}")?;
     Ok(())
 }
@@ -287,7 +324,11 @@ pub fn json(w: &mut impl Write, tree: &Tree, findings: &[Finding]) -> io::Result
 /// Writing JSON is not the same job as reading it, so this is not the parser
 /// run backwards — it is eight lines that escape what RFC 8259 section 7
 /// requires and nothing else.
-pub(crate) fn string(w: &mut impl Write, s: &str) -> io::Result<()> {
+///
+/// `pub` rather than `pub(crate)` because `main` writes one JSON line of its
+/// own — the blind-spot object, which is about the walk and so has no `Tree`
+/// to hang off. Two escapers would be one escaper and one bug.
+pub fn string(w: &mut impl Write, s: &str) -> io::Result<()> {
     write!(w, "\"")?;
     for c in s.chars() {
         match c {
