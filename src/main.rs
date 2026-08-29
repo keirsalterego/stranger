@@ -410,6 +410,15 @@ fn tree(opts: TreeOptions) -> Result<ExitCode> {
 /// the first one out lost every sibling's findings *and* made the surfaced
 /// error a race between threads.
 ///
+/// The degradation promise stops at `Err`, and the doc comments elsewhere in
+/// this file state it without that qualification. A worker that *panics* still
+/// takes the whole scan with it: `thread::scope` re-raises a panicking child
+/// when it joins, and the release profile sets `panic = "abort"`, so there is
+/// no unwinding left to catch even if this wanted to. Every parser is written
+/// to return `Error` rather than panic and the fuzz suite in `tests/fuzz.rs`
+/// is what keeps that true, which is a smaller guarantee than "one file's
+/// problem stays one file's problem" and is the one actually on offer.
+///
 /// ponytail: one thread per lockfile, not a pool. A repo with four hundred
 /// lockfiles would spawn four hundred threads, and the fix then is to chunk the
 /// slice across `available_parallelism()` — but the walk skips `node_modules`,
