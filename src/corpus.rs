@@ -28,11 +28,14 @@ pub fn names(eco: Ecosystem) -> &'static [&'static str] {
         Ecosystem::Npm => &NPM,
         Ecosystem::PyPi => &PYPI,
         Ecosystem::Crates => &CRATES,
-        // proxy.golang.org publishes no ranked list and module paths are
-        // domains, so edit distance over them is a different problem. go.mod
-        // still parses; this rule just never fires on it. Said out loud in
-        // README LIMITS rather than shipped as a rule that silently does
-        // nothing.
+        // Nothing in the codebase produces this variant. `lock::KNOWN` has no
+        // `go.mod`, so no scan reaches here and `stranger scan go.mod` exits 2
+        // with "not a lockfile stranger knows" — Go is not read at all, never
+        // mind read-and-not-checked. The arm is here for the day a reader
+        // lands, and the answer will still be empty: proxy.golang.org
+        // publishes no ranked list and module paths are domains, so edit
+        // distance over them is a different problem. Said out loud in README
+        // LIMITS rather than shipped as a rule that silently does nothing.
         Ecosystem::Go => &[],
     }
 }
@@ -65,6 +68,12 @@ pub fn normalize(eco: Ecosystem, name: &str) -> String {
     out
 }
 
+/// `contains_in` against the compiled-in list.
+///
+/// Nothing in `src/` calls this — the rules take their list as a parameter so
+/// `tests/ablation.rs` can shrink it. Its one caller is `tests/pip.rs`, which
+/// is asking about the corpus itself rather than about a rule, and that is the
+/// only question this signature can answer.
 pub fn contains(eco: Ecosystem, name: &str) -> bool {
     contains_in(names(eco), eco, name)
 }
@@ -80,18 +89,15 @@ pub fn contains_in(names: &[&str], eco: Ecosystem, name: &str) -> bool {
     names.binary_search(&name.as_str()).is_ok()
 }
 
-/// The closest real name within `MAX_EDIT_DISTANCE`, if there is one.
+/// The closest real name in `names` within `MAX_EDIT_DISTANCE`, if there is
+/// one.
 ///
 /// ponytail: linear scan over the whole list. It looks wrong and is not: this
-/// only ever runs for names that already failed the `contains` check, which on
+/// only ever runs for names that already failed the membership check, which on
 /// the fixtures is a couple of dozen out of 1,390. The length filter inside
 /// `distance::within` rejects most of the corpus before any table is
 /// allocated. If the not-in-corpus set ever gets large, bucket the corpus by
 /// length — the ordering by name is not doing any work for this query.
-pub fn nearest(eco: Ecosystem, name: &str) -> Option<(&'static str, usize)> {
-    nearest_in(names(eco), eco, name)
-}
-
 pub fn nearest_in<'a>(names: &[&'a str], eco: Ecosystem, name: &str) -> Option<(&'a str, usize)> {
     let query = normalize(eco, name);
     names

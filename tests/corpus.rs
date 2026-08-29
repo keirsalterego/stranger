@@ -3,6 +3,14 @@ use stranger::lock::Ecosystem;
 
 const ALL: &[Ecosystem] = &[Ecosystem::Npm, Ecosystem::PyPi, Ecosystem::Crates];
 
+/// `nearest_in` is the real seam — the rules pass their own list so
+/// `tests/ablation.rs` can shrink it. These tests want the compiled-in list,
+/// which is one call away; a wrapper in `src/` that only tests reached would
+/// be library surface paid for by nobody.
+fn nearest(eco: Ecosystem, name: &str) -> Option<(&'static str, usize)> {
+    corpus::nearest_in(corpus::names(eco), eco, name)
+}
+
 /// `binary_search` on an unsorted slice does not fail loudly, it just returns
 /// the wrong answer for some inputs. Shell `sort` is locale-dependent, so the
 /// files are generated with `LC_ALL=C` and checked here rather than trusted.
@@ -41,6 +49,18 @@ fn sizes() {
     // No ranked list of Go module paths exists, so the rule never fires there.
     // Empty on purpose, and said out loud in README LIMITS.
     assert!(corpus::names(Ecosystem::Go).is_empty());
+}
+
+/// The `Ecosystem::Go` arm in `corpus::names` says nothing produces that
+/// variant. This is what makes the claim checkable rather than folklore: no
+/// reader looks for a Go manifest, so no scan can reach the arm. Add a Go
+/// reader and this fails, which is the moment the comment needs rewriting.
+#[test]
+fn no_go_manifest_is_a_lockfile_stranger_reads() {
+    assert!(
+        !stranger::lock::KNOWN.iter().any(|k| k.ends_with("go.mod")),
+        "a Go reader landed: the dead-arm comment in corpus.rs is now wrong"
+    );
 }
 
 /// The two-letter registry sweep missed `lodash`, which would have made the
@@ -108,20 +128,11 @@ fn pypi_separators_are_equivalent() {
 
 #[test]
 fn nearest_finds_the_obvious_parent() {
+    assert_eq!(nearest(Ecosystem::Npm, "expres"), Some(("express", 1)));
+    assert_eq!(nearest(Ecosystem::Npm, "lodahs"), Some(("lodash", 1)));
+    assert_eq!(nearest(Ecosystem::Npm, "chalck"), Some(("chalk", 1)));
     assert_eq!(
-        corpus::nearest(Ecosystem::Npm, "expres"),
-        Some(("express", 1))
-    );
-    assert_eq!(
-        corpus::nearest(Ecosystem::Npm, "lodahs"),
-        Some(("lodash", 1))
-    );
-    assert_eq!(
-        corpus::nearest(Ecosystem::Npm, "chalck"),
-        Some(("chalk", 1))
-    );
-    assert_eq!(
-        corpus::nearest(Ecosystem::PyPi, "python-dateutils"),
+        nearest(Ecosystem::PyPi, "python-dateutils"),
         Some(("python-dateutil", 1))
     );
 }
@@ -130,12 +141,6 @@ fn nearest_finds_the_obvious_parent() {
 /// rule stays quiet rather than inventing one.
 #[test]
 fn nearest_gives_up_on_names_that_are_not_typos() {
-    assert_eq!(
-        corpus::nearest(Ecosystem::Npm, "zzqxwvunexistentpackage"),
-        None
-    );
-    assert_eq!(
-        corpus::nearest(Ecosystem::Go, "github.com/whatever/thing"),
-        None
-    );
+    assert_eq!(nearest(Ecosystem::Npm, "zzqxwvunexistentpackage"), None);
+    assert_eq!(nearest(Ecosystem::Go, "github.com/whatever/thing"), None);
 }

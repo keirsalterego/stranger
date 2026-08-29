@@ -13,8 +13,11 @@
 //! the same tree would report the same findings in a different sequence, and a
 //! diff between two scans would be mostly noise. Entries are sorted.
 //!
-//! Symlinks are not followed. A symlink to a parent directory is an infinite
-//! walk, and `..`-shaped symlinks exist in real `node_modules` trees.
+//! Symlinked *directories* are not followed. A symlink to a parent directory
+//! is an infinite walk, and `..`-shaped symlinks exist in real `node_modules`
+//! trees. Symlinks to files are followed: a monorepo that keeps one lockfile
+//! and links it from every package is doing a normal thing, and refusing to
+//! read it means silently reporting "no lockfile" on a tree that has one.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -66,9 +69,21 @@ pub fn lockfiles(root: &Path, known: &[&str]) -> Vec<PathBuf> {
                 continue;
             };
 
-            if kind.is_symlink() {
-                continue;
-            }
+            // `file_type` does not follow the link, so a symlink is neither a
+            // file nor a dir here and has to be resolved by hand. Only the
+            // directory case is dangerous — that is the cycle — and a dangling
+            // link resolves to nothing, so both fall out as `continue`.
+            let kind = if kind.is_symlink() {
+                let Ok(target) = std::fs::metadata(&path) else {
+                    continue;
+                };
+                if target.is_dir() {
+                    continue;
+                }
+                target.file_type()
+            } else {
+                kind
+            };
 
             if kind.is_dir() {
                 if depth + 1 > MAX_DEPTH {

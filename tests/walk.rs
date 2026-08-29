@@ -25,6 +25,16 @@ impl Tree {
         fs::create_dir_all(self.0.join(rel)).unwrap();
         self
     }
+    /// `target` is written into the link verbatim, so a test can plant the
+    /// relative `..`-shaped links that occur in the wild as easily as an
+    /// absolute one.
+    #[cfg(unix)]
+    fn link(&self, target: &str, rel: &str) -> &Tree {
+        let p = self.0.join(rel);
+        fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::os::unix::fs::symlink(target, p).unwrap();
+        self
+    }
     fn find(&self) -> Vec<String> {
         walk::lockfiles(&self.0, KNOWN)
             .into_iter()
@@ -129,6 +139,43 @@ fn an_empty_tree_finds_nothing() {
 fn a_missing_root_is_not_a_panic() {
     let missing = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("definitely-not-here");
     assert!(walk::lockfiles(&missing, KNOWN).is_empty());
+}
+
+/// A monorepo that keeps one lockfile and links it from every package used to
+/// scan as empty: the skip was written for directory cycles but caught every
+/// symlink, files included.
+#[cfg(unix)]
+#[test]
+fn follows_a_symlinked_lockfile() {
+    let t = Tree::new("walk_symlink_file");
+    t.file("upstream/shared.json");
+    t.link("../upstream/shared.json", "pkg/package-lock.json");
+    assert_eq!(t.find(), vec!["pkg/package-lock.json"]);
+}
+
+/// The other half of the same change. Directory symlinks are what make a walk
+/// infinite, so they stay skipped — a link back to the root and a `..`-shaped
+/// link of the kind `node_modules` is full of, both dead ends.
+#[cfg(unix)]
+#[test]
+fn a_symlinked_directory_cycle_terminates() {
+    let t = Tree::new("walk_symlink_cycle");
+    let root = t.0.to_string_lossy().into_owned();
+    t.file("a/package-lock.json");
+    t.link(&root, "a/loop");
+    t.link("..", "a/b/up");
+    assert_eq!(t.find(), vec!["a/package-lock.json"]);
+}
+
+/// A link with nothing on the end of it is neither a file to read nor a
+/// directory to descend, and must not abort the rest of the scan.
+#[cfg(unix)]
+#[test]
+fn a_dangling_symlink_is_skipped() {
+    let t = Tree::new("walk_symlink_dangling");
+    t.file("package-lock.json");
+    t.link("./nothing-here.json", "pkg/package-lock.json");
+    assert_eq!(t.find(), vec!["package-lock.json"]);
 }
 
 /// Fixtures are named `npm-xl.package-lock.json`, so matching is by suffix.
