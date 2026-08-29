@@ -122,8 +122,8 @@ What that does *not* fix is a real registry package outside the corpus.
 
 ## The TOML subset
 
-One parser reads `Cargo.lock`, `poetry.lock` and `uv.lock` — three ecosystems for
-the price of one, which made it the highest-leverage module after JSON.
+One parser reads `Cargo.lock`, `poetry.lock` and `uv.lock` — three formats for
+the price of one, which bought more per line written than anything after JSON.
 
 Accepted: `key = value`, `[table]` and `[dotted.table]` headers,
 `[[array.of.tables]]`, basic strings with the full escape set including `\uXXXX`
@@ -160,9 +160,9 @@ Three things the real files taught that guessing would have missed:
 YAML 1.1's implicit typing turns `no`, `on`, `off` and `y` into booleans. That is
 the Norway problem, and in a supply-chain tool it is not a curiosity.
 
-`no`, `on`, `y` and `off` are all real npm package names. A reader that turned the
-key `no@1.0.0` into a boolean would drop a package out of an audit without saying
-anything. So `yaml.rs` types exactly two tokens — lowercase `true` and lowercase
+`no`, `on`, `y` and `off` are all registered npm package names. A reader that
+turned the key `no@1.0.0` into a boolean would drop a package out of an audit
+without saying anything. `no` and `on` are in `corpus/npm.txt`; `y` and `off` are registered on npm and are not, because the corpus is the top 140,066 names by download count and not the whole registry. Which is the same distinction the tool makes about `Origin::Elsewhere`: absence from a popularity sample is not evidence a package does not exist. So `yaml.rs` types exactly two tokens — lowercase `true` and lowercase
 `false`, which the fixture genuinely needs for `hasBin` and `optional` — and
 leaves `null`, `~`, `Yes`, `010` and `1e3` as strings.
 

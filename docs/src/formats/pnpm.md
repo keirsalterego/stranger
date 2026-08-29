@@ -91,7 +91,9 @@ beats that.
 
 The version arrives as the string `"9.0"`, because pnpm quotes it and
 [the YAML subset](../decisions.md) types exactly two tokens — `true` and `false` —
-and leaves everything else a string. `no`, `on` and `y` are real npm package names,
+and leaves everything else a string. `no` and `on` are npm package names this
+repository's own corpus can confirm — `y` and `off` are registered too but sit
+below its popularity cut —
 and a reader that turned `no@1.0.0` into a boolean would drop a package out of an
 audit without saying anything.
 

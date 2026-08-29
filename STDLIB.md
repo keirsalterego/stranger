@@ -52,8 +52,8 @@ limitation and not a theoretical one for other inputs.
 ## Parsing and CLI
 
 ### `clap` — 1,083,204,108 all-time · 222,262,381 in 90 days
-[`src/cli.rs`](src/cli.rs). A hand-written parser for one subcommand, five flags
-and three exit codes.
+[`src/cli.rs`](src/cli.rs). A hand-written parser for two subcommands, the seven
+options `USAGE` lists, and three exit codes.
 
 **What I gave up:** shell completions, `--help` generated from the same source as
 the parser, colored help, and `clap`'s genuinely good error messages for typo'd
@@ -71,10 +71,10 @@ What I got back is error text that says what was expected *here* — `--format t
 
 ### `anyhow` — 909,556,524 all-time · 200,860,233 in 90 days
 ### `thiserror` — 1,377,720,340 all-time · 338,962,699 in 90 days
-[`src/error.rs`](src/error.rs). One enum, three variants, hand-written `Display`
-and `std::error::Error` with a real `source()`.
+[`src/error.rs`](src/error.rs). One enum, four variants — `Syntax`, `InFile`, `Io`,
+`Usage` — hand-written `Display` and `std::error::Error` with a real `source()`.
 
-**What I gave up:** `thiserror`'s derive, which for three variants is about
+**What I gave up:** `thiserror`'s derive, which for four variants is about
 fifteen lines of boilerplate — a fair trade. `anyhow`'s backtrace capture and its
 `.context()` chaining, which I miss more; adding a file path to an IO error is
 manual here. What I got is that `Error::Syntax` carries `line` and `col` as
@@ -85,7 +85,8 @@ position without parsing the message back out.
 
 ### `toml` — 855,052,855 all-time · 201,425,545 in 90 days
 [`src/toml.rs`](src/toml.rs). A documented subset, sufficient for `Cargo.lock`,
-`poetry.lock` and `uv.lock` — three ecosystems for one parser.
+`poetry.lock` and `uv.lock` — three formats for one parser, though only two
+ecosystems: poetry and uv are both PyPI.
 
 Supported: `key = value`, `[table]`, `[dotted.table]`, `[[array.of.tables]]`,
 basic strings with the full escape set including `\uXXXX` and `\UXXXXXXXX`,
@@ -278,9 +279,9 @@ items. Each is refused *by name at the indicator* rather than by falling through
 The decision worth defending is implicit typing. YAML 1.1 turns `no`, `on`,
 `off` and `y` into booleans, which is the famous Norway problem. Exactly two
 tokens are typed here — lowercase `true` and lowercase `false` — and everything
-else stays a string, because **`no`, `on`, `y` and `off` are all real npm
+else stays a string, because **`no`, `on`, `y` and `off` are all registered npm
 package names**. A reader that turned the key `no@1.0.0` into a boolean would
-drop a package out of a supply-chain audit without a word. `null`, `~`, `Yes`,
+drop a package out of a supply-chain audit without a word. `no` and `on` are in `corpus/npm.txt`; `y` and `off` are registered on npm and are not, because the corpus is the top 140,066 names by download count and not the whole registry. Which is the same distinction the tool makes about `Origin::Elsewhere`: absence from a popularity sample is not evidence a package does not exist. `null`, `~`, `Yes`,
 `010` and `1e3` all stay strings for the same reason.
 
 ## Terminal

@@ -137,10 +137,12 @@ Three things the fixtures taught that guessing would have missed:
 
 The same reasoning governs `src/yaml.rs`, where the stakes are higher. YAML 1.1
 implicit typing turns `no`, `on`, `off` and `y` into booleans — and all four are
-real npm package names. A reader that turned the key `no@1.0.0` into a boolean
-would drop a package out of an audit without a word, so exactly two tokens are
+registered npm package names. A reader that turned the key `no@1.0.0` into a
+boolean would drop a package out of an audit without a word, so exactly two tokens are
 typed (lowercase `true` and `false`, which `pnpm-lock.yaml` needs) and everything
 else stays a string.
+
+Checkable against this repository only for half of them: `no` and `on` are in `corpus/npm.txt`; `y` and `off` are registered on npm and are not, because the corpus is the top 140,066 names by download count and not the whole registry. Which is the same distinction the tool makes about `Origin::Elsewhere`: absence from a popularity sample is not evidence a package does not exist.
 
 ## What the xorshift is for
 
@@ -369,13 +371,18 @@ the tree, and the standard library has no SHA-256 to check one with anyway.
 **The Single File bonus — cut deliberately, and it was never close.** Twenty-five
 files crushed into one `main.rs` trades a 25% criterion for a 5% bonus.
 
-**`src/semver.rs` — written, tested, and not wired in.** Thirteen tests including
-the prerelease precedence rules from section 11 that most implementations get
-wrong. Nothing calls it: the drift rule compares version strings for equality,
-which is all it needs, and no other rule asks an ordering question. It is left in
-the tree and named in the book's [Limits](https://keir.is-a.dev/stranger/limits.html)
-page as code that exists and is not used, because deleting it would hide an hour
-that was spent and pretending it is a feature would be worse.
+**`src/semver.rs` — written for a range matcher that got cut, and then earned its
+place anyway.** Ten tests, including the prerelease precedence rules from section
+11 that most implementations get wrong. It spent a day as genuinely dead code, and
+three files here and in the book said so. That stopped being true in `58c101f`:
+the drift rule has to put one package's several versions in *an* order before it
+prints them, and byte order is not that order — it puts `10.2.5` first and
+`1.0.0-rc.1` above `1.0.0`. So `drift.rs` imports `Version` and sorts with it.
+Equality is still all the rule *asks*; ordering is what the reader needs.
+
+Worth recording as a decision rather than quietly corrected, because the sentence
+survived in three files for a day after it went false, and the thing that finally
+caught it was a checker that runs the book's own console blocks.
 
 **Not cut, and it should have been on the list from the start: the demo video.**
 It is the one deliverable with no partial credit.

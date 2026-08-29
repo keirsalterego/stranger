@@ -122,7 +122,7 @@ treated as manifest declarations rather than as evidence.
 
 ## Discovery
 
-`stranger scan <dir>` recurses, skipping `node_modules` and eleven other
+`stranger scan <dir>` recurses, skipping `node_modules` and twelve other
 directories, and matches any filename ending in one of the seven names it knows.
 
 Pointing at a file skips the walk, and the match there is the same suffix rule, so

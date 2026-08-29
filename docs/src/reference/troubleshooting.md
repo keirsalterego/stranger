@@ -20,7 +20,7 @@ so pointing straight at it does not help either — that is exit 2, "not a lockf
 stranger knows". Copy or symlink it to a name in the list.
 
 The other cause is a lockfile inside `node_modules`, `target`, `.venv` or one of
-the nine other skipped directories, or deeper than six levels down.
+the ten other skipped directories, or deeper than six levels down.
 
 Point at a file to skip the walk:
 
@@ -147,9 +147,9 @@ passed `-v`.
 ## Findings you believe are wrong
 
 Most likely the package is real and newer than the corpus snapshot of 2026-08-28,
-or it fell off a popularity ranking. `tensorflow-gpu` in `fixtures/reqs-xs.
-requirements.txt` is exactly that, and it is shipped as a fixture rather than
-hidden. [False positives](../detection/false-positives.md) covers the shape of it
+or it fell off a popularity ranking. `tensorflow-gpu` in
+`fixtures/reqs-xs.requirements.txt` is exactly that, and it is shipped as a
+fixture rather than hidden. [False positives](../detection/false-positives.md) covers the shape of it
 and the [ablation table](../detection/ablation.md) puts numbers on it.
 
 The nearest name in `detail` is the closest corpus entry, which is not always the

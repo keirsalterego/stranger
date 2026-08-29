@@ -132,16 +132,6 @@ Depth 6 counts directories below the one you named: a lockfile six levels down i
 found, and one seven levels down is not. A `dist/` or `.cache/` you actually
 wanted audited has to be named as the scan path directly.
 
-## Code that exists and is not used
-
-`src/semver.rs` is a semver comparator with 13 tests, including the prerelease
-precedence rules from section 11 that most implementations get wrong. Nothing
-calls it. [Version drift](rules/drift.md) compares version strings for equality,
-which is all that rule needs, and no other rule asks an ordering question yet.
-
-It is honest as a library and it is not a feature. Nothing in this book describes
-behaviour it provides, because it does not provide any.
-
 ## Numbers that do not quite line up
 
 The human report prints `risk N/100` and 100 is not a score this tool can

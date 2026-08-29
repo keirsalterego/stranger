@@ -72,8 +72,9 @@ one frame. Writing a spinner so that a spinner crate could be crossed off is
 padding rather than substitution.
 
 The rule the log enforces on itself is that an unwritten module gets no entry. That
-is why `src/semver.rs` **is** in the table — it exists, it has 13 tests — while the
-page on [Limits](../limits.md) says plainly that nothing calls it.
+is why `src/semver.rs` **is** in the table. It has ten tests, and for one day it was
+also the one module nothing called — which the log said out loud rather than
+implying it was load-bearing. [Version drift](../rules/drift.md) sorts with it now.
 
 ## Data that is not code, disclosed anyway
 
