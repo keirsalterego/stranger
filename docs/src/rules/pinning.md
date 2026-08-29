@@ -14,17 +14,17 @@ $ ./target/release/stranger scan -v fixtures/poisoned.requirements.txt
   poisoned.requirements.txt 6 packages   (6 direct · 0 transitive)
 
   ⚠  HALLUCINATION RISK     2
-     python-dateutils@2.9.0   not in corpus · d=1 from "python-dateutil" · root-only, no parent
-     requests-http@1.0.2      not in corpus · d=2 from "requests-html" · root-only, no parent
+     python-dateutils@2.9.0   not in corpus · d=1 from "python-dateutil" · no dependency graph in this format
+     requests-http@1.0.2      not in corpus · d=2 from "requests-html" · no dependency graph in this format
 
   ⚠  UNPINNED               3     no exact version recorded
      flask                    ~=3.0 · capped at the major, still floats below the cap
-     numpy                    no version specifier · resolves to whatever is newest at install time
+     numpy                    no bound in either direction · resolves to whatever is newest at install time
      urllib3                  >=1.26 · a range, so the file does not say what installs
 
   ·  INSTALL SCRIPTS        — no signal in this format
 
-  risk 79/100    9ms    third-party deps used to compute this: 0
+  risk 79/100    6ms    third-party deps used to compute this: 0
 ```
 
 The file behind that:
@@ -106,7 +106,7 @@ tells these apart:
 ```console
 $ ./target/release/stranger scan --format json fixtures/poisoned.requirements.txt | jq -c '.findings[] | select(.rule=="pinning")'
 {"rule":"pinning","severity":"low","package":"flask","version":"","detail":"~=3.0 · capped at the major, still floats below the cap"}
-{"rule":"pinning","severity":"high","package":"numpy","version":"","detail":"no version specifier · resolves to whatever is newest at install time"}
+{"rule":"pinning","severity":"high","package":"numpy","version":"","detail":"no bound in either direction · resolves to whatever is newest at install time"}
 {"rule":"pinning","severity":"medium","package":"urllib3","version":"","detail":">=1.26 · a range, so the file does not say what installs"}
 ```
 

@@ -43,24 +43,43 @@ every run.
 |---|---|---|---|---|---|
 | 100% (140066) | on | 3 | 0 | 1.000 | 1.000 |
 | 100% (140066) | off | 3 | 0 | 1.000 | 1.000 |
-| 90% (126004) | on | 3 | 3 | 0.500 | 1.000 |
-| 90% (126004) | off | 3 | 95 | 0.031 | 1.000 |
-| 70% (98197) | on | 3 | 16 | 0.158 | 1.000 |
-| 70% (98197) | off | 3 | 332 | 0.009 | 1.000 |
-| 50% (69897) | on | 2 | 20 | 0.091 | 0.667 |
-| 50% (69897) | off | 2 | 483 | 0.004 | 0.667 |
-| 25% (35134) | on | 2 | 16 | 0.111 | 0.667 |
-| 25% (35134) | off | 2 | 549 | 0.004 | 0.667 |
+| 90% (126004) | on | 3 | 1 | 0.750 | 1.000 |
+| 90% (126004) | off | 3 | 36 | 0.077 | 1.000 |
+| 70% (98197) | on | 2 | 6 | 0.250 | 0.667 |
+| 70% (98197) | off | 2 | 127 | 0.016 | 0.667 |
+| 50% (69897) | on | 1 | 8 | 0.111 | 0.333 |
+| 50% (69897) | off | 1 | 175 | 0.006 | 0.333 |
+| 25% (35134) | on | 1 | 5 | 0.167 | 0.333 |
+| 25% (35134) | off | 1 | 177 | 0.006 | 0.333 |
 
 Read the 90% row first, because it is the realistic one. Ten percent of the
 corpus missing is roughly what a few months of registry growth looks like. The
-clause takes false positives from 95 down to 3 — a 32-fold cut — and recall stays
+clause takes false positives from 36 down to 1 — a 36-fold cut — and recall stays
 at 1.000. Nothing was traded for it.
 
-At 70% the ratio is 332 to 16, about 21-fold. At 25% it is 549 to 16, about
-34-fold. The clause never makes precision worse at any level, and it never costs
-a true positive; the ablation test asserts both of those rather than leaving them
-to the reader's eye.
+At 70% the ratio is 127 to 6, about 21-fold. At 25% it is 177 to 5, about
+35-fold. The clause never makes precision worse at any level, and it never costs
+a true positive relative to running without it; the ablation test asserts both of
+those rather than leaving them to the reader's eye.
+
+### These numbers moved when the length budget landed, and one of them moved the wrong way
+
+Every false-positive count on this table is roughly a third of what it was
+before `distance::CHARS_PER_EDIT`, because most of what a thinned corpus used to
+hand clause 3 were short names sitting near something by arithmetic. Those never
+reach clause 3 now. Precision improves at every level.
+
+**Recall got worse, and it is not a rounding artefact.** At 70% the table used to
+read 3 true positives and now reads 2; at 50% and 25% it used to read 2 and now
+reads 1. That is the length budget refusing an edit the old threshold granted.
+
+The honest reading is that the finding it lost was luck rather than detection. By
+70% the thinning has deleted `express` itself, so `expres` no longer has its real
+parent in the corpus and what it was matching was `espree` — a name it has nothing
+to do with, as the section below works through. The budget declines to spend an
+edit reaching a stranger. But it *is* a recall change, it is a cost, and a page
+that only published the precision half of it would be doing the thing this
+repository keeps saying it will not do.
 
 ## The verdict outlives the explanation
 

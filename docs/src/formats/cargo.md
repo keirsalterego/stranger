@@ -7,21 +7,25 @@ $ ./target/release/stranger scan fixtures/cargo-m.Cargo.lock
 
   cargo-m.Cargo.lock       708 packages   (34 direct · 674 transitive · 15 workspace)
 
-  ⚠  HALLUCINATION RISK     1
-     ksni@0.3.4               not in corpus · d=2 from "jni" · root-only, no parent
-
   ⚠  VERSION DRIFT          70    same package at 2+ versions in one tree
 
   ·  INSTALL SCRIPTS        — no signal in this format
   ·  UNPINNED               — no signal in this format
 
-  risk 77/100    12ms    third-party deps used to compute this: 0
+  risk 46/100    8ms    third-party deps used to compute this: 0
 ```
 
-`ksni` is a real crate below the top 5,000 and is a false positive —
-[False positives](../detection/false-positives.md) has it, and it is the reason
-the crates.io corpus's size is a published number rather than an implementation
-detail.
+`ksni` used to appear in that block. It is a real crate below the top 5,000 and it
+was a false positive — and it was four characters long, which turned out to be the
+whole story: a name that short is within two edits of *something* in every
+registry, so clause 2 was not filtering it at all. The length budget
+(`distance::CHARS_PER_EDIT`) gives a four-character name no edits, and `ksni` stops
+firing. [False positives](../detection/false-positives.md) has the measurement.
+
+The crates.io corpus's size is still a published number rather than an
+implementation detail, because that is the limit underneath: 5,000 names is the
+top of crates.io and not the whole of it, and a longer crate below the cut would
+still be reported.
 
 Structurally this is the easiest of the three formats: an array of `[[package]]`
 tables, no install paths to reproduce, no nesting. What makes it non-trivial is

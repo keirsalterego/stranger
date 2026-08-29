@@ -7,9 +7,6 @@ $ ./target/release/stranger scan fixtures/pnpm-l.pnpm-lock.yaml
 
   pnpm-l.pnpm-lock.yaml    850 packages   (29 direct · 821 transitive)
 
-  ⚠  HALLUCINATION RISK     1
-     taze@19.0.4              not in corpus · d=1 from "gaze" · root-only, no parent
-
   ⚠  TRIVIAL                23    (2.7% of third-party)
 
   ⚠  VERSION DRIFT          58    same package at 2+ versions in one tree
@@ -17,11 +14,18 @@ $ ./target/release/stranger scan fixtures/pnpm-l.pnpm-lock.yaml
   ·  INSTALL SCRIPTS        — no signal in this format
   ·  UNPINNED               — no signal in this format
 
-  risk 77/100    232ms    third-party deps used to compute this: 0
+  risk 46/100    148ms    third-party deps used to compute this: 0
 ```
 
-`taze` is a false positive and is left in the fixture on purpose —
-[False positives](../detection/false-positives.md) has it.
+`taze` used to appear in that block, and was the npm half of a pair of false
+positives — `ksni` on [cargo](cargo.md) was the other. Both are four characters
+long, and that is why: on npm, a four-character name has a neighbour within two
+edits **100%** of the time, so clause 2 was a formality rather than a filter. The
+length budget refuses it the edit and `taze` stops firing.
+[False positives](../detection/false-positives.md) has the table.
+
+It is still in the fixture. A fixture that stops demonstrating the bug it was
+kept for is still the file the fix was measured against.
 
 pnpm packages are npm packages, so this reader shares npm's corpus and the trivial
 rule's name list works here unchanged. What it does not share is the file.

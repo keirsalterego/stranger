@@ -408,7 +408,7 @@ Here is that costing a false positive, on a real fixture:
 $ stranger scan fixtures/reqs-xs.requirements.txt
 
   ⚠  HALLUCINATION RISK     1
-     tensorflow-gpu           not in corpus · d=1 from "tensorflow-cpu" · root-only, no parent
+     tensorflow-gpu           not in corpus · d=1 from "tensorflow-cpu" · no dependency graph in this format
 ```
 
 `tensorflow-gpu` is a real PyPI package. It is deprecated and absent from the
@@ -427,13 +427,20 @@ asymmetry is the whole argument:
 
 | corpus kept | candidates clause 3 removes on `poetry-m` | on `uv-m` | on any `requirements.txt` |
 |---|---|---|---|
-| 90% | 6 of 10 | 6 of 11 | **0** |
-| 70% | 18 of 30 | 24 of 32 | **0** |
-| 50% | 22 of 38 | 27 of 35 | **0** |
-| 25% | 30 of 48 | 34 of 45 | **0** |
+| 90% | 2 of 3 | 2 of 4 | **0** |
+| 70% | 6 of 10 | 12 of 15 | **0** |
+| 50% | 5 of 11 | 8 of 10 | **0** |
+| 25% | 8 of 13 | 6 of 8 | **0** |
 
-Between 55% and 77% of the candidates on a file with a graph, and exactly zero on
-a flat file at every corpus size, because there is no edge in the file to read.
+Between 45.5% and 80.0% of the candidates on a file with a graph, and exactly
+zero on a flat file at every corpus size, because there is no edge in the file to
+read.
+
+The candidate counts here are about a third of what this table said before the
+length budget landed, and that is the budget working rather than the clause
+weakening: most of what a thinned corpus used to hand clause 3 were short names
+sitting near something by arithmetic, and those no longer reach clause 3 at all.
+The *share* clause 3 removes barely moved.
 The thinning is the same seeded xorshift `tests/ablation.rs` uses, seed
 `0x5EED_1234`, so these rows are reproducible rather than different every run.
 `tests/pypi.rs` pins the asymmetry itself.
@@ -446,20 +453,50 @@ never asked. The Cargo reader found this the hard way: `slint` and `sg` in the
 both. Packages are now tagged with an origin and the name rules stay quiet unless
 the lockfile says the package came from the registry.
 
-What that does *not* fix is a real registry package outside the corpus. Two of the
-three false positives left in this repository are exactly that, in two different
-ecosystems:
+What that does *not* fix is a real registry package outside the corpus.
 
-| reported | fixture | what it actually is |
-|---|---|---|
-| `ksni@0.3.4` | `cargo-m.Cargo.lock` | a real crates.io crate, just below the top 5,000 |
-| `taze@19.0.4` | `pnpm-l.pnpm-lock.yaml` | a real npm package, outside the 140,066-name corpus |
+Until the last day this section named three false positives — `ksni` in
+`cargo-m.Cargo.lock`, `taze` in `pnpm-l.pnpm-lock.yaml`, and `tensorflow-gpu` —
+and called the first two unlucky near-misses of the popularity cut. **They were
+not unlucky. They were structural, and the argument for leaving them in was
+wrong.**
 
-Both came through the registry the corpus samples, so the origin check has nothing
-to say about them. Both are simply not in a list of the most-downloaded names, and
-the rule cannot tell "below the popularity cut" from "does not exist". Two
-ecosystems failing the same way is a stronger statement than one would be, which
-is why both are left in the fixtures rather than tuned away.
+`ksni` and `taze` are both four characters long. Measure what that means: take
+every name in a corpus, pretend it is missing — which is exactly what a real
+package below the popularity cut looks like — and ask whether the rest of the
+list offers it a neighbour within two edits. On npm the answer at four
+characters is **100% of the time**. At three characters it is 100% on all three
+registries. So for a short name, clause 2 was not a filter at all, it was a
+formality, and the rule collapsed to "not in the corpus AND in-degree zero" —
+which is a guaranteed CRITICAL for any real package that happens to be
+unpopular.
+
+The fix is a budget that scales with length: one edit per five characters, capped
+at two. The five came from that same table — on npm, a hit at distance 1 stops
+being the likelier outcome at five characters and a hit at distance 2 at ten
+characters — and from a sweep of nine candidate policies against every fixture.
+Both tables are in the doc comment on `distance::CHARS_PER_EDIT`, and both are
+tests you can run.
+
+| policy | true positives | false positives | recall | precision |
+|---|---|---|---|---|
+| flat threshold of 2 — what shipped for most of the weekend | 7 | 5 | 1.000 | 0.583 |
+| **`min(2, len / 5)` — what ships now** | **7** | **1** | **1.000** | **0.875** |
+| a tighter flat threshold of 1 | 6 | 4 | 0.857 | 0.600 |
+
+Every planted name still fires, at the same distance and against the same parent.
+`ksni`, `taze`, and two short names in the hostile fixture stop firing. The last
+row is there because "just lower the threshold" is the obvious alternative and it
+is worse at both ends: it loses `requests-http`, a true positive at two edits from
+`requests-html`, and it still keeps four false positives.
+
+**One false positive is left, and it is the honest one.** `tensorflow-gpu` is
+fourteen characters and one edit from `tensorflow-cpu`. No length policy reaches
+it, because at fourteen characters a near-miss really is evidence. It is a real,
+deprecated PyPI package that fell out of a top-15,000 list, it came through the
+registry the corpus samples so the origin check has nothing to say about it, and
+it sits in a `requirements.txt` where there is no clause 3 to save it. It stays in
+the fixtures.
 
 That is corpus coverage, and it is the next limit.
 

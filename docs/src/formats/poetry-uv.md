@@ -40,10 +40,14 @@ That costs a real false positive on `tensorflow-gpu`.
 
 Both formats here record the resolved graph, which is the entire reason to read
 them. A reader that produced packages and no edges would leave the rule exactly as
-weak as it already was — and
-[the ablation](../detection/ablation.md) measures the difference: clause 3 removes
-60–75% of candidates on poetry and uv, and structurally zero on `requirements.txt`,
-at every corpus size.
+weak as it already was — and it is measured rather than asserted: clause 3 removes
+**45.5% to 80.0%** of candidates on poetry and uv, and structurally zero on
+`requirements.txt`, at every corpus size.
+
+The source for those numbers is `tests/pypi.rs`, which prints the whole table
+under `cargo test --test pypi -- --nocapture`. It is a different measurement from
+[the ablation](../detection/ablation.md), which is npm-only — this page used to
+cite the ablation for a PyPI number, which is the wrong table.
 
 ## What each one records
 

@@ -17,13 +17,13 @@ $ ./target/release/stranger scan fixtures/reqs-xs.requirements.txt
   reqs-xs.requirements.txt 12 packages   (12 direct · 0 transitive)
 
   ⚠  HALLUCINATION RISK     1
-     tensorflow-gpu           not in corpus · d=1 from "tensorflow-cpu" · root-only, no parent
+     tensorflow-gpu           not in corpus · d=1 from "tensorflow-cpu" · no dependency graph in this format
 
   ⚠  UNPINNED               12    no exact version recorded
 
   ·  INSTALL SCRIPTS        — no signal in this format
 
-  risk 77/100    9ms    third-party deps used to compute this: 0
+  risk 77/100    4ms    third-party deps used to compute this: 0
 ```
 
 `tensorflow-gpu` is a real PyPI package. It is deprecated, which is why it is
@@ -47,6 +47,79 @@ for a reason that has nothing to do with being fake.
 The [ablation table](ablation.md) puts a number on the npm side: delete 10% of
 the corpus, roughly what a few months of registry growth costs you, and the false
 positive count goes from 0 to 3. Delete 30% and it goes to 16.
+
+## Short names, and the two false positives that are gone
+
+Two findings were on this page until the last day of the window: `ksni` in
+`cargo-m.Cargo.lock` and `taze` in `pnpm-l.pnpm-lock.yaml`. Both were described as
+real packages that had fallen below a popularity cut — bad luck, and the corpus's
+fault.
+
+That was the wrong diagnosis. Both names are **four characters long**, and length
+turns out to be the variable that matters.
+
+The measurement is leave-one-out over each corpus: take a real name, pretend it is
+missing — which is exactly what a real package below the cut looks like to clause
+1 — and ask whether the rest of the list offers it a neighbour. That is the false
+positive rate, as a function of length:
+
+| chars | npm k=1 | npm k=2 | pypi k=1 | pypi k=2 | crates k=1 | crates k=2 |
+|---|---|---|---|---|---|---|
+| 2 | 99.6% | 100.0% | 88.0% | 100.0% | 36.4% | 100.0% |
+| 3 | 98.6% | 100.0% | 69.9% | 100.0% | 60.4% | 100.0% |
+| 4 | 51.9% | **100.0%** | 43.9% | 98.9% | 41.4% | 99.1% |
+| 5 | 40.5% | 97.5% | 34.0% | 93.8% | 18.7% | 78.9% |
+| 6 | 36.5% | 85.8% | 16.3% | 76.6% | 12.5% | 51.5% |
+| 8 | 30.0% | 63.0% | 11.3% | 35.6% | 7.0% | 26.6% |
+| 9 | 27.7% | 55.1% | 5.9% | 23.1% | 4.1% | 19.3% |
+| 10 | 18.8% | **46.1%** | 2.1% | 14.9% | 4.8% | 9.5% |
+
+At four characters, a name absent from npm finds a neighbour within two edits
+**every single time**. So clause 2 was not weighing evidence about `ksni` or
+`taze`; it was passing everything, and the rule was really running on two clauses:
+"not in the corpus" and "in-degree zero". For a real package that nobody depends
+on — a devDependency of the root manifest, say — that is a guaranteed CRITICAL.
+
+The threshold is a function of length now: one edit per five characters, capped at
+two, which is `distance::budget_for`. Five is where the table points. Reading the
+npm column, a hit at k = 1 stops being the likelier outcome at five characters and
+a hit at k = 2 at ten characters — below a coin flip being the bar, because a
+clause that fires on most inputs is not evidence about any of them. That is one
+edit per five characters, twice.
+
+Nine policies were swept against every fixture, with the seven planted names as
+ground truth and everything else counted as a false positive:
+
+| policy | TP | FP | recall | precision |
+|---|---|---|---|---|
+| `2` — a flat threshold, what shipped | 7 | 5 | 1.000 | 0.583 |
+| `min(2, len / 3)` | 7 | 4 | 1.000 | 0.636 |
+| `min(2, (len - 1) / 3)` | 7 | 3 | 1.000 | 0.700 |
+| `min(2, len / 4)` | 7 | 3 | 1.000 | 0.700 |
+| **`min(2, len / 5)` — ships** | **7** | **1** | **1.000** | **0.875** |
+| `1` — a tighter flat threshold instead | 6 | 4 | 0.857 | 0.600 |
+
+Recall does not move. All seven planted names still fire, at the same distances
+and against the same parents.
+
+Four policies tie at 0.875, so the fixtures do not pick between them — the
+leave-one-out table does. `(len - 1) / 4` hands out two edits at nine characters,
+where npm still answers 55% of the time. `(len - 1) / 5` and `len / 6` refuse
+`nunpy` its edit at five characters, and `nunpy` is a true positive `tests/pip.rs`
+already holds the rule to.
+
+The last row is there because "just lower the threshold" is the obvious
+alternative, and it is worse at both ends: it loses `requests-http` — a genuine
+hallucination two edits from `requests-html` — and still keeps four false
+positives.
+
+Both tables are in the doc comment on `distance::CHARS_PER_EDIT`, and both are
+tests: `tests/corpus.rs::length_is_the_false_positive_rate` (ignored by default,
+about six minutes) and `tests/ablation.rs::edit_budget_policy_sweep`.
+
+**What it does not fix** is the next section. `tensorflow-gpu` is fourteen
+characters, and at fourteen characters a near-miss really is evidence — no length
+policy reaches it, and it should not.
 
 ## Flat formats lose the clause that would have saved it
 

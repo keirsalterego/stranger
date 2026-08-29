@@ -180,20 +180,20 @@ $ ./target/release/stranger scan /tmp/mixed
 
   ·  UNPINNED               — no signal in this format
 
-  risk 77/100    38ms    third-party deps used to compute this: 0
+  risk 77/100    17ms    third-party deps used to compute this: 0
 
 
   requirements.txt         6 packages   (6 direct · 0 transitive)
 
   ⚠  HALLUCINATION RISK     2
-     python-dateutils@2.9.0   not in corpus · d=1 from "python-dateutil" · root-only, no parent
-     requests-http@1.0.2      not in corpus · d=2 from "requests-html" · root-only, no parent
+     python-dateutils@2.9.0   not in corpus · d=1 from "python-dateutil" · no dependency graph in this format
+     requests-http@1.0.2      not in corpus · d=2 from "requests-html" · no dependency graph in this format
 
   ⚠  UNPINNED               3     no exact version recorded
 
   ·  INSTALL SCRIPTS        — no signal in this format
 
-  risk 79/100    34ms    third-party deps used to compute this: 0
+  risk 79/100    6ms    third-party deps used to compute this: 0
 ```
 
 `--fail-on` compares against the worst severity across all of them. `--format

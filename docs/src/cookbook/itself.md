@@ -55,9 +55,6 @@ $ ./target/release/stranger scan ~/keir.is-a.dev
 
   pnpm-lock.yaml           850 packages   (29 direct · 821 transitive)
 
-  ⚠  HALLUCINATION RISK     1
-     taze@19.0.4              not in corpus · d=1 from "gaze" · root-only, no parent
-
   ⚠  TRIVIAL                23    (2.7% of third-party)
 
   ⚠  VERSION DRIFT          58    same package at 2+ versions in one tree
@@ -65,25 +62,36 @@ $ ./target/release/stranger scan ~/keir.is-a.dev
   ·  INSTALL SCRIPTS        — no signal in this format
   ·  UNPINNED               — no signal in this format
 
-  risk 77/100    233ms    third-party deps used to compute this: 0
+  risk 46/100    146ms    third-party deps used to compute this: 0
 ```
 
-### The finding is wrong, and it is the useful kind of wrong
+### There used to be a hallucination finding here, and it was wrong
+
+This section said, for most of the weekend, that the scan above reported one
+`HALLUCINATION RISK` and that it was a false positive. It is gone from the block —
+not tuned away, and the difference matters.
 
 [`taze`](https://www.npmjs.com/package/taze) is a real, maintained npm package for
-updating dependency ranges. It is a **false positive**, and the reason is exactly
-the limit the corpus section names: 140,066 names is the most-downloaded slice of
-npm, `taze` sits outside it, and the rule cannot tell "below the popularity cut"
-from "does not exist". Clause 3 had no chance to save it either — nothing depends
-on `taze`, because a devDependency of the root manifest genuinely has in-degree
-zero. That is the rule working correctly on bad information.
+updating dependency ranges, it sits outside the most-downloaded 140,066 names, and
+clause 3 had no chance to save it: nothing depends on `taze`, because a
+devDependency of the root manifest genuinely has in-degree zero. The neighbour the
+tool named, `gaze`, is one deletion away and real. The page called that the rule
+working correctly on bad information, and left it in on the grounds that a better
+screenshot would have made a worse tool.
 
-The neighbour it names, `gaze`, is one deletion away and real.
+That reading was too generous to the rule. `taze` is **four characters long**, and
+a four-character name has a neighbour within two edits 100% of the time on npm —
+so clause 2 was not weighing evidence about `taze`, it was passing everything. The
+finding was not the corpus being incomplete. It was the threshold being a constant
+where it should have been a function of length.
+[`distance::CHARS_PER_EDIT`](../detection/false-positives.md) is the fix and the
+measurement behind it.
 
-So the honest reading of this scan is: one finding, and it is wrong. That is what
-`stranger` says about the site that hosts it, and tuning it away would have been a
-better screenshot and a worse tool.
-[False positives](../detection/false-positives.md) has the other two.
+So what this page now shows is a scan with no hallucination finding on it, which
+is a weaker screenshot and a truer one. The rule still gets `tensorflow-gpu`
+wrong, in a `requirements.txt` fixture, for a reason no length policy can fix —
+that one is fourteen characters, and at fourteen characters a near-miss really is
+evidence. [False positives](../detection/false-positives.md) keeps it.
 
 ### The lockfile is already a fixture
 
@@ -95,11 +103,12 @@ a04b16fb54b274f40d9fef0dbad27616c1e6755409383c5a07e106075c23981a  …/keir.is-a.
 a04b16fb54b274f40d9fef0dbad27616c1e6755409383c5a07e106075c23981a  fixtures/pnpm-l.pnpm-lock.yaml
 ```
 
-Which means the pnpm reader was developed against this exact file and `taze` has
-been a known false positive since before the reader shipped. It was left in rather
-than removed from the fixture, and it is named in the README's limits, because a
-detector whose test data has had its inconvenient case deleted is measuring
-nothing.
+Which means the pnpm reader was developed against this exact file and `taze` was a
+known false positive from before the reader shipped until the last day of the
+window. It was left in rather than removed from the fixture, and that is the only
+reason the length budget could be measured against it at all: a detector whose
+test data has had its inconvenient case deleted has nothing left to measure a fix
+with.
 
 ## Try it on yours
 
