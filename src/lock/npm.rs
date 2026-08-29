@@ -119,6 +119,16 @@ pub fn read(path: &Path, src: &str) -> Result<Tree> {
         }
     }
 
+    // A package that lists the same name in two fields — `dependencies` and
+    // `peerDependencies` is the pair that occurs — is one edge, not two. Five
+    // packages in `npm-l` and in `poisoned` do it, and two in `npm-xl`. The
+    // rules never noticed because every one of them asks whether in-degree is
+    // zero, and 2 is as non-zero as 1; `stranger tree` prints the number, so it
+    // had to become the number of packages that depend on this one. `pnpm.rs`
+    // has always deduplicated here.
+    edges.sort_unstable();
+    edges.dedup();
+
     roots.sort_unstable();
     roots.dedup();
     // A workspace member is not one of its own direct dependencies.
@@ -130,6 +140,7 @@ pub fn read(path: &Path, src: &str) -> Result<Tree> {
         packages,
         edges,
         roots,
+        records_edges: true,
     })
 }
 

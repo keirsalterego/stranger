@@ -25,7 +25,8 @@ on a Go module. `tests/corpus.rs` asserts that emptiness so it stays intentional
 **Flat formats have no graph.** `requirements.txt` records no dependency edges, so
 clause 3 is vacuous and the detection rule runs on two clauses. See
 [pip](formats/pip.md) and, for it costing a real false positive,
-[False positives](detection/false-positives.md).
+[False positives](detection/false-positives.md). `stranger tree` says the file
+has no graph rather than reporting the in-degree 0 it would find there.
 
 ## Six formats, five rules, and most pairs are not real
 

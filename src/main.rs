@@ -9,12 +9,13 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Instant;
 
-use stranger::cli::{self, Color, Command, Format, Options};
+use stranger::cli::{self, Color, Command, Format, Options, TreeOptions};
 use stranger::error::{Error, Result};
 use stranger::lock;
 use stranger::report;
 use stranger::rules::{Finding, Severity, drift, pinning, scripts, slopsquat, trivial};
 use stranger::term::Term;
+use stranger::tree;
 
 fn main() -> ExitCode {
     match run() {
@@ -47,18 +48,10 @@ fn run() -> Result<ExitCode> {
             return Ok(ExitCode::SUCCESS);
         }
         Command::Scan(o) => o,
+        Command::Tree(o) => return tree(o),
     };
 
-    let lockfiles = if opts.path.is_file() {
-        vec![opts.path.clone()]
-    } else if opts.path.is_dir() {
-        lock::discover(&opts.path)
-    } else {
-        return Err(Error::usage(format!(
-            "{}: no such file or directory",
-            opts.path.display()
-        )));
-    };
+    let lockfiles = lockfiles(&opts.path)?;
 
     // Asked once, here. Nothing below this line reads the environment again.
     let term = Term::detect(matches!(opts.color, Color::Never));
@@ -77,8 +70,7 @@ fn run() -> Result<ExitCode> {
         // a time already handles. Printing the sentence here was the one path
         // in the tool that wrote something other than JSON to a JSON stream.
         if !opts.quiet && matches!(opts.format, Format::Human) {
-            writeln!(out, "\n  no lockfile in {}", opts.path.display()).ok();
-            writeln!(out, "  looked for: {}\n", lock::KNOWN.join(", ")).ok();
+            nothing_to_read(&mut out, &opts.path).ok();
         }
         return Ok(ExitCode::SUCCESS);
     }
@@ -124,6 +116,76 @@ fn run() -> Result<ExitCode> {
         (Some(threshold), Some(seen)) if seen >= threshold => ExitCode::from(1),
         _ => ExitCode::SUCCESS,
     })
+}
+
+fn lockfiles(path: &Path) -> Result<Vec<PathBuf>> {
+    if path.is_file() {
+        Ok(vec![path.to_path_buf()])
+    } else if path.is_dir() {
+        Ok(lock::discover(path))
+    } else {
+        Err(Error::usage(format!(
+            "{}: no such file or directory",
+            path.display()
+        )))
+    }
+}
+
+fn nothing_to_read(out: &mut impl Write, path: &Path) -> io::Result<()> {
+    writeln!(out, "\n  no lockfile in {}", path.display())?;
+    writeln!(out, "  looked for: {}\n", lock::KNOWN.join(", "))
+}
+
+/// `stranger tree <pkg>` — read the same lockfiles, run no rules, and print the
+/// graph around one name.
+///
+/// Sequential where `scan` is threaded, and that is not an oversight: the
+/// expensive half of a scan is the nearest-neighbour sweep over a 140,066-name
+/// corpus, which is exactly the part this does not do. Reading sixteen fixtures
+/// takes long enough to notice and not long enough to thread, and reading them
+/// in path order means the output is in path order for free.
+fn tree(opts: TreeOptions) -> Result<ExitCode> {
+    let paths = lockfiles(&opts.path)?;
+    let term = Term::detect(matches!(opts.color, Color::Never));
+    let stdout = io::stdout();
+    let mut out = stdout.lock();
+
+    if paths.is_empty() && matches!(opts.format, Format::Human) {
+        // Same degradation as a scan of an empty directory: say what was
+        // looked for, exit clean. A JSON consumer gets the `found: false`
+        // object below instead, which already carries `lockfiles: 0`.
+        nothing_to_read(&mut out, &opts.path).map_err(|e| Error::io("stdout", e))?;
+        return Ok(ExitCode::SUCCESS);
+    }
+
+    let mut trees = Vec::with_capacity(paths.len());
+    let mut failed = 0usize;
+    for path in &paths {
+        match lock::read(path) {
+            Ok(t) => trees.push(t),
+            // One corrupt lockfile is one lockfile's problem, exactly as in a
+            // scan: the name you are asking about may well be in a sibling.
+            Err(e) => {
+                eprintln!("stranger: {e}");
+                failed += 1;
+            }
+        }
+    }
+    if trees.is_empty() && failed > 0 {
+        return Ok(ExitCode::from(2));
+    }
+
+    let report = tree::Report::build(&trees, &opts.package, &opts.path, opts.depth);
+    match opts.format {
+        Format::Human => tree::human(&mut out, term, &report, opts.quiet),
+        Format::Json => tree::json(&mut out, &report),
+    }
+    .map_err(|e| Error::io("stdout", e))?;
+
+    // A package that is not there is an answer, not a failure. Exit 0 and list
+    // what is close, because "no such package" plus a stack trace is how a tool
+    // teaches people not to run it.
+    Ok(ExitCode::SUCCESS)
 }
 
 /// Read and audit every lockfile, one thread each, and hand back the results in

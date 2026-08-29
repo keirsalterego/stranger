@@ -306,6 +306,7 @@ impl Graph {
             packages,
             edges: self.edges,
             roots: self.roots,
+            records_edges: true,
         }
     }
 }
