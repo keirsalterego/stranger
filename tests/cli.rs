@@ -254,6 +254,22 @@ fn every_json_line_parses() {
     }
 }
 
+/// A project with no third-party dependencies at all writes a valid v9 pnpm
+/// lockfile with no `packages:` section in it. Rejecting that made "you depend
+/// on nobody" look like "your lockfile is broken".
+#[test]
+fn a_pnpm_lock_with_no_packages_is_an_empty_tree() {
+    let dir = scratch("cli_pnpm_empty");
+    let path = dir.join("pnpm-lock.yaml");
+    write(
+        &path,
+        "lockfileVersion: '9.0'\n\nsettings:\n  autoInstallPeers: true\n\nimporters:\n\n  .: {}\n",
+    );
+    let o = run(&["scan", path.to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(0), "{}", stderr(&o));
+    assert!(stdout(&o).contains("0 packages"), "{}", stdout(&o));
+}
+
 #[test]
 fn quiet_drops_the_header_and_the_risk_line() {
     let out = stdout(&run(&["scan", POISONED, "-q"]));

@@ -75,15 +75,18 @@ pub fn read(path: &Path, src: &str) -> Result<Tree> {
         }
     }
 
-    let entries = doc
-        .get("packages")
-        .and_then(Value::as_mapping)
-        .ok_or_else(|| Error::usage(format!("{}: no `packages` map", path.display())))?;
+    // A project with no third-party dependencies writes a valid v9 lockfile
+    // with no `packages:` section in it at all, and the honest reading of that
+    // file is a tree with nothing in it. Refusing it made "you depend on
+    // nobody" indistinguishable from "your lockfile is broken", which is the
+    // wrong answer to give the one project that has nothing to audit.
+    let entries = doc.get("packages").and_then(Value::as_mapping);
+    let count = entries.map_or(0, |e| e.len());
 
-    let mut packages = Vec::with_capacity(entries.len());
-    let mut index: HashMap<&str, usize> = HashMap::with_capacity(entries.len());
+    let mut packages = Vec::with_capacity(count);
+    let mut index: HashMap<&str, usize> = HashMap::with_capacity(count);
 
-    for (key, entry) in entries {
+    for (key, entry) in entries.into_iter().flatten() {
         let (name, version) = split_key(key);
         index.insert(key.as_str(), packages.len());
         packages.push(Package {

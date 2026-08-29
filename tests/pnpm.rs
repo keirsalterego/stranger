@@ -221,8 +221,18 @@ fn older_lockfile_versions_are_refused() {
 fn a_file_that_is_not_a_lockfile_is_refused() {
     let err = read("hello: world\n").unwrap_err();
     assert!(err.to_string().contains("no lockfileVersion"));
-    let err = read("lockfileVersion: '9.0'\nsettings: {}\n").unwrap_err();
-    assert!(err.to_string().contains("no `packages` map"));
+}
+
+/// A missing `packages:` section is not one of the refusals. A project with
+/// no third-party dependencies writes exactly this file, and it is legal —
+/// refusing it made "you depend on nobody" indistinguishable from "your
+/// lockfile is broken".
+#[test]
+fn a_lock_with_no_packages_is_an_empty_tree() {
+    let t = read("lockfileVersion: '9.0'\nsettings: {}\n").expect("a legal v9 file");
+    assert!(t.packages.is_empty());
+    assert!(t.edges.is_empty());
+    assert!(t.roots.is_empty());
 }
 
 /// A syntax error travels out of the reader with its position intact rather
