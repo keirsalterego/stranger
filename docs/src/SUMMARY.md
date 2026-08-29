@@ -35,5 +35,6 @@
 - [Reference]()
   - [Building](reference/building.md)
   - [Reproducible builds](reference/reproducible-builds.md)
+  - [JSON conformance](reference/json-conformance.md)
   - [The STDLIB log](reference/stdlib.md)
   - [Troubleshooting](reference/troubleshooting.md)
