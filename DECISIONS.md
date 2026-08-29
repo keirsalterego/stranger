@@ -100,8 +100,8 @@ cannot measure.
 
 ## The TOML subset
 
-One parser reads `Cargo.lock`, `poetry.lock` and `uv.lock`. Three ecosystems for
-the price of one, which bought more per line written than anything after JSON.
+One parser reads `Cargo.lock`, `poetry.lock` and `uv.lock`. Three formats for the
+price of one — two ecosystems, since poetry and uv are both PyPI — which bought more per line written than anything after JSON.
 
 **Accepted:** `key = value` at top level and inside tables; `[table]` and
 `[dotted.table]` headers; `[[array.of.tables]]`, which is `[[package]]` and the
@@ -114,7 +114,39 @@ allowed; single-line inline tables; `#` comments.
 **Refused, each with a line and column:** floats, dates, times and date-times as
 bare values; hex, octal and binary integers; dotted keys (`a.b = 1`) outside a
 table header; inline tables spread over several lines, which is TOML 1.1;
-duplicate keys; and a `[table]` header that reopens a table already defined.
+duplicate keys; a `[table]` header that reopens a table already defined; a
+header that reaches *past* a sealed value, so `a = {b = 1}` followed by `[a.c]`
+is refused and not only `[a]`; a header path nested deeper than 64; and a bare
+carriage return.
+
+The last three are all from the final day and each is worth a line.
+
+**A deep header used to abort the process.** `descend` is a loop, so nothing in
+the parser recursed and the depth limit was never applied to headers. But the
+nested `Value::Table` chain it *builds* is freed recursively, one stack frame per
+segment. `parse` returned `Ok` on a 200,000-segment header in 333 ms and then the
+program died in `Drop` — a stack overflow, which `panic = "abort"` makes
+unrecoverable, taking every sibling lockfile's findings with it. The threshold on
+a worker thread's 2 MiB stack was about 30,000 segments, or 70 KB of input.
+
+**A bare carriage return was silently dropping a key.** Neither `skip_blank` nor
+`end_of_line` stopped at `\r`, so `# c\rname = "lodash"\nversion = "1"\n` parsed
+`Ok` as `{"version": "1"}` — the `name` key gone, no error. A lockfile reader that
+loses a package without saying so is the exact failure this tool exists to catch.
+TOML 1.0 settles it twice: the prose says a newline is LF or CRLF, and the ABNF's
+comment body admits no `%x0D`. So it is refused, positioned on the byte, and the
+message says "a bare carriage return is not a newline" rather than "expected a
+newline" — the character is invisible in an editor and the second message leaves
+you staring at a line that looks fine.
+
+**And one thing stopped being refused.** `"a.b" = 1` followed by `[a.b]` used to
+report ``table `a.b` is defined twice``. Those are distinct namespaces in TOML
+1.0 — a quoted key containing a dot is one key, not a path — and the parser could
+not tell them apart because it joined path segments into a flat `String`. A
+refused lockfile is a whole dependency tree left unaudited, and poetry writes
+`"jaraco.classes" = "*"`, so this was reachable. Canonical keys are a
+`Vec<Seg>` now, which makes the collision impossible by construction rather than
+escaped around.
 
 Refusing beats guessing. A parser that improvises at a construct it does not know
 produces a plausible wrong answer, and a plausible wrong answer in a security
@@ -128,14 +160,64 @@ Three things the fixtures taught that guessing would have missed:
   bare integers across all six fixtures are `version` and `revision`: 1, 3, 4.
 - **poetry writes quoted keys containing dots**: `"jaraco.classes" = "*"`. That
   is one key whose name contains a dot, not a dotted key. Quoting is what
-  decides, not the dot; conflating them silently invents a `jaraco` table.
+  decides, not the dot — and conflating them did not invent a `jaraco` table, it
+  refused the file, which is worse in a different direction. See above.
 - **No triple-quoted string appears anywhere in the corpus.** Not one, across six
   real lockfiles, contrary to what I assumed going in — I had expected poetry to
   use them for descriptions. They are implemented anyway, because a lockfile is
   permitted to contain one and mis-reading it would be worse than refusing it,
   but nothing in the corpus exercises that path.
 
-The same reasoning governs `src/yaml.rs`, where the stakes are higher. YAML 1.1
+## The YAML subset
+
+The same reasoning governs `src/yaml.rs`, and the stakes there turned out to be
+higher than "a file gets refused".
+
+**Accepted:** block mappings and sequences; single- and double-quoted scalars;
+plain scalars; flow mappings and flow sequences, both inline after their key and
+on the line below it; comments. **Refused with a position:** anchors, aliases and
+tags anywhere, including inside a flow key; tabs used for indentation; a flow
+indicator opening a plain scalar or key; an empty mapping key, in either context;
+a flow mapping spanning lines.
+
+Two of those are from the final day, and the first is the worst bug in the
+repository's history.
+
+**A legal reformat of a lockfile turned its findings off, with no error.** These
+two spellings are the same YAML:
+
+```yaml
+resolution: {integrity: sha512-AA}
+```
+```yaml
+resolution:
+  {integrity: sha512-AA}
+```
+
+`block()` only ever dispatched to `mapping` or `sequence`, so the second form
+went to the plain-key scanner, which stopped at the first `: ` and returned the
+key `{integrity`. That turned `has_integrity` false and moved the package from
+`Origin::Registry` to `Origin::Elsewhere` — and the slopsquat rule skips every
+`Elsewhere` package. Same file, same packages, three `HALLUCINATION RISK`
+findings one way and **none** the other, silently. Detection evasion in a
+detection tool, reachable by running the file through any YAML formatter.
+
+The fix is both halves: `block()` dispatches a leading `{` or `[` to the flow
+parsers, and the plain scalar and key scanners refuse a flow indicator instead of
+swallowing it. Either alone leaves the other spelling open. The proof is the
+whole 254 KB fixture with all 1,698 of its flow collections moved onto their own
+line: same 850 packages, same 1,851 edges, same roots, same keys.
+
+**Also: the flow scanner was O(n²), and so was its error path.** `line()` walks to
+the newline and was called once per flow item, which then broke a few bytes in.
+500,000 items took 471.75 s; they take 139.6 ms now. A hostile file did not have
+to be *valid* to stall the auditor, which is worth saying out loud — an unclosed
+1 MB flow collection cost the same 471 s.
+
+**Billion-laughs is closed**, and not by a limit: there is no alias resolution
+machinery in this parser at all, so there is nothing for an expansion to expand.
+
+Then the decision the module is really about. YAML 1.1
 implicit typing turns `no`, `on`, `off` and `y` into booleans — and all four are
 registered npm package names. A reader that turned the key `no@1.0.0` into a
 boolean would drop a package out of an audit without a word, so exactly two tokens are

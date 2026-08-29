@@ -839,6 +839,14 @@ impl<'a> Parser<'a> {
                 let k = self.rest[..key_end]
                     .trim_end_matches([' ', '\t'])
                     .to_string();
+                // `plain_key` refuses an empty key in block context and this
+                // scanner accepted one, so `a: {: 1}` built the key "" while
+                // `a:\n  : 1` was an error. Not an invented key — the text
+                // really is empty — but two key scanners disagreeing about the
+                // same question is the kind of gap somebody finds by probing.
+                if k.is_empty() {
+                    return Err(self.err("empty mapping key"));
+                }
                 self.bump(key_end);
                 k
             }

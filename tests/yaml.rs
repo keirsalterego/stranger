@@ -734,3 +734,20 @@ fn a_megabyte_on_one_line_errors_rather_than_hangs() {
         "refusing them took {took:?}"
     );
 }
+
+/// Both key scanners answer the same question the same way. `plain_key`
+/// refused an empty key in block context from the start; `flow_key` accepted
+/// one, so `a: {: 1}` built a mapping with an empty key while the block
+/// spelling of the same thing was an error.
+#[test]
+fn an_empty_key_is_refused_in_both_contexts() {
+    for src in ["a: {: 1}\n", "a:\n  : 1\n"] {
+        let err = yaml::parse(src).expect_err(src);
+        assert!(
+            err.to_string().contains("empty mapping key"),
+            "{src:?} -> {err}"
+        );
+    }
+    // A key that is only whitespace is the same case once it is trimmed.
+    assert!(yaml::parse("a: {   : 1}\n").is_err());
+}
