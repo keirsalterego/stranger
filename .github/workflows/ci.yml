@@ -83,21 +83,37 @@ jobs:
       # word for it, and every line in it is generated. Nothing checked that
       # the committed copy still matched its generator, and one line had
       # already drifted: it named the npm list's 140,066 as though that were
-      # the whole corpus. Only the timestamp is allowed to differ — the binary
-      # size is not, having been verified byte-identical across build paths of
-      # very different lengths.
+      # the whole corpus.
+      #
+      # Three things legitimately differ between the machine that generated
+      # the file and this runner, and all three are normalised rather than
+      # excused. The timestamp is obvious. `cargo tree` prints the absolute
+      # repo path. And the binary is 3,885,712 bytes here and 3,884,168 on
+      # ubuntu-latest — same rustc 1.98.0, different linker and system
+      # libraries. I had assumed that number was a fact about the toolchain,
+      # because two builds at very different path lengths on one machine agree
+      # exactly; it is a fact about the machine, which is precisely why the
+      # reproducible-build bar is "same machine, same toolchain".
+      #
+      # What still gets compared: every claim. The cargo tree line count, the
+      # [[package]] count, the empty dependency tables, the unsafe scan, the
+      # corpus size, the offline build.
       - name: The proof is current
         run: |
           set -euo pipefail
+          norm() {
+            sed -e '/^generated /d' \
+                -e 's#(/.*)$#(PATH)#' \
+                -e 's#^release binary: [0-9]* bytes#release binary: SIZE bytes#' \
+                "$1"
+          }
           cp deps-proof.txt /tmp/proof.committed
           ./scripts/proof.sh >/dev/null
-          if ! diff -u \
-              <(grep -v '^generated ' /tmp/proof.committed) \
-              <(grep -v '^generated ' deps-proof.txt); then
+          if ! diff -u <(norm /tmp/proof.committed) <(norm deps-proof.txt); then
             echo "deps-proof.txt is stale — run 'make proof' and commit it" >&2
             exit 1
           fi
-          echo "matches scripts/proof.sh"
+          echo "every generated claim matches scripts/proof.sh"
 
       # Every `$ stranger scan fixtures/...` in the book and the README is
       # followed by what the tool printed. Nothing kept those in step, and two
