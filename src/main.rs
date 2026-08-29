@@ -70,19 +70,54 @@ fn run() -> Result<ExitCode> {
         // Their FAQ makes degrading gracefully a condition of the ruling that
         // lets us read these files at all, so this is a requirement and not
         // polish. Say what was looked for, exit clean.
-        if !opts.quiet {
+        //
+        // Prose only in human mode. `--format json` is one object per lockfile
+        // on its own line, so the honest JSON answer to no lockfiles is no
+        // lines — and it is the answer a consumer reading the stream a line at
+        // a time already handles. Printing the sentence here was the one path
+        // in the tool that wrote something other than JSON to a JSON stream.
+        if !opts.quiet && matches!(opts.format, Format::Human) {
             writeln!(out, "\n  no lockfile in {}", opts.path.display()).ok();
             writeln!(out, "  looked for: {}\n", lock::KNOWN.join(", ")).ok();
         }
         return Ok(ExitCode::SUCCESS);
     }
 
-    let scanned = scan_all(&lockfiles)?;
-
     let mut worst: Option<Severity> = None;
-    for a in &scanned {
-        worst = worst.max(a.findings.iter().map(|f| f.severity).max());
-        emit(&mut out, &opts, term, &a.tree, &a.findings, a.elapsed)?;
+    let mut read = 0usize;
+
+    // In path order, results and failures alike — `scan_all` hands them back
+    // in the order the paths came in, so the stderr stream is as reproducible
+    // as the stdout one. Reporting whichever thread failed first was the one
+    // part of a scan that changed between two runs over the same tree.
+    for scanned in scan_all(&lockfiles) {
+        match scanned {
+            Ok(a) => {
+                read += 1;
+                worst = worst.max(a.findings.iter().map(|f| f.severity).max());
+                emit(&mut out, &opts, term, &a.tree, &a.findings, a.elapsed)?;
+            }
+            // One corrupt lockfile is one lockfile's problem. Throwing away
+            // fifteen siblings' findings because the sixteenth is garbage is
+            // the failure the graceful-degradation requirement above is about,
+            // and it is worst exactly when it matters most: the tree somebody
+            // half-generated is the tree most likely to hold both.
+            //
+            // stderr, so `--format json` stays parseable while the complaint
+            // still reaches a person.
+            Err(e) => eprintln!("stranger: {e}"),
+        }
+    }
+
+    // Exit 2 is "stranger could not do its job", not "stranger hit a bump". A
+    // scan that read something reported findings, so those decide the code as
+    // usual and the unreadable file is on stderr where a person will see it; a
+    // scan that read nothing has nothing to say, and letting that exit 0 would
+    // have a CI gate call an unopenable tree clean. The middle case — some
+    // read, some not — is deliberately not its own code: `--fail-on` answers
+    // "is there a finding", and no third value fits in that answer.
+    if read == 0 {
+        return Ok(ExitCode::from(2));
     }
 
     Ok(match (opts.fail_on, worst) {
@@ -101,15 +136,19 @@ fn run() -> Result<ExitCode> {
 ///
 /// Output order is the input order, not the finishing order. Two runs over the
 /// same tree have to produce the same bytes or a diff between scans is noise.
+/// That holds for the failures too, which is why a file that could not be read
+/// comes back as its own slot's `Err` rather than as this function's: hoisting
+/// the first one out lost every sibling's findings *and* made the surfaced
+/// error a race between threads.
 ///
 /// ponytail: one thread per lockfile, not a pool. A repo with four hundred
 /// lockfiles would spawn four hundred threads, and the fix then is to chunk the
 /// slice across `available_parallelism()` — but the walk skips `node_modules`,
 /// so the realistic count is single digits and a pool would be scaffolding for
 /// a case that does not arrive.
-fn scan_all(lockfiles: &[PathBuf]) -> Result<Vec<Audit>> {
+fn scan_all(lockfiles: &[PathBuf]) -> Vec<Result<Audit>> {
     if lockfiles.len() == 1 {
-        return Ok(vec![audit(&lockfiles[0])?]);
+        return vec![audit(&lockfiles[0])];
     }
 
     let (tx, rx) = mpsc::channel();
@@ -127,16 +166,15 @@ fn scan_all(lockfiles: &[PathBuf]) -> Result<Vec<Audit>> {
     });
     drop(tx);
 
-    let mut done: Vec<Option<Audit>> = (0..lockfiles.len()).map(|_| None).collect();
+    let mut done: Vec<Option<Result<Audit>>> = (0..lockfiles.len()).map(|_| None).collect();
     for (i, result) in rx {
-        done[i] = Some(result?);
+        done[i] = Some(result);
     }
     // Every slot is filled: the scope joined every thread before returning, and
     // each one sent exactly once.
-    Ok(done
-        .into_iter()
+    done.into_iter()
         .map(|d| d.expect("every lockfile reported"))
-        .collect())
+        .collect()
 }
 
 /// One lockfile's result, with the time *that file* took.

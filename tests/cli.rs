@@ -51,6 +51,15 @@ fn write(path: &Path, body: &str) {
     std::fs::write(path, body).expect("write");
 }
 
+fn fixture(name: &str) -> String {
+    std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("fixtures")
+            .join(name),
+    )
+    .expect("fixture")
+}
+
 const POISONED: &str = "fixtures/poisoned.package-lock.json";
 const CLEAN: &str = "fixtures/npm-xs.package-lock.json";
 
@@ -120,6 +129,77 @@ fn a_directory_with_no_lockfile_says_so_and_exits_zero() {
     assert_eq!(o.status.code(), Some(0));
 }
 
+/// One corrupt lockfile used to cost the whole tree: the first `Err` came out
+/// of the thread pool and every sibling's findings went with it, which is the
+/// worst possible time for it — a half-generated tree is exactly the tree
+/// holding both a garbage file and the hallucinations you were scanning for.
+#[test]
+fn one_unreadable_lockfile_does_not_cancel_its_siblings() {
+    let dir = scratch("cli_mixed");
+    write(
+        &dir.join("good/package-lock.json"),
+        &fixture("poisoned.package-lock.json"),
+    );
+    write(&dir.join("bad/package-lock.json"), "garbage{");
+
+    let o = run(&["scan", dir.to_str().unwrap()]);
+    let out = stdout(&o);
+    for planted in ["chalck@5.3.0", "expres@4.18.2", "lodahs@4.17.21"] {
+        assert!(out.contains(planted), "{planted} missing from:\n{out}");
+    }
+    // The complaint reaches a person, on the stream that is not the report.
+    let err = stderr(&o);
+    assert!(err.contains("bad"), "{err}");
+    assert!(
+        err.contains("1:1"),
+        "the position survives the wrapping: {err}"
+    );
+    // Findings printed, so the findings decide the code. Nothing was broken
+    // enough to stop the scan doing its job.
+    assert_eq!(o.status.code(), Some(0), "{err}");
+    assert_eq!(
+        run(&["scan", dir.to_str().unwrap(), "--fail-on", "critical"])
+            .status
+            .code(),
+        Some(1),
+        "a surviving critical still gates"
+    );
+}
+
+/// The other side of it: 2 is for a scan that could not do its job at all, and
+/// a tree where nothing at all could be read is that scan. Exiting 0 there
+/// would have a gate call an unopenable tree clean.
+#[test]
+fn a_tree_where_nothing_reads_exits_two() {
+    let dir = scratch("cli_all_bad");
+    write(&dir.join("a/package-lock.json"), "garbage{");
+    write(&dir.join("b/package-lock.json"), "{\"lockfileVersion\"");
+
+    let o = run(&["scan", dir.to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(2), "{}", stderr(&o));
+    assert_eq!(stdout(&o), "", "nothing was read, so nothing is reported");
+}
+
+/// Both failures name their own file, in path order, every time. The reported
+/// error used to be whichever thread finished first — six runs over the same
+/// two files gave two different messages, on the one code path whose whole
+/// promise is that two runs produce the same bytes.
+#[test]
+fn the_error_stream_is_in_path_order_and_deterministic() {
+    let dir = scratch("cli_two_bad");
+    write(&dir.join("a/package-lock.json"), "garbage{");
+    write(&dir.join("b/package-lock.json"), "{\"lockfileVersion\"");
+
+    let once = stderr(&run(&["scan", dir.to_str().unwrap()]));
+    let lines: Vec<&str> = once.lines().collect();
+    assert_eq!(lines.len(), 2, "{once}");
+    assert!(lines[0].contains("a"), "{once}");
+    assert!(lines[1].contains("b"), "{once}");
+    for _ in 0..5 {
+        assert_eq!(stderr(&run(&["scan", dir.to_str().unwrap()])), once);
+    }
+}
+
 /// A syntax error is only "a line you can open" if it says which file. On a
 /// directory of sixteen lockfiles `expected a value at 1:1` names none of
 /// them, and the parsers cannot say — they are handed a string.
@@ -131,6 +211,47 @@ fn a_syntax_error_names_its_file() {
     let err = stderr(&run(&["scan", path.to_str().unwrap()]));
     assert!(err.contains("package-lock.json"), "{err}");
     assert!(err.contains("at 1:1"), "{err}");
+}
+
+/// JSON mode is one object per lockfile on its own line, so no lockfiles is no
+/// lines. The prose was written to stdout regardless of `--format`, which made
+/// this the one way to get something other than JSON out of a JSON stream.
+#[test]
+fn json_on_a_directory_with_no_lockfile_stays_json() {
+    let dir = scratch("cli_empty_json");
+    let o = run(&["scan", "--format", "json", dir.to_str().unwrap()]);
+    assert_eq!(stdout(&o), "", "{}", stdout(&o));
+    assert_eq!(o.status.code(), Some(0));
+    // Human mode still says what it looked for. Degrading gracefully is a
+    // requirement; it just has to speak the format it was asked for.
+    let human = stdout(&run(&["scan", dir.to_str().unwrap()]));
+    assert!(human.contains("no lockfile"), "{human}");
+}
+
+/// Every line of a JSON scan parses on its own, whatever the tree holds — an
+/// empty directory, or several files including one that will not read.
+#[test]
+fn every_json_line_parses() {
+    let dir = scratch("cli_json_lines");
+    write(
+        &dir.join("good/package-lock.json"),
+        &fixture("npm-xs.package-lock.json"),
+    );
+    write(&dir.join("also/requirements.txt"), "requests==2.31.0\n");
+    write(&dir.join("bad/package-lock.json"), "garbage{");
+    let empty = scratch("cli_json_lines_empty");
+
+    for target in [empty, dir] {
+        let out = stdout(&run(&[
+            "scan",
+            "--format",
+            "json",
+            target.to_str().unwrap(),
+        ]));
+        for line in out.lines() {
+            stranger::json::parse(line).unwrap_or_else(|e| panic!("{line}: {e}"));
+        }
+    }
 }
 
 #[test]
