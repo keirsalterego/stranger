@@ -36,8 +36,9 @@ as an oversight.
 
 ## The corpus is data, and it is compiled in
 
-160,066 package names ship inside the binary via `include_str!`. That is about
-3 MB of a 3.6 MB release binary.
+160,066 package names ship inside the binary via `include_str!`. The three lists
+in `corpus/` are about 3 MB of text, and they are the bulk of the release binary —
+`wc -c corpus/*.txt` against `ls -l target/release/stranger` is the check.
 
 The alternative — fetching at runtime, or reading a cache directory — would have
 made the tool's central claim false. `stranger` works on a plane. There is no
@@ -51,10 +52,11 @@ rather than apologising for it as a limitation.
 
 ## Why the in-degree clause exists
 
-Edit distance is not a rule. `lodash.merge` is two edits from `lodash.mergewith`,
-`eslint-config-x` is one from `eslint-configs-x`, and npm contains thousands of
-such pairs where both names are real. A threshold loose enough to catch a typo
-catches legitimate siblings, and precision collapses.
+Edit distance is not a rule. `lodash.assign` is two edits from `lodash.assignin`,
+`object-assign` is one from `object.assign`, and npm contains thousands of such
+pairs where both names are real — all four of those are in `corpus/npm.txt`. A
+threshold loose enough to catch a typo catches legitimate siblings, and precision
+collapses.
 
 The observation that separates them is not about spelling. A hallucinated package
 is always a root dependency, because nothing real has ever heard of it. The only
@@ -99,7 +101,7 @@ cannot measure.
 ## The TOML subset
 
 One parser reads `Cargo.lock`, `poetry.lock` and `uv.lock`. Three ecosystems for
-the price of one, which made it the highest-leverage module after JSON.
+the price of one, which bought more per line written than anything after JSON.
 
 **Accepted:** `key = value` at top level and inside tables; `[table]` and
 `[dotted.table]` headers; `[[array.of.tables]]`, which is `[[package]]` and the
@@ -178,8 +180,8 @@ prints what was looked for and exits 0, rather than being useless or panicking.
 It rejects it, with position.
 
 JSON strings are sequences of UTF-16 code units, so anything outside the Basic
-Multilingual Plane arrives as `🦀` and has to be recombined into one
-scalar. `unicode_escape` reads four hex digits, and if the result is in
+Multilingual Plane arrives as a surrogate pair — 🦀 is `\uD83E\uDD80` — and has
+to be recombined into one scalar. `unicode_escape` reads four hex digits, and if the result is in
 `0xD800..=0xDBFF` it requires the next two bytes to be `\u` and the following four
 digits to be a low surrogate in `0xDC00..=0xDFFF`, then combines them:
 `0x10000 + ((hi - 0xD800) << 10) + (lo - 0xDC00)`.
@@ -319,10 +321,10 @@ returns nothing, and that is a one-line check anyone can run.
 Recorded here as decisions rather than omissions.
 
 The plan had a line through the build list: everything below it was to be cut at
-H30 if unstarted, by the clock rather than by feeling. Three of the four items
-below that line landed anyway — `yaml.rs` with the pnpm reader, and the parallel
-scan on `std::thread::scope`. Two did not, and one thing above the line was cut
-outright.
+H30 if unstarted, by the clock rather than by feeling. Two of the four items below
+that line landed anyway — `yaml.rs` with the pnpm reader, and the parallel scan on
+`std::thread::scope`. Two did not: `yarn.lock` and `stranger diff`, both written
+up below. One thing above the line was cut outright as well.
 
 **`yarn.lock` — cut, and it was the right call twice over.** It was below the line,
 and there is no yarn fixture on this machine, so it would have shipped tested
