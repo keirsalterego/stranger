@@ -16,7 +16,11 @@ own three examples had stopped firing entirely when packages gained an origin,
 because their hand-written fixtures carry no `resolved` field.
 
 So: run the command, compare the block. Elapsed milliseconds are the one thing
-allowed to differ, because they are a measurement rather than a claim.
+allowed to differ, because they are a measurement rather than a claim — in the
+human report as `35ms`, in `--format json` as `"elapsed_ms":35`. Both are
+normalised away; everything else in a JSON line is a claim like any other, and
+`--format json` blocks were skipped here long enough for `"risk":64` to outlive
+the score that produced it.
 
 Only blocks naming `fixtures/` are checked, because a `/tmp` path depends on a
 heredoc earlier in the page. stdout and stderr are compared together, since a
@@ -37,11 +41,13 @@ ROOT = Path(__file__).resolve().parent.parent
 BIN = ROOT / "target" / "release" / "stranger"
 PAGES = sorted((ROOT / "docs" / "src").rglob("*.md")) + [ROOT / "README.md"]
 
-# `stranger scan …` optionally prefixed with the path the docs use. A pipe or a
-# `--format json` means the block is an excerpt or a single long line, neither of
-# which compares usefully.
+# `stranger scan …` optionally prefixed with the path the docs use. A pipe means
+# the block quotes what `jq` made of the output rather than the output, which
+# does not compare usefully; `--format json` on its own does.
 INVOCATION = re.compile(r"^\$ (?:\./target/release/)?stranger (scan [^|$]*)$")
-ELAPSED = re.compile(r"\b\d+ms\b")
+# `12ms` in the human report, `"elapsed_ms":12` in the JSON: the same
+# measurement, normalised the same way.
+ELAPSED = re.compile(r'\b\d+ms\b|(?<="elapsed_ms":)\d+')
 
 
 def lines(text):
@@ -66,10 +72,7 @@ def check(page):
     i = 0
     while i < len(src):
         m = INVOCATION.match(src[i].strip())
-        if not m or "--format json" not in src[i] and "fixtures/" not in src[i]:
-            i += 1
-            continue
-        if "--format json" in src[i]:
+        if not m or "fixtures/" not in src[i]:
             i += 1
             continue
 

@@ -12,15 +12,25 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      # rust-toolchain.toml pins 1.98.0, and rustup honours it, so there is
-      # nothing to specify here. Pinning the version twice is one more place
-      # for the two to disagree.
+      # rust-toolchain.toml pins the version and rustup honours it, so there
+      # is nothing to specify here — but "honours it" was only ever printed,
+      # never checked. A rustup that quietly resolved something else would
+      # have built green all weekend, and the reproducible-build claim is a
+      # claim about one exact compiler.
       - name: Toolchain
         run: |
+          set -euo pipefail
           rustup show
-          rustc --version
+          want=$(sed -n 's/^ *channel *= *"\(.*\)"/\1/p' rust-toolchain.toml)
+          test -n "$want"
+          got=$(rustc --version | cut -d' ' -f2)
+          if [ "$got" != "$want" ]; then
+            echo "rust-toolchain.toml pins $want, rustc is $got" >&2
+            exit 1
+          fi
+          echo "rustc $got, as pinned"
           cargo --version
 
       # The claim the whole entry rests on. If this ever stops being one line,
@@ -68,6 +78,42 @@ jobs:
 
       - name: Build offline
         run: CARGO_NET_OFFLINE=true cargo build --release --locked --offline
+
+      # deps-proof.txt is what a judge reads instead of taking the README's
+      # word for it, and every line in it is generated. Nothing checked that
+      # the committed copy still matched its generator, and one line had
+      # already drifted: it named the npm list's 140,066 as though that were
+      # the whole corpus.
+      #
+      # Three things legitimately differ between the machine that generated
+      # the file and this runner, and all three are normalised rather than
+      # excused. The timestamp is obvious. `cargo tree` prints the absolute
+      # repo path. And the binary is 3,885,712 bytes here and 3,884,168 on
+      # ubuntu-latest — same rustc 1.98.0, different linker and system
+      # libraries. I had assumed that number was a fact about the toolchain,
+      # because two builds at very different path lengths on one machine agree
+      # exactly; it is a fact about the machine, which is precisely why the
+      # reproducible-build bar is "same machine, same toolchain".
+      #
+      # What still gets compared: every claim. The cargo tree line count, the
+      # [[package]] count, the empty dependency tables, the unsafe scan, the
+      # corpus size, the offline build.
+      - name: The proof is current
+        run: |
+          set -euo pipefail
+          norm() {
+            sed -e '/^generated /d' \
+                -e 's#(/.*)$#(PATH)#' \
+                -e 's#^release binary: [0-9]* bytes#release binary: SIZE bytes#' \
+                "$1"
+          }
+          cp deps-proof.txt /tmp/proof.committed
+          ./scripts/proof.sh >/dev/null
+          if ! diff -u <(norm /tmp/proof.committed) <(norm deps-proof.txt); then
+            echo "deps-proof.txt is stale — run 'make proof' and commit it" >&2
+            exit 1
+          fi
+          echo "every generated claim matches scripts/proof.sh"
 
       # Every `$ stranger scan fixtures/...` in the book and the README is
       # followed by what the tool printed. Nothing kept those in step, and two

@@ -37,7 +37,12 @@ else
   while [ "$i" -lt 50 ]; do "$BIN" scan "$FIXTURE" >/dev/null; i=$((i + 1)); done
   end=$(date +%s%N)
   echo "50 runs in $(( (end - start) / 1000000 ))ms"
-  echo "mean: $(( (end - start) / 50000000 )).$(( ((end - start) / 50000) % 1000 ))ms"
+  # %03d, not the bare remainder. 19,653ms over 50 runs is 393.079ms, and the
+  # unpadded version printed 393.79 — a tenth of a millisecond wrong, in a
+  # block whose whole job is to report a measurement.
+  printf 'mean: %d.%03dms\n' \
+    "$(( (end - start) / 50000000 ))" \
+    "$(( ((end - start) / 50000) % 1000 ))"
   echo
   echo "install hyperfine for p50/p99 rather than a mean."
 fi
