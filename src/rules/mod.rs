@@ -48,17 +48,33 @@ pub enum Rule {
     Pinning,
 }
 
-/// Report order. Worst first, and stable, so a diff between two scans is a
-/// diff and not a reshuffle.
-pub const ORDER: &[Rule] = &[
-    Rule::Slopsquat,
-    Rule::InstallScript,
-    Rule::Trivial,
-    Rule::Drift,
-    Rule::Pinning,
-];
-
 impl Rule {
+    /// Where this rule prints: threat, then waste, then what the file does not
+    /// pin down. A name that may not exist and code that runs at install can
+    /// hurt you; a one-line package is only weight; drift and missing pins are
+    /// the lockfile declining to say what will actually be installed. Fixed, so
+    /// a diff between two scans is a diff and not a reshuffle.
+    ///
+    /// Not severity order, and it never was. `Pinning` alone spans low to high
+    /// inside one block, so a block has no single severity to sort by — sorting
+    /// on the worst one present would slide `UNPINNED` up and down the report
+    /// between two scans of the same project, which is the thing a fixed order
+    /// exists to prevent.
+    ///
+    /// A match rather than a list of every rule, because the compiler cannot
+    /// see a variant missing from a list and can see one missing from a match.
+    /// A sixth rule does not build until it has been given a place in the
+    /// report.
+    pub fn rank(self) -> usize {
+        match self {
+            Rule::Slopsquat => 0,
+            Rule::InstallScript => 1,
+            Rule::Trivial => 2,
+            Rule::Drift => 3,
+            Rule::Pinning => 4,
+        }
+    }
+
     pub fn heading(self) -> &'static str {
         match self {
             Rule::Slopsquat => "HALLUCINATION RISK",

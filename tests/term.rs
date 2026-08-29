@@ -193,6 +193,49 @@ fn short_names_keep_the_floor() {
     assert_eq!(col, Some(30));
 }
 
+/// Blocks come out in `Rule::rank` order — not the order the findings arrived
+/// in, which is why they are fed in backwards here, and not severity order,
+/// which is why `UNPINNED` still prints last while holding the only `High` and
+/// `TRIVIAL` still prints above it on a `Low`.
+#[test]
+fn blocks_print_in_rank_order_whatever_order_they_arrive_in() {
+    let at = |rule, severity| Finding {
+        rule,
+        severity,
+        package: "p".to_string(),
+        version: "1.0.0".to_string(),
+        detail: "d".to_string(),
+    };
+    let out = render(
+        false,
+        &[
+            at(Rule::Pinning, Severity::High),
+            at(Rule::Drift, Severity::Medium),
+            at(Rule::Trivial, Severity::Low),
+            at(Rule::InstallScript, Severity::High),
+            at(Rule::Slopsquat, Severity::Critical),
+        ],
+    );
+    let headings: Vec<&str> = out
+        .lines()
+        .filter_map(|l| l.strip_prefix("  ⚠  "))
+        // The heading is the cell before the column gap; headings themselves
+        // never carry a double space.
+        .filter_map(|l| l.split("  ").next())
+        .collect();
+    assert_eq!(
+        headings,
+        [
+            "HALLUCINATION RISK",
+            "INSTALL SCRIPTS",
+            "TRIVIAL",
+            "VERSION DRIFT",
+            "UNPINNED",
+        ],
+        "{out}"
+    );
+}
+
 // -- digit grouping ---------------------------------------------------------
 
 #[test]
