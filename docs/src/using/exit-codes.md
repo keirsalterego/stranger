@@ -81,7 +81,7 @@ $ echo $?
 2
 
 $ ./target/release/stranger scan /tmp/renametest/requirements-dev.txt
-stranger: requirements-dev.txt: not a lockfile stranger knows. It reads: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock
+stranger: requirements-dev.txt: not a lockfile stranger knows. It reads: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock, go.mod
 $ echo $?
 2
 ```
@@ -112,7 +112,7 @@ says nothing. The alternative is an error message on every piped invocation.
 $ ./target/release/stranger scan /tmp/empty
 
   no lockfile in /tmp/empty
-  looked for: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock
+  looked for: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock, go.mod
 
 $ echo $?
 0

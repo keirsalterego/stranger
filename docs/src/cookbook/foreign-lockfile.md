@@ -43,8 +43,9 @@ parser.
 
 Point at the whole repository and discovery does the work: it walks six levels
 down, skipping `node_modules` and twelve other named directories, and picks up
-any of the six filenames in `lock::KNOWN` — `package-lock.json`,
-`pnpm-lock.yaml`, `Cargo.lock`, `requirements.txt`, `poetry.lock`, `uv.lock`.
+any of the seven filenames in `lock::KNOWN` — `package-lock.json`,
+`pnpm-lock.yaml`, `Cargo.lock`, `requirements.txt`, `poetry.lock`, `uv.lock`,
+`go.mod`.
 On a handover that is what you want, because you do not yet know which
 ecosystems are in there.
 

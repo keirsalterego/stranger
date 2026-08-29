@@ -80,7 +80,7 @@ $ stranger scan .
 ```
 
 The walk finds every lockfile under the directory and audits them on separate
-threads — six formats and three ecosystems in one pass, if that is what is there.
+threads — seven formats and four ecosystems in one pass, if that is what is there.
 It does not descend into `node_modules`, `target`, `.venv` or `dist`, because a
 populated `node_modules` holds hundreds of vendored lockfiles belonging to other
 people and auditing those is worse than auditing nothing.
@@ -188,7 +188,7 @@ file is absent rather than being useless without it:
 $ stranger scan /tmp/empty-project
 
   no lockfile in /tmp/empty-project
-  looked for: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock
+  looked for: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock, go.mod
 ```
 
 Exit code 0. `stranger` never executes `npm`, `pip`, `cargo`, `git` or anything
@@ -281,15 +281,31 @@ the error, because it records the root explicitly: 91 real direct dependencies
 against the 60 the derivation would have found. So `poetry-m`'s reported 75
 direct is a floor, not a count.
 
-**No Go corpus.** `proxy.golang.org` publishes no ranked list of modules and
-module paths are domains, so edit distance over them is a different problem.
-Where `go.mod` parsing exists the tree is read correctly, but the hallucination
-rule never fires on it. Saying so beats shipping a rule that silently never
-triggers.
+**No Go corpus.** `go.mod` reads. The `gomod-m` fixture is 174 requirements, 50
+direct against 124 `// indirect`, and that split — the only graph the format
+has — is read correctly.
 
-**Flat formats have no graph.** `requirements.txt` records no dependency edges at
-all, so every package trivially has in-degree 0 and clause 3 is vacuous there. The
-rule falls back to two clauses on those files and is correspondingly weaker.
+What does not read is the name. `proxy.golang.org` publishes no ranked list of
+modules and a module path is a domain, so edit distance over them is a different
+problem and there is nothing for a name to be absent from. `corpus::names`
+returns an empty slice for `Ecosystem::Go`, and the hallucination rule stops on
+its first line rather than running three clauses against a list nobody
+publishes. That check is on the ecosystem's own corpus and not on the one the
+ablation passes in, so no configuration turns it back on: `tests/gomod.rs` hands
+the rule a one-edit neighbour of a real module in the tree and it still says
+nothing.
+
+So a Go scan reports nothing: three rules because the format records nothing
+they read, the trivial-package rule because its list is npm micro-packages, and
+this one by decision. What you get is the tree, the direct and transitive
+counts, and the package list under `--format json`. Saying that plainly beats
+shipping a rule that silently never triggers.
+
+**Flat formats have no graph.** `requirements.txt` and `go.mod` record no
+dependency edges at all, so every package trivially has in-degree 0 and clause 3
+is vacuous there. The rule falls back to two clauses on those files and is
+correspondingly weaker — on `requirements.txt`, at least, which is the only one
+of the two where the rule runs at all.
 
 Here is that costing a false positive, on a real fixture:
 

@@ -24,6 +24,15 @@ present is public.
 | `reqs-xs.requirements.txt` | 12 | pip — every line a bare name, no constraint anywhere |
 | `reqs-s.requirements.txt` | 23 | pip |
 | `pnpm-l.pnpm-lock.yaml` | 850 | pnpm, lockfileVersion 9 — one importer, 850 snapshots, 1,851 edges, 42 `hasBin`, 3 `deprecated` |
+| `gomod-m.go.mod` | 174 | go 1.25.7 — 124 `// indirect`, 26 pseudo-versions, 2 `+incompatible`, three `require` blocks |
+| `gomod-xs.go.mod` | 6 | go 1.24 — one single-line `require`, one `retract` block |
+
+Neither go fixture contains a `replace`, an `exclude` or a `toolchain`, so those
+three are tested against hand-written input in `tests/gomod.rs` — handled,
+unmeasured, the same status as the third shape of a Cargo dependency string. The
+`retract` block in `gomod-xs` is the one that earns its place: its two lines are
+bare versions, and a reader that skipped forward instead of consuming them would
+report `v1.4.1` as a module.
 
 Names describe shape, not origin. A directory called `some-company-console/` in a
 public repo publishes what someone's private product is built on; `npm-m` does not.
@@ -91,10 +100,13 @@ documentation is worth more than one that confirmed it.
 ## Measured, not remembered
 
 Every npm count in the table above is `jq '.packages | length - 1'`, every cargo
-count is `grep -c '^\[\[package\]\]'`, and every pip count is
-`awk 'NF && $0 !~ /^[ \t]*#/'`, all run against the file in this
-directory. They are here because the numbers in the README have to be
-reproducible by someone who is not me, and because the notes I collected before
+count is `grep -c '^\[\[package\]\]'`, every pip count is
+`awk 'NF && $0 !~ /^[ \t]*#/'`, and every go count is
+`grep -cE '[^[:space:]]+\.[^[:space:]]*[[:space:]]+v[0-9]'` — a module path and
+a version on one line, which is deliberately not the same as "an indented line",
+because that would also count the versions in a `retract` block. All run against
+the file in this directory. They are here because the numbers in the README have
+to be reproducible by someone who is not me, and because the notes I collected before
 the window said npm-xl held 1,391 entries. It holds 1,390.
 
 The same thing happened again with `reqs-xs`, which this table said held 11

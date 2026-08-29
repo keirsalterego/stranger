@@ -37,8 +37,8 @@ of them. `tests/json.rs` tests exactly that list.
 
 **What I gave up:** `serde`'s derive machinery. There is no `#[derive(Deserialize)]`
 here — every lockfile reader walks a `Value` tree by hand and decides what to do
-with a missing field at the point it is missing. For six readers that is fine and
-arguably clearer, since the "what if this key is absent" question gets answered
+with a missing field at the point it is missing. For seven readers that is fine
+and arguably clearer, since the "what if this key is absent" question gets answered
 where the answer matters instead of in an attribute. For a hundred types it would
 be miserable. I also gave up streaming: the whole file is parsed into memory, which
 is correct for a 718 KB lockfile and wrong for a 700 MB one.
@@ -348,7 +348,7 @@ The rule this section exists to enforce: an unwritten module gets no entry.
 ## Data that is not code, disclosed anyway
 
 `corpus/` holds 160,066 package names across three ecosystems, fetched once with
-`curl` at development time on 2026-08-28. `fixtures/` holds fourteen real
+`curl` at development time on 2026-08-28. `fixtures/` holds sixteen real
 lockfiles from public projects plus two poisoned by hand.
 
 Neither is code. Nothing in either directory is compiled as source — the corpora

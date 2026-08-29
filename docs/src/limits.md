@@ -18,37 +18,46 @@ present and never whether it is correct.
 is lives in a tarball on the registry, and `stranger` does not fetch. See
 [Install scripts](rules/install-scripts.md).
 
-**No Go corpus.** `proxy.golang.org` publishes no ranked list and module paths are
-domains, so the corpus is empty on purpose and the detection rule can never fire
-on a Go module. `tests/corpus.rs` asserts that emptiness so it stays intentional.
+**No Go corpus.** `go.mod` reads — 174 requirements out of `gomod-m`, 50 direct
+against 124 `// indirect` — and the name is the part that does not.
+`proxy.golang.org` publishes no ranked list and module paths are domains, so the
+corpus is empty on purpose and the detection rule can never fire on a Go module.
+`tests/corpus.rs` asserts that emptiness so it stays intentional, and
+`tests/gomod.rs` asserts the silence. See [go](formats/gomod.md).
 
-**Flat formats have no graph.** `requirements.txt` records no dependency edges, so
-clause 3 is vacuous and the detection rule runs on two clauses. See
-[pip](formats/pip.md) and, for it costing a real false positive,
+**Flat formats have no graph.** `requirements.txt` and `go.mod` record no
+dependency edges, so clause 3 is vacuous and the detection rule runs on two
+clauses — on `requirements.txt`, at any rate, being the one of the two where it
+runs at all. See [pip](formats/pip.md) and, for it costing a real false positive,
 [False positives](detection/false-positives.md).
 
-## Six formats, five rules, and most pairs are not real
+## Seven formats, five rules, and most pairs are not real
 
 `package-lock.json` (lockfileVersion 2 and 3), `pnpm-lock.yaml` (v9),
-`Cargo.lock` (v3 and v4), `poetry.lock`, `uv.lock`, `requirements.txt`. Four
-ecosystems, three parsers, one graph model.
+`Cargo.lock` (v3 and v4), `poetry.lock`, `uv.lock`, `requirements.txt`,
+`go.mod`. Four ecosystems, three shared parsers — JSON, YAML, TOML — with
+`requirements.txt` and `go.mod` reading their own lines, and one graph model.
 
 The grid below is the useful limit, because most of it is empty. A rule that
 cannot fire on your ecosystem is not protecting you from anything:
 
-| rule | npm | pnpm | cargo | poetry / uv | requirements.txt |
-|---|---|---|---|---|---|
-| slopsquat | yes | yes | registry crates only | yes | yes, weakened |
-| install-script | yes | never | never | never | never |
-| trivial | yes | yes | effectively never | effectively never | effectively never |
-| drift | yes | yes | yes | yes | not on a well-formed file |
-| pinning | never | never | never | never | yes |
+| rule | npm | pnpm | cargo | poetry / uv | requirements.txt | go.mod |
+|---|---|---|---|---|---|---|
+| slopsquat | yes | yes | registry crates only | yes | yes, weakened | never — no corpus |
+| install-script | yes | never | never | never | never | never |
+| trivial | yes | yes | effectively never | effectively never | effectively never | effectively never |
+| drift | yes | yes | yes | yes | not on a well-formed file | never |
+| pinning | never | never | never | never | yes | never |
 
-Four of the five never-cells are the same fact twice over. `install_script` is a
+Most of the `install-script` row is one fact repeated. `install_script` is a
 field npm has and nobody else records — pnpm does not carry it, `Cargo.lock` says
 nothing about `build.rs`, and neither poetry nor uv notes that a package runs
 `setup.py`. The reader sets the flag to `false` and each one says so in its module
 docs, so a quiet report on those four formats means *not measured*, never *safe*.
+
+`go.mod` is the one cell in that row where `false` is a measurement: the module
+system has no install-time hook to record. `go mod download` fetches and unpacks
+a zip, and nothing in it runs until you build.
 
 `trivial` is a hand-written list of npm micro-packages plus a predicate-shaped
 name heuristic. Nothing stops it running elsewhere and nothing makes it useful
@@ -60,7 +69,9 @@ version for every entry, so the rule has nothing to say and never says it.
 `slopsquat` on cargo is narrowed on purpose. A crates.io corpus can only speak
 about crates.io, so a package the lockfile marks as coming from git or a path
 is skipped rather than reported —
-[why that matters](detection/false-positives.md).
+[why that matters](detection/false-positives.md). On `go.mod` it is not narrowed
+but switched off, because there is no ranked list of module paths for a name to
+be absent from and pretending otherwise would make every module a candidate.
 
 A clean npm scan means: no name is absent-from-corpus-and-near-a-real-one-and-
 unvouched-for, nothing declares an install script, nothing appears at two
@@ -87,14 +98,14 @@ one-liner. [Trivial packages](rules/trivial.md) has the argument.
 
 ## Discovery matches names, not contents
 
-`stranger scan <dir>` recurses, but it finds a lockfile by its filename. The six
-names in `lock::KNOWN` are the whole list:
+`stranger scan <dir>` recurses, but it finds a lockfile by its filename. The
+seven names in `lock::KNOWN` are the whole list:
 
 ```console
 $ ./target/release/stranger scan /tmp
 
   no lockfile in /tmp
-  looked for: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock
+  looked for: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock, go.mod
 ```
 
 The match is on the *end* of the filename, so a prefixed copy is still found —

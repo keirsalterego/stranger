@@ -41,7 +41,7 @@ cursor *is* the remainder.
 | `anyhow` | 909,556,524 | `src/error.rs` | the same enum, with `?` |
 | `toml` | 855,052,855 | `src/toml.rs` | a documented subset that refuses what it cannot read |
 | `walkdir` | 588,096,443 | `src/walk.rs` | `std::fs::read_dir` and an explicit stack |
-| `glob` | 575,867,559 | `src/walk.rs` | `str::ends_with` against six known names |
+| `glob` | 575,867,559 | `src/walk.rs` | `str::ends_with` against seven known names |
 | `crossbeam-channel` | 565,386,665 | `src/main.rs` | `std::sync::mpsc` |
 | `rayon` | 516,056,344 | `src/main.rs` | `std::thread::scope` |
 | `serde_yaml` | 383,697,832 | `src/yaml.rs` | an indentation-driven subset, two booleans only |

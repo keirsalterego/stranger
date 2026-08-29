@@ -341,14 +341,30 @@ uses. `--format json` already emits a stable, ordered object per lockfile, so
 case without a subcommand. Ordering findings deterministically was the part worth
 doing, and that shipped.
 
-**`go.mod` and `go.sum` — cut, and it is the one gap I would fill first.** The
-parser is trivial. The corpus is not: `proxy.golang.org` publishes no ranked list,
-and a Go module path is a domain, so "not in the corpus" would mean "not in a list
-nobody publishes" rather than "does not exist" — which turns the detection rule
-into noise. `corpus::names` returns an empty slice for `Ecosystem::Go` and
-`tests/corpus.rs` asserts that emptiness so it stays deliberate rather than
-becoming a bug somebody fixes by accident. Shipping the parser without the corpus
-would have been a fifth format on the README and a rule that silently never fires.
+**`go.mod` — cut, then uncut, and the reason for the cut turned out to be the
+reason to ship.** The original call: the parser is trivial, the corpus is not.
+`proxy.golang.org` publishes no ranked list, and a Go module path is a domain, so
+"not in the corpus" would mean "not in a list nobody publishes" rather than "does
+not exist", which turns the detection rule into noise. Shipping the parser
+without the corpus looked like a seventh format on the README and a rule that
+silently never fires.
+
+What changed is where the silence lives. A rule that never fires because a list
+happens to be empty is the thing worth refusing; a rule that is *switched off for
+an ecosystem, in one line, with the reason written next to it* is a different
+object. `slopsquat::scan` now returns on its first line when the ecosystem's
+corpus is empty — checked against the compiled-in list rather than the one the
+ablation passes in, so no configuration can turn it back on — and `tests/gomod.rs`
+hands it a one-edit neighbour of a real module to prove it. `corpus::names` still
+returns an empty slice for `Ecosystem::Go` and `tests/corpus.rs` still asserts
+that emptiness.
+
+So the reader ships and the rule does not, both on purpose: 174 requirements out
+of `gomod-m`, split 50 direct against 124 `// indirect`, no findings, and the
+README says in the Limits section that no findings is what a Go scan produces.
+`go.sum` stays cut, and `src/lock/gomod.rs` argues that one out at length — it
+holds hashes for versions that lost the selection, so counting from it overstates
+the tree, and the standard library has no SHA-256 to check one with anyway.
 
 **The Single File bonus — cut deliberately, and it was never close.** Twenty-five
 files crushed into one `main.rs` trades a 25% criterion for a 5% bonus.
