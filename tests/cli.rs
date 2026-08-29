@@ -212,3 +212,39 @@ fn a_directory_scan_skips_vendored_lockfiles() {
     let out = stdout(&run(&["scan", root.to_str().unwrap()]));
     assert_eq!(out.matches(" packages   (").count(), 1, "{out}");
 }
+
+/// The trivial rule skips first-party packages, so its percentage has to be
+/// taken against the same population — the count the header prints. These were
+/// two different denominators for a while (`packages.len()` against
+/// `third_party()`), which on npm-m read 2.9% where the header's own numbers
+/// say 3.0%. Deriving both from one line of output is the only way this stays
+/// caught.
+#[test]
+fn the_trivial_percentage_matches_the_header_count() {
+    let out = stdout(&run(&["scan", "-v", "fixtures/npm-m.package-lock.json"]));
+
+    let header = out
+        .lines()
+        .find(|l| l.contains(" packages   ("))
+        .expect("header");
+    let total: f64 = header
+        .split_whitespace()
+        .nth(1)
+        .unwrap()
+        .replace(',', "")
+        .parse()
+        .unwrap();
+
+    let line = out
+        .lines()
+        .find(|l| l.contains("TRIVIAL"))
+        .expect("trivial");
+    let mut f = line
+        .split_whitespace()
+        .skip_while(|w| *w != "TRIVIAL")
+        .skip(1);
+    let hits: f64 = f.next().unwrap().replace(',', "").parse().unwrap();
+    let printed = f.next().unwrap().trim_start_matches('(');
+
+    assert_eq!(printed, format!("{:.1}%", 100.0 * hits / total), "{line}");
+}

@@ -15,7 +15,7 @@ $ ./target/release/stranger scan fixtures/poisoned.package-lock.json
 
   ⚠  INSTALL SCRIPTS        3     arbitrary code at install time
 
-  ⚠  TRIVIAL                35    (4.6% of tree)
+  ⚠  TRIVIAL                35    (4.6% of third-party)
 
   ⚠  VERSION DRIFT          55    same package at 2+ versions in one tree
 
@@ -41,7 +41,7 @@ $ ./target/release/stranger scan fixtures/npm-xl.package-lock.json
 
   ⚠  INSTALL SCRIPTS        8     arbitrary code at install time
 
-  ⚠  TRIVIAL                29    (2.1% of tree)
+  ⚠  TRIVIAL                29    (2.1% of third-party)
 
   ⚠  VERSION DRIFT          76    same package at 2+ versions in one tree
 
@@ -66,7 +66,7 @@ $ ./target/release/stranger scan -v fixtures/npm-xs.package-lock.json
 
   npm-xs.package-lock.json 37 packages   (1 direct · 36 transitive)
 
-  ⚠  TRIVIAL                4     (10.8% of tree)
+  ⚠  TRIVIAL                4     (10.8% of third-party)
      es-errors@1.3.0          one expression, one publisher · inlining it removes an account from your build
      gopd@1.2.0               one expression, one publisher · inlining it removes an account from your build
      has-symbols@1.1.0        predicate-shaped, resolves nothing · size not measured, see rule docs
@@ -88,7 +88,7 @@ $ ./target/release/stranger scan -q fixtures/poisoned.package-lock.json
 
   ⚠  INSTALL SCRIPTS        3     arbitrary code at install time
 
-  ⚠  TRIVIAL                35    (4.6% of tree)
+  ⚠  TRIVIAL                35    (4.6% of third-party)
 
   ⚠  VERSION DRIFT          55    same package at 2+ versions in one tree
 ```

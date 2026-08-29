@@ -17,7 +17,7 @@ $ stranger scan fixtures/poisoned.package-lock.json
 
   ⚠  INSTALL SCRIPTS        3     arbitrary code at install time
 
-  ⚠  TRIVIAL                35    (4.6% of tree)
+  ⚠  TRIVIAL                35    (4.6% of third-party)
 
   ⚠  VERSION DRIFT          55    same package at 2+ versions in one tree
 

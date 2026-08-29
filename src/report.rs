@@ -60,8 +60,14 @@ fn note(rule: Rule, hits: usize, tree: &Tree) -> String {
     match rule {
         Rule::Slopsquat => String::new(),
         Rule::Trivial => {
-            let pct = 100.0 * hits as f64 / tree.packages.len().max(1) as f64;
-            format!("({pct:.1}% of tree)")
+            // Against third_party(), not packages.len(), because the rule skips
+            // first-party packages outright — a workspace member can never be a
+            // hit, so counting it in the denominator prints a percentage of a
+            // population the numerator was never drawn from. On npm-m that is
+            // 2.9% against 3.0%, which is small enough to have survived a while
+            // and wrong in the direction that flatters the number.
+            let pct = 100.0 * hits as f64 / tree.third_party().max(1) as f64;
+            format!("({pct:.1}% of third-party)")
         }
         Rule::InstallScript => "arbitrary code at install time".into(),
         Rule::Drift => "same package at 2+ versions in one tree".into(),

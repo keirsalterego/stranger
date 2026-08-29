@@ -8,7 +8,7 @@ $ ./target/release/stranger scan -v fixtures/npm-xs.package-lock.json
 
   npm-xs.package-lock.json 37 packages   (1 direct · 36 transitive)
 
-  ⚠  TRIVIAL                4     (10.8% of tree)
+  ⚠  TRIVIAL                4     (10.8% of third-party)
      es-errors@1.3.0          one expression, one publisher · inlining it removes an account from your build
      gopd@1.2.0               one expression, one publisher · inlining it removes an account from your build
      has-symbols@1.1.0        predicate-shaped, resolves nothing · size not measured, see rule docs
@@ -81,14 +81,20 @@ and it collapses to a count unless you pass `-v`.
 ## The percentage
 
 ```text
-  ⚠  TRIVIAL                29    (2.1% of tree)
+  ⚠  TRIVIAL                29    (2.1% of third-party)
 ```
 
-The denominator is every entry in the lockfile, including workspace members, while
-the header's package count excludes them. On `npm-m` that is 17 out of 582 rather
-than 17 out of 576 — 2.9% instead of 3.0%. The gap is under a tenth of a
-percentage point on every fixture here and it is still an inconsistency; see
-[Limits](../limits.md).
+The denominator is the header's own package count — third-party entries only.
+The rule never looks at a first-party package, so a workspace member cannot be a
+hit, and counting one in the denominator would print a share of a population the
+numerator was never drawn from.
+
+That was the bug for most of the weekend: the percentage divided by every entry
+in the lockfile while the header divided by third-party ones. On `npm-m` it read
+17/582 where the header's own numbers say 17/576 — 2.9% against 3.0%. Under a
+tenth of a point on every fixture here, which is exactly why it survived so long.
+`tests/cli.rs` now derives both numbers from one line of output and fails if they
+ever disagree again.
 
 ## Duplicates collapse
 
