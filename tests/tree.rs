@@ -109,6 +109,29 @@ fn nothing_close_says_that_too() {
     assert!(out.contains("nothing within 2 edits"), "{out}");
 }
 
+/// `dev` and `optional` were populated by every reader and read by nothing.
+/// They are printed here and nowhere else, because this is the only surface
+/// where their absence claims nothing: pnpm records optionality and poetry
+/// records dev-ness, and the four formats that record neither would turn any
+/// aggregate count into a number about the file format rather than the tree.
+#[test]
+fn the_flags_a_reader_actually_set_are_printed() {
+    let dev = stdout(&run(&["tree", "attrs", "fixtures/poetry-m.poetry.lock"]));
+    assert!(dev.contains("dev-only"), "{dev}");
+
+    let opt = stdout(&run(&[
+        "tree",
+        "fsevents",
+        "fixtures/pnpm-l.pnpm-lock.yaml",
+    ]));
+    assert!(opt.contains("optional"), "{opt}");
+
+    // Cargo.lock records neither, so the line is absent rather than false.
+    let neither = stdout(&run(&["tree", "serde", "fixtures/cargo-m.Cargo.lock"]));
+    assert!(!neither.contains("dev-only"), "{neither}");
+    assert!(!neither.contains("optional"), "{neither}");
+}
+
 /// README LIMITS: a flat format records no edges, so in-degree 0 there is the
 /// file declining to say rather than a measurement. Printing a bare 0 would be
 /// the exact confusion clause 3 exists to avoid.
