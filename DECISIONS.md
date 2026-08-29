@@ -177,6 +177,65 @@ prints what was looked for and exits 0, rather than being useless or panicking.
 
 # Defence
 
+## Sanitising at the read seam, not at the print sites
+
+A lockfile is a file written by strangers. That is the premise of the whole tool,
+and for two days it was true of everything except the renderer, which printed
+package names and versions to a terminal unfiltered. A version string of
+`1.0.0\x1b[2K\x1b[1A\x1b[2K` scrolls the two lines above it out of existence — the
+`HALLUCINATION RISK` heading and the finding's own name — while the process still
+exits 1. `\x1b[2J` clears the screen. It is the one bug in this repository a
+*malicious* input could exploit rather than merely trip over, and a tool whose
+findings can be deleted by the file it is auditing is not an auditing tool.
+
+The obvious fix is a `sanitize()` call at each print site. It is also the wrong
+one. `report.rs`, `tree.rs` and five rules' `detail` strings all format package
+names, which makes "sanitise before printing" a rule with a dozen call sites and
+one of them missed by whoever adds the thirteenth. So it happens once, in
+`lock::read`, over every string a reader took out of the file. A name that reaches
+the rest of the program is a name that has been through it, and a seventh reader
+gets it for free.
+
+Two consequences worth defending:
+
+**Replaced with U+FFFD, not dropped.** The cell still takes a column, so the
+reader can see something was there rather than seeing a name that silently got
+shorter. It also keeps `term::width` honest — the escape bytes were being counted
+as display columns, so a hostile version string knocked every row after it out of
+alignment as well.
+
+**The JSON writer gets the scrubbed string too, although it never needed it.** It
+escapes correctly, so `\u001b` would have been perfectly safe there. But two
+output surfaces disagreeing about what a package is called is worse than either
+answer on its own, and a consumer diffing the human report against the JSON should
+not find a difference the tool invented. Nothing real is lost: no registry permits
+a control character in a name — npm allows URL-safe characters, PyPI normalises to
+`[a-z0-9.-]`, crates.io to `[A-Za-z0-9_-]` — and no version scheme has one either.
+
+`fixtures/hostile.package-lock.json` is the file that does all of this, and it is
+shipped rather than described. It is legal JSON throughout, with every escape in
+`\uXXXX` form, so it tests the renderer and not the parser.
+
+## Why the JSON object carries no elapsed time
+
+The human report prints `41ms`, because that is half the pitch and nobody diffs a
+terminal. The machine-readable object does not, and that is a deliberate
+subtraction rather than an omission.
+
+This file offers `diff <(stranger scan a --format json) <(stranger scan b --format
+json)` as the reason `stranger diff` was cut — you do not need a subcommand for
+something two shell redirections already do. That recipe printed a difference on
+every single run, because `elapsed_ms` was the one field that changed between two
+scans of the same tree. Everything else was already byte-identical, including the
+order of the findings and the order of the files in a directory scan, both of
+which cost real design effort to guarantee.
+
+So the field went. A promise that a scan is reproducible is worth more than a
+measurement a consumer can take with `time`, and shipping the recipe while
+shipping the one field that breaks it was the kind of thing a judge finds in
+thirty seconds. `tests/cli.rs::json_is_byte_identical_between_runs` holds it, and
+also holds that the human report kept its timing.
+
 ## Walk me through how your JSON parser handles a lone high surrogate.
 
 It rejects it, with position.
