@@ -21,7 +21,9 @@ $ stranger scan fixtures/poisoned.package-lock.json
 
   ⚠  VERSION DRIFT          55    same package at 2+ versions in one tree
 
-  risk 81/100    143ms    third-party deps used to compute this: 0
+  ·  UNPINNED               — no signal in this format
+
+  risk 81/100    56ms    third-party deps used to compute this: 0
 ```
 
 Critical findings get their lines. The rest are a count and what the count means,
@@ -47,6 +49,9 @@ $ stranger scan Cargo.lock
   Cargo.lock               0 packages   (0 direct · 0 transitive · 1 workspace)
 
   no findings
+  ·  INSTALL SCRIPTS        — no signal in this format
+  ·  UNPINNED               — no signal in this format
+
   risk 0/100    0ms    third-party deps used to compute this: 0
 ```
 
@@ -186,6 +191,7 @@ $ stranger tree accepts fixtures/npm-l.package-lock.json
   fixtures/npm-l.package-lock.json   npm · 754 packages
 
   accepts@2.0.0   node_modules/accepts
+     dev-only
 
      depended on by   in-degree 1
                       express@5.2.1
@@ -260,7 +266,7 @@ file is absent rather than being useless without it:
 $ rm -rf /tmp/empty-project && mkdir -p /tmp/empty-project
 $ stranger scan /tmp/empty-project
 
-  no lockfile in /tmp/empty-project
+  no lockfile stranger reads in /tmp/empty-project
   looked for: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock, go.mod
 ```
 

@@ -106,7 +106,7 @@ seven names in `lock::KNOWN` are the whole list:
 $ rm -rf /tmp/nolock && mkdir -p /tmp/nolock
 $ ./target/release/stranger scan /tmp/nolock
 
-  no lockfile in /tmp/nolock
+  no lockfile stranger reads in /tmp/nolock
   looked for: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock, go.mod
 ```
 
@@ -117,6 +117,25 @@ end does not: `requirements-dev.txt` and `deps.lock` are invisible to a director
 scan, and nothing inspects contents to second-guess that. Point at such a file
 directly and the reader is chosen by the same suffix rule, so it stays invisible
 there too.
+
+Two of those cuts are guesses rather than facts, and both are now printed under
+`-v` as `not descended into`, with the reason beside each one — a policy that
+hides a lockfile hides a lockfile, whether or not the policy was reasonable.
+
+`dist` is the guess. Most `dist/` directories are build output and auditing them
+is noise; some are the directory a package is published from, and the skip list
+cannot tell those apart. The hidden-directory rule is the bigger cut by far —
+every name starting with `.` goes, not just the seven dotted names below — and
+`.ci` and `.github` are both places people keep a real lockfile.
+
+Fourteen lockfile names are recognised and have no reader: `Gemfile.lock`,
+`Pipfile.lock`, `Podfile.lock`, `bun.lock`, `bun.lockb`, `composer.lock`,
+`conan.lock`, `go.sum`, `gradle.lockfile`, `mix.lock`, `packages.lock.json`,
+`pdm.lock`, `pubspec.lock` and `yarn.lock`. Finding one prints `found but not
+read:` and exits 0. Naming a file it will not read is not the same as reading
+it, and it is a great deal better than what it replaces — eight lockfiles in a
+directory used to print "no lockfile", which tells somebody with a yarn project
+that their repository has no lockfile.
 
 `walk::SKIP` names thirteen directories the walk will not enter — `node_modules`,
 `.git`, `target`, `vendor`, `.venv`, `venv`, `__pycache__`, `.tox`,

@@ -19,7 +19,9 @@ $ ./target/release/stranger scan fixtures/poisoned.package-lock.json
 
   ⚠  VERSION DRIFT          55    same package at 2+ versions in one tree
 
-  risk 81/100    141ms    third-party deps used to compute this: 0
+  ·  UNPINNED               — no signal in this format
+
+  risk 81/100    71ms    third-party deps used to compute this: 0
 ```
 
 ## The header
@@ -45,7 +47,9 @@ $ ./target/release/stranger scan fixtures/npm-xl.package-lock.json
 
   ⚠  VERSION DRIFT          76    same package at 2+ versions in one tree
 
-  risk 62/100    392ms    third-party deps used to compute this: 0
+  ·  UNPINNED               — no signal in this format
+
+  risk 62/100    382ms    third-party deps used to compute this: 0
 ```
 
 The file holds 1,390 entries. 14 of them are your own code, so the tree you got
@@ -72,7 +76,9 @@ $ ./target/release/stranger scan -v fixtures/npm-xs.package-lock.json
      has-symbols@1.1.0        predicate-shaped, resolves nothing · size not measured, see rule docs
      hasown@2.0.4             one expression, one publisher · inlining it removes an account from your build
 
-  risk 9/100    13ms    third-party deps used to compute this: 0
+  ·  UNPINNED               — no signal in this format
+
+  risk 9/100    6ms    third-party deps used to compute this: 0
 ```
 
 `-q` drops the header and the risk line and prints findings only, which is the

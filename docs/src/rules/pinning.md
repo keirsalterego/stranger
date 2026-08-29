@@ -22,7 +22,9 @@ $ ./target/release/stranger scan -v fixtures/poisoned.requirements.txt
      numpy                    no version specifier · resolves to whatever is newest at install time
      urllib3                  >=1.26 · a range, so the file does not say what installs
 
-  risk 79/100    28ms    third-party deps used to compute this: 0
+  ·  INSTALL SCRIPTS        — no signal in this format
+
+  risk 79/100    9ms    third-party deps used to compute this: 0
 ```
 
 The file behind that:
@@ -138,6 +140,8 @@ $ ./target/release/stranger scan /tmp/freeze
   requirements.txt         4 packages   (4 direct · 0 transitive)
 
   no findings
+  ·  INSTALL SCRIPTS        — no signal in this format
+
   risk 0/100    0ms    third-party deps used to compute this: 0
 ```
 

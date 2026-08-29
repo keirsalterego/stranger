@@ -36,7 +36,7 @@ for and exits 0:
 $ rm -rf /tmp/empty && mkdir -p /tmp/empty
 $ ./target/release/stranger scan /tmp/empty
 
-  no lockfile in /tmp/empty
+  no lockfile stranger reads in /tmp/empty
   looked for: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock, go.mod
 
 $ echo $?

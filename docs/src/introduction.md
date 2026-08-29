@@ -25,7 +25,9 @@ $ ./target/release/stranger scan fixtures/poisoned.package-lock.json
 
   ⚠  VERSION DRIFT          55    same package at 2+ versions in one tree
 
-  risk 81/100    141ms    third-party deps used to compute this: 0
+  ·  UNPINNED               — no signal in this format
+
+  risk 81/100    99ms    third-party deps used to compute this: 0
 ```
 
 Three planted names, three findings, no false positives. The critical rule lists
@@ -80,7 +82,7 @@ what it looked for and exits 0:
 $ rm -rf /tmp/empty && mkdir -p /tmp/empty
 $ ./target/release/stranger scan /tmp/empty
 
-  no lockfile in /tmp/empty
+  no lockfile stranger reads in /tmp/empty
   looked for: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock, go.mod
 
 $ echo $?

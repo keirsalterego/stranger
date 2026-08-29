@@ -13,7 +13,9 @@ $ ./target/release/stranger scan fixtures/npm-xl.package-lock.json
 
   ⚠  VERSION DRIFT          76    same package at 2+ versions in one tree
 
-  risk 62/100    392ms    third-party deps used to compute this: 0
+  ·  UNPINNED               — no signal in this format
+
+  risk 62/100    456ms    third-party deps used to compute this: 0
 ```
 
 All five rules can fire on an npm tree, though `pinning` never will: every entry
@@ -139,7 +141,9 @@ $ ./target/release/stranger scan fixtures/npm-s.package-lock.json
 
   ⚠  VERSION DRIFT          30    same package at 2+ versions in one tree
 
-  risk 56/100    65ms    third-party deps used to compute this: 0
+  ·  UNPINNED               — no signal in this format
+
+  risk 56/100    53ms    third-party deps used to compute this: 0
 ```
 
 ## Fixture counts

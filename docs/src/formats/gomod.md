@@ -9,6 +9,10 @@ $ ./target/release/stranger scan fixtures/gomod-m.go.mod
   gomod-m.go.mod           174 packages   (50 direct · 124 transitive)
 
   no findings
+  ·  HALLUCINATION RISK     — no signal in this format
+  ·  INSTALL SCRIPTS        — no signal in this format
+  ·  UNPINNED               — no signal in this format
+
   risk 0/100    0ms    third-party deps used to compute this: 0
 ```
 
@@ -119,7 +123,7 @@ What is left is the tree, the split, and the package list:
 
 ```console
 $ ./target/release/stranger scan --format json fixtures/gomod-xs.go.mod
-{"source":"fixtures/gomod-xs.go.mod","ecosystem":"go","packages":6,"direct":5,"transitive":1,"workspace":0,"integrity":0,"risk":0,"findings":[]}
+{"source":"fixtures/gomod-xs.go.mod","ecosystem":"go","packages":6,"direct":5,"transitive":1,"workspace":0,"integrity":0,"risk":0,"findings":[],"not_applicable":["slopsquat","install-script","pinning"]}
 ```
 
 ## Syntax errors carry a position

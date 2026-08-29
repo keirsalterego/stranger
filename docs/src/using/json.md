@@ -29,8 +29,49 @@ $ ./target/release/stranger scan --format json /tmp/mixed | jq -c '{source, pack
 
 ```console
 $ ./target/release/stranger scan --format json fixtures/poisoned.requirements.txt
-{"source":"fixtures/poisoned.requirements.txt","ecosystem":"pypi","packages":6,"direct":6,"transitive":0,"workspace":0,"integrity":0,"risk":79,"findings":[{"rule":"slopsquat","severity":"critical","package":"python-dateutils","version":"2.9.0","detail":"not in corpus · d=1 from \"python-dateutil\" · root-only, no parent"},{"rule":"slopsquat","severity":"critical","package":"requests-http","version":"1.0.2","detail":"not in corpus · d=2 from \"requests-html\" · root-only, no parent"},{"rule":"pinning","severity":"low","package":"flask","version":"","detail":"~=3.0 · capped at the major, still floats below the cap"},{"rule":"pinning","severity":"high","package":"numpy","version":"","detail":"no version specifier · resolves to whatever is newest at install time"},{"rule":"pinning","severity":"medium","package":"urllib3","version":"","detail":">=1.26 · a range, so the file does not say what installs"}]}
+{"source":"fixtures/poisoned.requirements.txt","ecosystem":"pypi","packages":6,"direct":6,"transitive":0,"workspace":0,"integrity":0,"risk":79,"findings":[{"rule":"slopsquat","severity":"critical","package":"python-dateutils","version":"2.9.0","detail":"not in corpus · d=1 from \"python-dateutil\" · root-only, no parent"},{"rule":"slopsquat","severity":"critical","package":"requests-http","version":"1.0.2","detail":"not in corpus · d=2 from \"requests-html\" · root-only, no parent"},{"rule":"pinning","severity":"low","package":"flask","version":"","detail":"~=3.0 · capped at the major, still floats below the cap"},{"rule":"pinning","severity":"high","package":"numpy","version":"","detail":"no version specifier · resolves to whatever is newest at install time"},{"rule":"pinning","severity":"medium","package":"urllib3","version":"","detail":">=1.26 · a range, so the file does not say what installs"}],"not_applicable":["install-script"]}
 ```
+
+## The blind-spot object
+
+A scan that could not see everything leads with one extra object, and it is the
+one with **no `source` key** — which is how a consumer tells the two apart
+without guessing:
+
+```console
+$ rm -rf /tmp/blind && mkdir -p /tmp/blind/ok /tmp/blind/locked
+$ cp fixtures/npm-xs.package-lock.json /tmp/blind/ok/package-lock.json
+$ touch /tmp/blind/yarn.lock
+$ chmod 000 /tmp/blind/locked
+$ ./target/release/stranger scan --format json /tmp/blind | head -1
+{"unreadable":["/tmp/blind/locked"],"unsupported":["yarn.lock"]}
+$ chmod 755 /tmp/blind/locked
+```
+
+`unreadable` is directories that exist and would not open. Each one removes an
+unknown number of lockfiles from the answer, so the scan exits **2** rather than
+reporting on a list it knows is short. `unsupported` is lockfile names with no
+reader behind them, which is information rather than a failure and does not
+change the exit code.
+
+Prose on this stream is the one thing a consumer reading a line at a time cannot
+survive. A second object shape is not, which is why the blind spots are JSON here
+and a sentence in the human report.
+
+## `not_applicable`, and why it is not the same as clean
+
+A rule that cannot fire in a format is not a rule that found nothing.
+`poetry.lock` records no install-script flag at all, so the scripts rule is mute
+there — and a CI gate that only sees `"findings":[]` would read that as a Python
+project with no install-time code execution, which is not a claim this tool can
+make about any Python project.
+
+```console
+$ ./target/release/stranger scan --format json fixtures/poetry-m.poetry.lock | jq -c '{findings: (.findings|length), not_applicable}'
+{"findings":0,"not_applicable":["install-script","pinning"]}
+```
+
+The human report says the same thing with a `·` instead of a `⚠`.
 
 ## The object
 
@@ -43,6 +84,7 @@ $ ./target/release/stranger scan --format json fixtures/poisoned.requirements.tx
 | `transitive` | number | `packages - direct` |
 | `workspace` | number | first-party entries set aside; 0 on a non-monorepo |
 | `integrity` | number | third-party entries that recorded an integrity field. **Presence, never correctness** — std ships no crypto, so no hash is ever computed. See [Limits](../limits.md) |
+| `not_applicable` | array | rules that cannot fire in this format, by id. Absent from the array is not the same as clean — see below |
 | `risk` | number | 0–98; a band for the worst severity plus a term for volume |
 | `findings` | array | worst rule first, then alphabetical by package within a rule |
 

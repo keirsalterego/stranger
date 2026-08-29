@@ -19,7 +19,9 @@ $ ./target/release/stranger scan fixtures/poisoned.requirements.txt
 
   ⚠  UNPINNED               3     no exact version recorded
 
-  risk 79/100    15ms    third-party deps used to compute this: 0
+  ·  INSTALL SCRIPTS        — no signal in this format
+
+  risk 79/100    9ms    third-party deps used to compute this: 0
 ```
 
 ## The format is flat, and the detection rule pays for it
@@ -49,7 +51,10 @@ $ ./target/release/stranger scan fixtures/poetry-m.poetry.lock
   poetry-m.poetry.lock     233 packages   (75 direct · 158 transitive)
 
   no findings
-  risk 0/100    9ms    third-party deps used to compute this: 0
+  ·  INSTALL SCRIPTS        — no signal in this format
+  ·  UNPINNED               — no signal in this format
+
+  risk 0/100    10ms    third-party deps used to compute this: 0
 ```
 
 158 of those 233 are transitive, and they can only be called transitive because

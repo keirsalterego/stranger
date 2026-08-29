@@ -14,7 +14,10 @@ $ ./target/release/stranger scan fixtures/pnpm-l.pnpm-lock.yaml
 
   ⚠  VERSION DRIFT          58    same package at 2+ versions in one tree
 
-  risk 77/100    268ms    third-party deps used to compute this: 0
+  ·  INSTALL SCRIPTS        — no signal in this format
+  ·  UNPINNED               — no signal in this format
+
+  risk 77/100    232ms    third-party deps used to compute this: 0
 ```
 
 `taze` is a false positive and is left in the fixture on purpose —

@@ -86,7 +86,9 @@ $ ./target/release/stranger scan /tmp/a
   ⚠  HALLUCINATION RISK     1
      expres@4.18.2            not in corpus · d=1 from "express" · root-only, no parent
 
-  risk 77/100    48ms    third-party deps used to compute this: 0
+  ·  UNPINNED               — no signal in this format
+
+  risk 77/100    34ms    third-party deps used to compute this: 0
 ```
 
 Now the same name, reached through a real package that claims to depend on it:
@@ -114,7 +116,9 @@ $ ./target/release/stranger scan /tmp/b
   package-lock.json        2 packages   (1 direct · 1 transitive)
 
   no findings
-  risk 0/100    7ms    third-party deps used to compute this: 0
+  ·  UNPINNED               — no signal in this format
+
+  risk 0/100    6ms    third-party deps used to compute this: 0
 ```
 
 Clauses 1 and 2 are identical in both files. `expres` is absent from the corpus
@@ -166,7 +170,9 @@ $ ./target/release/stranger scan /tmp/c
   ⚠  HALLUCINATION RISK     1
      expres@4.18.2            not in corpus · d=1 from "express" · root-only, no parent
 
-  risk 77/100    45ms    third-party deps used to compute this: 0
+  ·  UNPINNED               — no signal in this format
+
+  risk 77/100    20ms    third-party deps used to compute this: 0
 ```
 
 The workspace member declared it and the rule still fires. Compare with `/tmp/b`,
@@ -220,7 +226,9 @@ $ ./target/release/stranger scan fixtures/poisoned.requirements.txt
 
   ⚠  UNPINNED               3     no exact version recorded
 
-  risk 79/100    15ms    third-party deps used to compute this: 0
+  ·  INSTALL SCRIPTS        — no signal in this format
+
+  risk 79/100    10ms    third-party deps used to compute this: 0
 ```
 
 `requests-html` is a real PyPI package two edits away. The finding is a true

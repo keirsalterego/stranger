@@ -108,13 +108,44 @@ $ echo $?
 that fails with EPIPE. That is the shell working correctly, so it exits 0 and
 says nothing. The alternative is an error message on every piped invocation.
 
+## A directory it could not open is an error
+
+```console
+$ rm -rf /tmp/shut && mkdir -p /tmp/shut/proj
+$ cp fixtures/poisoned.package-lock.json /tmp/shut/proj/
+$ chmod 000 /tmp/shut/proj
+$ ./target/release/stranger scan /tmp/shut --fail-on critical
+
+  could not look inside 1 path — this scan is incomplete
+     /tmp/shut/proj
+
+$ echo $?
+2
+$ chmod 755 /tmp/shut/proj
+```
+
+Exit 2, and it **outranks the findings** — a directory that will not open is not
+a bump, it is stranger being unable to do its job. `--fail-on` asks "is there a
+finding at or above this level", and over a list of lockfiles that is short by an
+unknown number the honest answer is neither 0 nor 1.
+
+**The cost is real and it is worth naming.** One `0700` directory anywhere under
+the scan root turns the gate red, whether or not it had a lockfile in it. That is
+the trade: the alternative is the bug this replaced, where `chmod 000` over a
+directory holding a poisoned lockfile printed `no lockfile` and exited 0. A green
+tick over a directory nobody could open is worse than a red one over a directory
+that turned out to be empty, because only one of those two failures is silent.
+
+A directory that is *absent* is not a blind spot and is not counted — a path that
+is not there hides nothing.
+
 ## No lockfile is not an error
 
 ```console
 $ rm -rf /tmp/empty && mkdir -p /tmp/empty
 $ ./target/release/stranger scan /tmp/empty
 
-  no lockfile in /tmp/empty
+  no lockfile stranger reads in /tmp/empty
   looked for: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock, go.mod
 
 $ echo $?

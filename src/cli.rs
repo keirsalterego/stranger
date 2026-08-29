@@ -19,7 +19,9 @@ options:
   --format <human|json>          output format (default: human); a directory
                                  scan writes one object per lockfile per line,
                                  so the stream is NDJSON — read it a line at a
-                                 time, `jq` does, `json.load` does not
+                                 time, `jq` does, `json.load` does not. A scan
+                                 that could not see everything leads with one
+                                 more object, the one with no `source` key
   --fail-on <level>              scan: exit 1 when a finding is at or above
                                  low | medium | high | critical
   --depth <n>                    tree: how deep to print out-edges
@@ -36,7 +38,9 @@ so a path that starts with `-` is still reachable.
 exit codes:
   0  clean, or findings below the --fail-on threshold
   1  a finding at or above the threshold
-  2  bad usage, or a file that could not be read
+  2  bad usage, a file that could not be read, or a directory that could not
+     be opened — an unreadable directory outranks the findings, because a
+     scan short by an unknown number of lockfiles cannot answer --fail-on
 ";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -14,6 +14,9 @@ $ ./target/release/stranger scan Cargo.lock
   Cargo.lock               0 packages   (0 direct · 0 transitive · 1 workspace)
 
   no findings
+  ·  INSTALL SCRIPTS        — no signal in this format
+  ·  UNPINNED               — no signal in this format
+
   risk 0/100    0ms    third-party deps used to compute this: 0
 ```
 
@@ -58,6 +61,9 @@ $ ./target/release/stranger scan ~/keir.is-a.dev
   ⚠  TRIVIAL                23    (2.7% of third-party)
 
   ⚠  VERSION DRIFT          58    same package at 2+ versions in one tree
+
+  ·  INSTALL SCRIPTS        — no signal in this format
+  ·  UNPINNED               — no signal in this format
 
   risk 77/100    233ms    third-party deps used to compute this: 0
 ```

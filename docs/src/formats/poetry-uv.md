@@ -11,7 +11,10 @@ $ ./target/release/stranger scan fixtures/poetry-m.poetry.lock
   poetry-m.poetry.lock     233 packages   (75 direct · 158 transitive)
 
   no findings
-  risk 0/100    8ms    third-party deps used to compute this: 0
+  ·  INSTALL SCRIPTS        — no signal in this format
+  ·  UNPINNED               — no signal in this format
+
+  risk 0/100    16ms    third-party deps used to compute this: 0
 ```
 
 ```console
@@ -21,7 +24,10 @@ $ ./target/release/stranger scan fixtures/uv-m.uv.lock
 
   ⚠  VERSION DRIFT          1     same package at 2+ versions in one tree
 
-  risk 27/100    11ms    third-party deps used to compute this: 0
+  ·  INSTALL SCRIPTS        — no signal in this format
+  ·  UNPINNED               — no signal in this format
+
+  risk 27/100    20ms    third-party deps used to compute this: 0
 ```
 
 A clean report on a 233-package tree is a real result and is published as one.

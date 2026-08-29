@@ -83,7 +83,9 @@ $ ./target/release/stranger scan --fail-on high fixtures/poisoned.package-lock.j
 
   ⚠  VERSION DRIFT          55    same package at 2+ versions in one tree
 
-  risk 81/100    141ms    third-party deps used to compute this: 0
+  ·  UNPINNED               — no signal in this format
+
+  risk 81/100    55ms    third-party deps used to compute this: 0
 $ echo $?
 1
 ```

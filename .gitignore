@@ -8,3 +8,11 @@
 
 # make bench writes this; it is a timing on one machine, not a claim
 bench.md
+
+# Artefacts the docs' own commands produce. `docs/check-output.py` runs the
+# console blocks for real — that is what makes the book reproduce — and the
+# pull-request cookbook writes `stranger scan --format json . > stranger.json`
+# into the repository root, exactly as a reader would. One of those got
+# committed before this line existed.
+stranger.json
+__pycache__/

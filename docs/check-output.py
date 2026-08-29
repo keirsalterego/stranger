@@ -26,7 +26,7 @@ worst was on page one, in the block that proves the graceful-degradation half of
 the compliance argument. A judge pasting it got exit 2.
 
 So the setup lines are executed rather than skipped. `mkdir`, `cat > … <<'EOF'`,
-`cp`, `rm`, `chmod` and `ln` run for real, in order, before the command that
+`cp`, `touch`, `rm`, `chmod` and `ln` run for real, in order, before the command that
 depends on them — which means the page a reader pastes is literally the page that
 was verified, and a missing `mkdir` is a failure here rather than a surprise for
 somebody else. Nothing else executes: a line starting with anything not on that
@@ -63,7 +63,7 @@ PAGES = sorted((ROOT / "docs" / "src").rglob("*.md")) + [
 # pipeline is allowed because several pages quote what `jq` made of the output
 # rather than the output. Anything else is counted unverified and reported.
 RUNNABLE = re.compile(
-    r"^(?:\./target/release/)?(?:stranger|mkdir|cat|cp|rm|chmod|ln|find|printf|echo)\b"
+    r"^(?:\./target/release/)?(?:stranger|mkdir|cat|cp|rm|chmod|ln|find|printf|echo|touch)\b"
 )
 HEREDOC = re.compile(r"<<-?'?(\w+)'?")
 # `12ms` in the human report, and `"elapsed_ms":12` from when JSON carried the

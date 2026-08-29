@@ -48,6 +48,7 @@ $ ./target/release/stranger tree accepts fixtures/npm-l.package-lock.json
   fixtures/npm-l.package-lock.json   npm · 754 packages
 
   accepts@2.0.0   node_modules/accepts
+     dev-only
 
      depended on by   in-degree 1
                       express@5.2.1
@@ -70,6 +71,7 @@ $ ./target/release/stranger tree qs fixtures/npm-l.package-lock.json --depth 1
   fixtures/npm-l.package-lock.json   npm · 754 packages
 
   qs@6.15.3   node_modules/qs
+     dev-only
 
      depended on by   in-degree 2
                       body-parser@2.3.0
@@ -110,6 +112,7 @@ $ ./target/release/stranger tree ansi-regex fixtures/npm-l.package-lock.json
   fixtures/npm-l.package-lock.json   npm · 754 packages
 
   ansi-regex@5.0.1   node_modules/ansi-regex
+     dev-only
 
      depended on by   in-degree 1
                       strip-ansi@6.0.1
@@ -117,6 +120,7 @@ $ ./target/release/stranger tree ansi-regex fixtures/npm-l.package-lock.json
      depends on       nothing
 
   ansi-regex@6.2.2   node_modules/ora/node_modules/ansi-regex
+     dev-only
 
      depended on by   in-degree 1
                       strip-ansi@7.2.0
@@ -124,6 +128,7 @@ $ ./target/release/stranger tree ansi-regex fixtures/npm-l.package-lock.json
      depends on       nothing
 
   ansi-regex@6.2.2   node_modules/string-width/node_modules/ansi-regex
+     dev-only
 
      depended on by   in-degree 1
                       strip-ansi@7.2.0
