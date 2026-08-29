@@ -328,12 +328,13 @@ fn scrub(mut tree: Tree) -> Tree {
     tree
 }
 
-/// Every known lockfile under `dir`.
+/// Every known lockfile under `dir`, and everywhere the walk could not look.
 ///
 /// The walk is what makes this usable on a monorepo, and the skip list in
 /// `crate::walk` is what keeps it from wandering into `node_modules` and
-/// auditing four hundred vendored lockfiles belonging to other people.
-pub fn discover(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+/// auditing four hundred vendored lockfiles belonging to other people. What it
+/// skipped and what it could not open come back too — see `walk::Walk`.
+pub fn discover(dir: &std::path::Path) -> crate::walk::Walk {
     crate::walk::lockfiles(dir, KNOWN)
 }
 

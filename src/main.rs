@@ -14,8 +14,9 @@ use stranger::error::{Error, Result};
 use stranger::lock;
 use stranger::report;
 use stranger::rules::{Finding, Severity, drift, pinning, scripts, slopsquat, trivial};
-use stranger::term::Term;
+use stranger::term::{self, Term};
 use stranger::tree;
+use stranger::walk::Walk;
 
 fn main() -> ExitCode {
     match run() {
@@ -81,7 +82,7 @@ fn run() -> Result<ExitCode> {
         Command::Tree(o) => return tree(o),
     };
 
-    let lockfiles = lockfiles(&opts.path)?;
+    let walk = discover(&opts.path)?;
 
     // Asked once, here. Nothing below this line reads the environment again.
     let term = Term::detect(matches!(opts.color, Color::Never));
@@ -89,7 +90,24 @@ fn run() -> Result<ExitCode> {
     let stdout = io::stdout();
     let mut out = stdout.lock();
 
-    if lockfiles.is_empty() {
+    // Before the reports, because it changes how every line below it should be
+    // read, and because `| head -5` must not be able to hide it.
+    //
+    // `.ok()`: a caveat that could not be printed must not change the exit
+    // code. The one it qualifies is decided below from `walk` directly, so the
+    // failure mode of a closed stdout here is a missing sentence and a correct
+    // 2, rather than an error about stdout standing in for the answer.
+    blind_spots(
+        &mut out,
+        &walk,
+        &opts.path,
+        opts.format,
+        opts.verbose,
+        opts.quiet,
+    )
+    .ok();
+
+    if walk.found.is_empty() && walk.unreadable.is_empty() {
         // Their FAQ makes degrading gracefully a condition of the ruling that
         // lets us read these files at all, so this is a requirement and not
         // polish. Say what was looked for, exit clean.
@@ -116,7 +134,7 @@ fn run() -> Result<ExitCode> {
     // in the order the paths came in, so the stderr stream is as reproducible
     // as the stdout one. Reporting whichever thread failed first was the one
     // part of a scan that changed between two runs over the same tree.
-    for scanned in scan_all(&lockfiles) {
+    for scanned in scan_all(&walk.found) {
         match scanned {
             Ok(a) => {
                 read += 1;
@@ -141,14 +159,37 @@ fn run() -> Result<ExitCode> {
         }
     }
 
-    // Exit 2 is "stranger could not do its job", not "stranger hit a bump". A
-    // scan that read something reported findings, so those decide the code as
-    // usual and the unreadable file is on stderr where a person will see it; a
-    // scan that read nothing has nothing to say, and letting that exit 0 would
-    // have a CI gate call an unopenable tree clean. The middle case — some
-    // read, some not — is deliberately not its own code: `--fail-on` answers
-    // "is there a finding", and no third value fits in that answer.
-    if read == 0 {
+    // Exit 2 is "stranger could not do its job", not "stranger hit a bump".
+    //
+    // `read == 0` is the older half: lockfiles were found and none of them
+    // parsed, so there is nothing to gate on and exiting 0 would have a CI
+    // gate call an unreadable tree clean. A scan that read *something*
+    // reported findings, and those decide the code as usual while the file
+    // that would not parse sits on stderr where a person will see it. The
+    // middle case is deliberately not its own code: `--fail-on` answers "is
+    // there a finding", and no third value fits in that answer.
+    //
+    // A directory the walk could not open is the other half, and it outranks
+    // the findings even when its siblings read fine. An unreadable *root* is
+    // the easy half of that — stranger was pointed at something it cannot
+    // open, and there is no answer at all. The judgement call is the
+    // unreadable *subdirectory*, which looks like the unparseable-sibling case
+    // above and is not, because the two holes are different shapes. A lockfile
+    // that will not parse is named: the list of what is there is complete,
+    // one entry of it failed, and the reader can see exactly what they are
+    // missing. A directory that will not open removes an unknown number of
+    // entries from that list, and stranger cannot say whether it held nothing
+    // or held the poisoned file. `--fail-on` asks "is there a finding at or
+    // above this level" over a list that is short by an unknown amount, and
+    // the honest answer to that is neither 0 nor 1.
+    //
+    // The cost is real and I am choosing to pay it: one 0700 directory
+    // anywhere under the scan root turns the gate red, and the fix is the
+    // user's to make without a flag from us — chmod it, or point stranger at
+    // the subtrees it can read. The alternative is a green tick over a
+    // directory nobody could open, which is the exact failure this tool exists
+    // to find in other people's dependency trees.
+    if !walk.unreadable.is_empty() || read == 0 {
         return Ok(ExitCode::from(2));
     }
 
@@ -158,9 +199,15 @@ fn run() -> Result<ExitCode> {
     })
 }
 
-fn lockfiles(path: &Path) -> Result<Vec<PathBuf>> {
+fn discover(path: &Path) -> Result<Walk> {
     if path.is_file() {
-        Ok(vec![path.to_path_buf()])
+        // A path given by hand is not discovery. Nothing was skipped and
+        // nothing could have gone unlooked-at, so the three blind-spot lists
+        // are empty by construction rather than by luck.
+        Ok(Walk {
+            found: vec![path.to_path_buf()],
+            ..Walk::default()
+        })
     } else if path.is_dir() {
         Ok(lock::discover(path))
     } else {
@@ -178,9 +225,113 @@ fn lockfiles(path: &Path) -> Result<Vec<PathBuf>> {
     }
 }
 
+/// "I looked and found nothing", said so it cannot be mistaken for "I could not
+/// look" — which is what `blind_spots` above it has already ruled out.
 fn nothing_to_read(out: &mut impl Write, path: &Path) -> io::Result<()> {
-    writeln!(out, "\n  no lockfile in {}", path.display())?;
+    writeln!(out, "\n  no lockfile stranger reads in {}", path.display())?;
     writeln!(out, "  looked for: {}\n", lock::KNOWN.join(", "))
+}
+
+/// Everything the walk did not look at, printed before the report it qualifies.
+///
+/// Three lists, three audiences. The unreadable paths are a failure and go out
+/// whatever the flags say, because they are about to become an exit code and a
+/// report that does not mention them is a report that lies by omission. The
+/// unsupported lockfiles are the FAQ's graceful-degradation condition: naming
+/// `yarn.lock` is not reading it, but "no lockfile in ." told somebody holding
+/// one that their repository has none, and a declared cut the user can see is
+/// a different thing from a cut only the author knows about. The skipped
+/// directories are policy — thirteen names, every hidden directory and
+/// everything past `walk::MAX_DEPTH` — so they stay behind `-v`, but policy
+/// that hides a lockfile hides a lockfile just the same.
+///
+/// In JSON mode all of it collapses to one object on one line. Prose on that
+/// stream would be the one thing that breaks a consumer reading it line by
+/// line; a second object shape does not, and it has no `source` key, which is
+/// how a consumer tells it from a scan. `--quiet` keeps the failure and drops
+/// the rest.
+fn blind_spots(
+    out: &mut impl Write,
+    walk: &Walk,
+    root: &Path,
+    format: Format,
+    verbose: bool,
+    quiet: bool,
+) -> io::Result<()> {
+    let unsupported = if quiet { &[][..] } else { &walk.unsupported };
+    if walk.unreadable.is_empty() && unsupported.is_empty() {
+        return skipped(out, walk, root, format, verbose, quiet);
+    }
+
+    if matches!(format, Format::Json) {
+        write!(out, "{{\"unreadable\":[")?;
+        for (i, p) in walk.unreadable.iter().enumerate() {
+            if i > 0 {
+                write!(out, ",")?;
+            }
+            report::string(out, &term::sanitize(&p.display().to_string()))?;
+        }
+        write!(out, "],\"unsupported\":[")?;
+        for (i, name) in unsupported.iter().enumerate() {
+            if i > 0 {
+                write!(out, ",")?;
+            }
+            report::string(out, name)?;
+        }
+        return writeln!(out, "]}}");
+    }
+
+    if !walk.unreadable.is_empty() {
+        let n = walk.unreadable.len();
+        let s = if n == 1 { "" } else { "s" };
+        writeln!(
+            out,
+            "\n  could not look inside {n} path{s} — this scan is incomplete"
+        )?;
+        for p in &walk.unreadable {
+            writeln!(out, "     {}", term::sanitize(&p.display().to_string()))?;
+        }
+        // The blank line belongs to whatever comes next, and everything that
+        // can come next brings its own.
+        if unsupported.is_empty() {
+            writeln!(out)?;
+        }
+    }
+    if !unsupported.is_empty() {
+        writeln!(out, "\n  found but not read: {}", unsupported.join(", "))?;
+    }
+    skipped(out, walk, root, format, verbose, quiet)
+}
+
+/// The `-v` half. Split out only because `blind_spots` has two early returns
+/// that both still owe it.
+fn skipped(
+    out: &mut impl Write,
+    walk: &Walk,
+    root: &Path,
+    format: Format,
+    verbose: bool,
+    quiet: bool,
+) -> io::Result<()> {
+    if !verbose || quiet || walk.skipped.is_empty() || matches!(format, Format::Json) {
+        return Ok(());
+    }
+    // Relative to the scan root, because the absolute paths are all the same
+    // for the first sixty characters and the part that differs is the part
+    // being reported.
+    let names: Vec<String> = walk
+        .skipped
+        .iter()
+        .map(|(p, _)| {
+            term::sanitize(&p.strip_prefix(root).unwrap_or(p).display().to_string()).into_owned()
+        })
+        .collect();
+    let w = term::column(names.iter().map(String::as_str), 24);
+    writeln!(out, "\n  not descended into ({})", walk.skipped.len())?;
+    for (name, (_, why)) in names.iter().zip(&walk.skipped) {
+        writeln!(out, "     {} {why}", term::pad(name, w))?;
+    }
+    Ok(())
 }
 
 /// `stranger tree <pkg>` — read the same lockfiles, run no rules, and print the
@@ -192,11 +343,20 @@ fn nothing_to_read(out: &mut impl Write, path: &Path) -> io::Result<()> {
 /// takes long enough to notice and not long enough to thread, and reading them
 /// in path order means the output is in path order for free.
 fn tree(opts: TreeOptions) -> Result<ExitCode> {
-    let paths = lockfiles(&opts.path)?;
+    let walk = discover(&opts.path)?;
     let term = Term::detect(matches!(opts.color, Color::Never));
     let stdout = io::stdout();
     let mut out = stdout.lock();
 
+    // `tree` has no `-v`, so the skipped list stays unprinted here — the rest
+    // matters just as much as it does in a scan. "no such package" over a
+    // directory that would not open is the same wrong answer as "no findings".
+    blind_spots(&mut out, &walk, &opts.path, opts.format, false, opts.quiet).ok();
+    if !walk.unreadable.is_empty() {
+        return Ok(ExitCode::from(2));
+    }
+
+    let paths = walk.found;
     if paths.is_empty() && matches!(opts.format, Format::Human) {
         // Same degradation as a scan of an empty directory: say what was
         // looked for, exit clean. A JSON consumer gets the `found: false`

@@ -287,7 +287,11 @@ pub fn json(w: &mut impl Write, tree: &Tree, findings: &[Finding]) -> io::Result
 /// Writing JSON is not the same job as reading it, so this is not the parser
 /// run backwards — it is eight lines that escape what RFC 8259 section 7
 /// requires and nothing else.
-pub(crate) fn string(w: &mut impl Write, s: &str) -> io::Result<()> {
+///
+/// `pub` rather than `pub(crate)` because `main` writes one JSON line of its
+/// own — the blind-spot object, which is about the walk and so has no `Tree`
+/// to hang off. Two escapers would be one escaper and one bug.
+pub fn string(w: &mut impl Write, s: &str) -> io::Result<()> {
     write!(w, "\"")?;
     for c in s.chars() {
         match c {
