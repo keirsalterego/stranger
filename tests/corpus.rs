@@ -51,15 +51,17 @@ fn sizes() {
     assert!(corpus::names(Ecosystem::Go).is_empty());
 }
 
-/// The `Ecosystem::Go` arm in `corpus::names` says nothing produces that
-/// variant. This is what makes the claim checkable rather than folklore: no
-/// reader looks for a Go manifest, so no scan can reach the arm. Add a Go
-/// reader and this fails, which is the moment the comment needs rewriting.
+/// Go is read and Go is not checked, and those are two facts rather than one.
+/// This test used to assert the first half away — no `go.mod` in `KNOWN`, so
+/// nothing could reach an empty corpus. A reader landed, so the half that has
+/// to keep holding is the second: `tests/gomod.rs` proves the rule stays
+/// silent, and this proves why it has to.
 #[test]
-fn no_go_manifest_is_a_lockfile_stranger_reads() {
+fn go_is_read_and_still_has_no_corpus() {
+    assert!(stranger::lock::KNOWN.contains(&"go.mod"));
     assert!(
-        !stranger::lock::KNOWN.iter().any(|k| k.ends_with("go.mod")),
-        "a Go reader landed: the dead-arm comment in corpus.rs is now wrong"
+        corpus::names(Ecosystem::Go).is_empty(),
+        "a Go corpus appeared: README LIMITS and the slopsquat guard both claim there is none"
     );
 }
 

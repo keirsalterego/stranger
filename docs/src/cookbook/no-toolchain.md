@@ -36,7 +36,7 @@ for and exits 0:
 $ ./target/release/stranger scan /tmp/empty
 
   no lockfile in /tmp/empty
-  looked for: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock
+  looked for: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock, go.mod
 
 $ echo $?
 0
@@ -53,15 +53,18 @@ nearest-neighbour search would find nothing, and the rule would report nothing. 
 absent corpus makes the tool quiet, not hysterical.
 
 That is not hypothetical. `Ecosystem::Go` runs in exactly that state on purpose:
-`proxy.golang.org` publishes no ranked list and module paths are domains, so there
-is no Go corpus and the detection rule can never fire on one. Named in
-[Limits](../limits.md) rather than shipped as a rule that silently does nothing.
+`go.mod` reads, `proxy.golang.org` publishes no ranked list and module paths are
+domains, so there is no Go corpus and the detection rule can never fire on one.
+The rule does not even reach its first clause there — an empty corpus stops it —
+so it is off by decision rather than by arithmetic. Named in
+[Limits](../limits.md) and [go](../formats/gomod.md) rather than shipped as a
+rule that silently does nothing.
 
 ## A filename it does not recognise
 
 ```console
 $ ./target/release/stranger scan /tmp/renametest/requirements-dev.txt
-stranger: requirements-dev.txt: not a lockfile stranger knows. It reads: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock
+stranger: requirements-dev.txt: not a lockfile stranger knows. It reads: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock, go.mod
 $ echo $?
 2
 ```
@@ -75,8 +78,9 @@ Pointing at a specific file you believe is a lockfile and being wrong is a usage
 error — exit 2. Scanning a directory that happens to hold nothing readable is not
 — exit 0. The difference is whether you asserted something.
 
-All six formats read, which is the point of this page: `Cargo.lock` needs no
-`cargo`, `uv.lock` needs no `uv`, and `pnpm-lock.yaml` needs no `pnpm` or Node.
+All seven formats read, which is the point of this page: `Cargo.lock` needs no
+`cargo`, `uv.lock` needs no `uv`, `pnpm-lock.yaml` needs no `pnpm` or Node, and
+`go.mod` needs no `go`.
 A semver comparator (`src/semver.rs`) exists and is tested and is not wired into
 the binary, because no rule has yet asked an ordering question.
 

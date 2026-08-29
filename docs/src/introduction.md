@@ -80,7 +80,7 @@ what it looked for and exits 0:
 $ ./target/release/stranger scan /tmp/empty
 
   no lockfile in /tmp/empty
-  looked for: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock
+  looked for: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock, go.mod
 
 $ echo $?
 0
@@ -88,9 +88,9 @@ $ echo $?
 
 ## What it reads today
 
-Six formats across four ecosystems: `package-lock.json` (v2, v3),
-`pnpm-lock.yaml` (v9), `Cargo.lock` (v3, v4), `poetry.lock`, `uv.lock` and
-`requirements.txt`. Five rules, one of which has an idea in it — the
+Seven formats across four ecosystems: `package-lock.json` (v2, v3),
+`pnpm-lock.yaml` (v9), `Cargo.lock` (v3, v4), `poetry.lock`, `uv.lock`,
+`requirements.txt` and `go.mod`. Five rules, one of which has an idea in it — the
 [co-occurrence rule](detection/rule.md), which separates a hallucinated name from
 a legitimate sibling using something other than spelling. The rest of this book
 is what those things do, what they measure, and where they are wrong.

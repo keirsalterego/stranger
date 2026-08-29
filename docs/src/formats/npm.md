@@ -37,11 +37,11 @@ the worst possible output for an auditing tool.
 package-lock.json. **A file with a `lockfileVersion` but no `packages` map** is
 refused too.
 
-**A filename that is not one of the six it knows:**
+**A filename that is not one of the seven it knows:**
 
 ```console
 $ ./target/release/stranger scan /tmp/renametest/requirements-dev.txt
-stranger: requirements-dev.txt: not a lockfile stranger knows. It reads: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock
+stranger: requirements-dev.txt: not a lockfile stranger knows. It reads: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock, go.mod
 ```
 
 `Cargo.lock` was the example here until the Cargo reader landed and it started
@@ -119,7 +119,7 @@ treated as manifest declarations rather than as evidence.
 ## Discovery
 
 `stranger scan <dir>` recurses, skipping `node_modules` and eleven other
-directories, and matches any filename ending in one of the six names it knows.
+directories, and matches any filename ending in one of the seven names it knows.
 
 Pointing at a file skips the walk, and the match there is the same suffix rule, so
 a lockfile you have renamed still reads:

@@ -3,14 +3,14 @@
 ## "no lockfile in ." on a project that has one
 
 Discovery recurses from the directory you named and matches filenames ending in
-one of six known names. A file renamed at the *front* still reads; one renamed at
+one of seven known names. A file renamed at the *front* still reads; one renamed at
 the back does not.
 
 ```console
 $ ./target/release/stranger scan /tmp/project
 
   no lockfile in /tmp/project
-  looked for: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock
+  looked for: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock, go.mod
 ```
 
 The usual cause is a name like `requirements-dev.txt`, which ends in `.txt` and
@@ -58,10 +58,10 @@ and cannot be read the same way.
 
 ```console
 $ ./target/release/stranger scan /tmp/renametest/requirements-dev.txt
-stranger: requirements-dev.txt: not a lockfile stranger knows. It reads: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock
+stranger: requirements-dev.txt: not a lockfile stranger knows. It reads: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock, go.mod
 ```
 
-Six formats in this build, and the error lists them from the same constant
+Seven formats in this build, and the error lists them from the same constant
 discovery uses, so the message cannot drift out of date the way this page did.
 
 You asserted the file was a lockfile and it does not match any name, so this is

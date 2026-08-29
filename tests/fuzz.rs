@@ -1,6 +1,6 @@
 //! Malformed input must produce an error, never a panic and never a hang.
 //!
-//! Three hand-written parsers and six readers, all of them walking bytes that
+//! Three hand-written parsers and seven readers, all of them walking bytes that
 //! came off somebody else's disk. The happy-path tests say the readers get the
 //! right answer from a well-formed file. Nothing said what they do with a
 //! truncated download, a merge-conflict marker, or a file that a disk flipped a
@@ -34,9 +34,11 @@
 //!
 //! Nothing in the readers. 5,000 iterations per reader here, plus three further
 //! seeds run by hand at this size and three more at 20,000 — on the order of
-//! 500,000 mutated inputs across six readers. That is a weak claim stated
-//! precisely rather than a strong one stated vaguely: this finds panics
-//! reachable from *nearly* valid input, and it has found none.
+//! 500,000 mutated inputs across the first six readers. The go.mod reader has
+//! had the same treatment at a smaller size, roughly 40,000 inputs: the shipped
+//! seed, three others, and one of those repeated at 20,000. That is a weak
+//! claim stated precisely rather than a strong one stated vaguely: this finds
+//! panics reachable from *nearly* valid input, and it has found none.
 
 use std::path::Path;
 
@@ -153,4 +155,9 @@ fn uv_survives_corruption() {
 #[test]
 fn pip_survives_corruption() {
     hammer("reqs-s.requirements.txt", stranger::lock::pip::read);
+}
+
+#[test]
+fn gomod_survives_corruption() {
+    hammer("gomod-m.go.mod", stranger::lock::gomod::read);
 }

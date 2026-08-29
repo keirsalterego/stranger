@@ -22,6 +22,7 @@
   - [cargo](formats/cargo.md)
   - [poetry and uv](formats/poetry-uv.md)
   - [pip](formats/pip.md)
+  - [go](formats/gomod.md)
 - [Cookbook]()
   - [Gate a pull request](cookbook/pull-request.md)
   - [Audit a lockfile you did not write](cookbook/foreign-lockfile.md)

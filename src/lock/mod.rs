@@ -1,6 +1,7 @@
 //! What every lockfile reader produces, regardless of ecosystem.
 
 pub mod cargo;
+pub mod gomod;
 pub mod npm;
 pub mod pip;
 pub mod pnpm;
@@ -148,6 +149,7 @@ pub const KNOWN: &[&str] = &[
     "requirements.txt",
     "poetry.lock",
     "uv.lock",
+    "go.mod",
 ];
 
 /// Read one lockfile, dispatching on its name.
@@ -162,8 +164,8 @@ pub fn read(path: &std::path::Path) -> crate::error::Result<Tree> {
     // still reads. Lockfiles get renamed the moment you collect more than one.
     //
     // Suffix matching only stays unambiguous while no known name is a suffix
-    // of another. None of these six is, so the arm order is documentation
-    // rather than precedence — but check it before adding a seventh.
+    // of another. None of these seven is, so the arm order is documentation
+    // rather than precedence — but check it before adding an eighth.
     let tree = if name.ends_with("package-lock.json") {
         npm::read(path, &src)
     } else if name.ends_with("pnpm-lock.yaml") {
@@ -176,6 +178,8 @@ pub fn read(path: &std::path::Path) -> crate::error::Result<Tree> {
         pypi::poetry(path, &src)
     } else if name.ends_with("uv.lock") {
         pypi::uv(path, &src)
+    } else if name.ends_with("go.mod") {
+        gomod::read(path, &src)
     } else {
         Err(crate::error::Error::usage(format!(
             "{name}: not a lockfile stranger knows. It reads: {}",

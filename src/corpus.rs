@@ -28,14 +28,17 @@ pub fn names(eco: Ecosystem) -> &'static [&'static str] {
         Ecosystem::Npm => &NPM,
         Ecosystem::PyPi => &PYPI,
         Ecosystem::Crates => &CRATES,
-        // Nothing in the codebase produces this variant. `lock::KNOWN` has no
-        // `go.mod`, so no scan reaches here and `stranger scan go.mod` exits 2
-        // with "not a lockfile stranger knows" — Go is not read at all, never
-        // mind read-and-not-checked. The arm is here for the day a reader
-        // lands, and the answer will still be empty: proxy.golang.org
-        // publishes no ranked list and module paths are domains, so edit
-        // distance over them is a different problem. Said out loud in README
-        // LIMITS rather than shipped as a rule that silently does nothing.
+        // Empty, and reached. `lock::gomod` reads `go.mod` now, so every Go
+        // scan comes through here and gets nothing — proxy.golang.org
+        // publishes no ranked list, and a module path is a domain, so edit
+        // distance over them is a different problem that a list nobody
+        // publishes cannot answer. Parsing the file and having no corpus for
+        // it are separate facts and both are true.
+        //
+        // The rule does not merely come out quiet by arithmetic: an empty
+        // corpus stops `slopsquat::scan` at its first line, so a Go tree is
+        // skipped by decision rather than by an accident of an empty list.
+        // Said out loud in README LIMITS too.
         Ecosystem::Go => &[],
     }
 }

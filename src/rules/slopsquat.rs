@@ -49,6 +49,20 @@ impl Default for Config<'_> {
 }
 
 pub fn scan(tree: &Tree, cfg: Config<'_>) -> Vec<Finding> {
+    // An ecosystem with no corpus has nothing for clause one to mean. Go is
+    // the one: `go.mod` reads, and `proxy.golang.org` publishes no ranked list
+    // of module paths, so "not in the corpus" would be "not in a list nobody
+    // publishes" and every module in every file would be a candidate.
+    //
+    // Asked of the compiled-in list rather than of `names`, because
+    // `cfg.corpus` is the ablation's handle and an ablation must not be able
+    // to switch a rule on for an ecosystem that has no corpus to thin. Both
+    // routes give no findings today — an empty list matches nothing and
+    // neighbours nothing — but only this one says it was decided.
+    if corpus::names(tree.ecosystem).is_empty() {
+        return Vec::new();
+    }
+
     let names = cfg.corpus.unwrap_or_else(|| corpus::names(tree.ecosystem));
     let in_degree = tree.in_degree();
     let mut findings = Vec::new();
