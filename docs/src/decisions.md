@@ -51,10 +51,13 @@ rather than apologising for as a limitation.
 
 ## Why the in-degree clause exists
 
-Edit distance is not a rule. `lodash.merge` is two edits from `lodash.mergewith`,
-`eslint-config-x` is one from `eslint-configs-x`, and npm holds thousands of pairs
-where both names are real. A threshold loose enough to catch a typo catches
-legitimate siblings, and precision collapses.
+Edit distance is not a rule. `http-proxy-agent` is one edit from
+`https-proxy-agent`; both are real, both are in the corpus, and both are depended
+on by other packages in `npm-xl`. So are `safe-buffer` and `safer-buffer`, also one
+edit apart. Take just the 1,077 distinct names the npm fixtures install: between
+them they have 9,453 neighbours within distance 2 in the corpus, every one a
+package that exists. A threshold loose enough to catch a typo catches legitimate
+siblings, and precision collapses.
 
 The observation that separates them is not about spelling:
 
@@ -62,9 +65,9 @@ The observation that separates them is not about spelling:
 > nothing real has ever heard of it. A model put it in your manifest; no
 > maintainer ever put it in theirs.
 
-The only reference to `lodahs` anywhere in the world is the manifest being
-audited. Real packages, including the boring near-miss siblings, are depended upon
-by other packages.
+The only reference to `lodahs` — one transposition from `lodash` — anywhere in the
+world is the manifest being audited. Real packages, including the boring near-miss
+siblings, are depended upon by other packages.
 
 So the rule is a conjunction: not in corpus, **and** within edit distance 2,
 **and** in-degree zero. [The co-occurrence rule](detection/rule.md) has the
@@ -73,9 +76,9 @@ detail, including why the clauses are evaluated 1, 3, 2.
 ### The refinement the fixtures forced
 
 The first version counted every dependency edge as evidence. Both monorepo
-fixtures then reported *zero* direct dependencies for projects with 582 and 1,390
-packages, because both declare `workspaces` and keep almost nothing in the root
-manifest.
+fixtures then reported *zero* direct dependencies for projects of 582 and 1,390
+lockfile entries, because both declare `workspaces` and keep almost nothing in the
+root manifest.
 
 Fixing that by "also read the workspace members" would have been wrong in an
 interesting way. An edge out of a workspace member is the same manifest, by the
