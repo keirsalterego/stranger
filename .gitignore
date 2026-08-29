@@ -5,3 +5,6 @@
 .specstory/
 .DS_Store
 /docs/book
+
+# make bench writes this; it is a timing on one machine, not a claim
+bench.md

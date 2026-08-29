@@ -303,9 +303,22 @@ never asked. The Cargo reader found this the hard way: `slint` and `sg` in the
 both. Packages are now tagged with an origin and the name rules stay quiet unless
 the lockfile says the package came from the registry.
 
-What that does *not* fix is a real registry package outside the corpus. `ksni` in
-the same fixture is a genuine crates.io crate that sits just below the top 5,000,
-and it is still reported. That one is corpus coverage, which is the next limit.
+What that does *not* fix is a real registry package outside the corpus. Two of the
+three false positives left in this repository are exactly that, in two different
+ecosystems:
+
+| reported | fixture | what it actually is |
+|---|---|---|
+| `ksni@0.3.4` | `cargo-m.Cargo.lock` | a real crates.io crate, just below the top 5,000 |
+| `taze@19.0.4` | `pnpm-l.pnpm-lock.yaml` | a real npm package, outside the 140,066-name corpus |
+
+Both came through the registry the corpus samples, so the origin check has nothing
+to say about them. Both are simply not in a list of the most-downloaded names, and
+the rule cannot tell "below the popularity cut" from "does not exist". Two
+ecosystems failing the same way is a stronger statement than one would be, which
+is why both are left in the fixtures rather than tuned away.
+
+That is corpus coverage, and it is the next limit.
 
 **The corpus is a snapshot.** Taken 2026-08-28. A package published after that
 date looks exactly like a package that does not exist. The table above is, among

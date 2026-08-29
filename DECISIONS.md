@@ -318,5 +318,46 @@ returns nothing, and that is a one-line check anyone can run.
 
 Recorded here as decisions rather than omissions.
 
-*(Filled in at the H30 cut line — whatever is below the line and unstarted is cut,
-by the clock rather than by feeling, and each entry gets its reason.)*
+The plan had a line through the build list: everything below it was to be cut at
+H30 if unstarted, by the clock rather than by feeling. Three of the four items
+below that line landed anyway — `yaml.rs` with the pnpm reader, and the parallel
+scan on `std::thread::scope`. Two did not, and one thing above the line was cut
+outright.
+
+**`yarn.lock` — cut, and it was the right call twice over.** It was below the line,
+and there is no yarn fixture on this machine, so it would have shipped tested
+against a file I wrote myself to match my own reading of the format. Every other
+reader here was built against real lockfiles from real projects, and three of them
+found something I had assumed wrong. A reader validated only against my
+assumptions would have been the one place in this repository where that check did
+not happen.
+
+**`stranger diff old.lock new.lock` — cut.** Below the line, and a whole second
+verb: two trees, a matching problem between them, and a report format nothing else
+uses. `--format json` already emits a stable, ordered object per lockfile, so
+`diff <(stranger scan a --format json) <(stranger scan b --format json)` covers the
+case without a subcommand. Ordering findings deterministically was the part worth
+doing, and that shipped.
+
+**`go.mod` and `go.sum` — cut, and it is the one gap I would fill first.** The
+parser is trivial. The corpus is not: `proxy.golang.org` publishes no ranked list,
+and a Go module path is a domain, so "not in the corpus" would mean "not in a list
+nobody publishes" rather than "does not exist" — which turns the detection rule
+into noise. `corpus::names` returns an empty slice for `Ecosystem::Go` and
+`tests/corpus.rs` asserts that emptiness so it stays deliberate rather than
+becoming a bug somebody fixes by accident. Shipping the parser without the corpus
+would have been a fifth format on the README and a rule that silently never fires.
+
+**The Single File bonus — cut deliberately, and it was never close.** Twenty-five
+files crushed into one `main.rs` trades a 25% criterion for a 5% bonus.
+
+**`src/semver.rs` — written, tested, and not wired in.** Thirteen tests including
+the prerelease precedence rules from section 11 that most implementations get
+wrong. Nothing calls it: the drift rule compares version strings for equality,
+which is all it needs, and no other rule asks an ordering question. It is left in
+the tree and named in the book's [Limits](https://keir.is-a.dev/stranger/limits.html)
+page as code that exists and is not used, because deleting it would hide an hour
+that was spent and pretending it is a feature would be worse.
+
+**Not cut, and it should have been on the list from the start: the demo video.**
+It is the one deliverable with no partial credit.
