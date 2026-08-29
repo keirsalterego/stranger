@@ -66,6 +66,10 @@ pub fn scan(tree: &Tree, cfg: Config<'_>) -> Vec<Finding> {
     let names = cfg.corpus.unwrap_or_else(|| corpus::names(tree.ecosystem));
     let in_degree = tree.in_degree();
     let mut findings = Vec::new();
+    // Built on the first name that gets as far as clause two, and not before.
+    // A tree whose every package is in the corpus never reaches clause two,
+    // and should not pay to index a list nothing asks a question of.
+    let mut by_length: Option<corpus::ByLength<'_>> = None;
 
     for (i, pkg) in tree.packages.iter().enumerate() {
         // Somebody in this repo wrote it. Not a stranger.
@@ -91,8 +95,13 @@ pub fn scan(tree: &Tree, cfg: Config<'_>) -> Vec<Finding> {
         if cfg.require_no_parent && in_degree[i] > 0 {
             continue;
         }
-        // Clause two.
-        let Some((nearest, distance)) = corpus::nearest_in(names, tree.ecosystem, &pkg.name) else {
+        // Clause two, and the budget it gets depends on how long the name is.
+        // A three-letter name is within two edits of something in every
+        // registry, so at a flat threshold this clause passes for free on
+        // short names and the rule quietly becomes a two-clause rule. See
+        // `distance::CHARS_PER_EDIT`.
+        let index = by_length.get_or_insert_with(|| corpus::ByLength::new(names));
+        let Some((nearest, distance)) = index.nearest(tree.ecosystem, &pkg.name) else {
             continue;
         };
 

@@ -12,7 +12,7 @@
 //! produce a different one, so `tests/corpus.rs` asserts sortedness rather
 //! than trusting whoever last regenerated the files.
 
-use crate::distance::{self, MAX_EDIT_DISTANCE};
+use crate::distance;
 use crate::lock::Ecosystem;
 use std::sync::LazyLock;
 
@@ -92,23 +92,81 @@ pub fn contains_in(names: &[&str], eco: Ecosystem, name: &str) -> bool {
     names.binary_search(&name.as_str()).is_ok()
 }
 
-/// The closest real name in `names` within `MAX_EDIT_DISTANCE`, if there is
-/// one.
+/// The closest real name in `names` to `name`, if any is close enough.
 ///
-/// ponytail: linear scan over the whole list. It looks wrong and is not: this
-/// only ever runs for names that already failed the membership check, which on
-/// the fixtures is a couple of dozen out of 1,390. The length filter inside
-/// `distance::within` rejects most of the corpus before any table is
-/// allocated. If the not-in-corpus set ever gets large, bucket the corpus by
-/// length — the ordering by name is not doing any work for this query.
+/// One-shot: builds an index, asks it one question, throws it away. A caller
+/// with more than one name to ask about should build a [`ByLength`] and keep
+/// it, which is what `rules::slopsquat` does.
 pub fn nearest_in<'a>(names: &[&'a str], eco: Ecosystem, name: &str) -> Option<(&'a str, usize)> {
-    let query = normalize(eco, name);
-    names
-        .iter()
-        .filter_map(|&candidate| {
-            distance::within(&query, candidate, MAX_EDIT_DISTANCE).map(|d| (candidate, d))
-        })
-        // Ties go to the shorter name, which is almost always the real package
-        // and the typo's parent — `lodash` over `lodash.merge`.
-        .min_by_key(|&(candidate, d)| (d, candidate.len()))
+    ByLength::new(names).nearest(eco, name)
+}
+
+/// The corpus, grouped by name length.
+///
+/// A name at edit distance `k` cannot differ in length by more than `k`, so a
+/// sweep only ever has to look at the `2k + 1` buckets around the query and
+/// never touches the rest of the list. That bound is exact, not a heuristic,
+/// and `tests/corpus.rs` holds it to an exhaustive sweep rather than to my
+/// word for it.
+///
+/// The cost of not exploiting it was not theoretical: 500 names absent from
+/// the npm corpus took 19.1s of wall clock to look up, where 500 names present
+/// in it cost the rule nothing at all, because clause one answers those from a
+/// binary search. Buckets take one unknown name from 23.7 to 19.7 CPU
+/// milliseconds — the rest of that gap is `distance::Query`, and the numbers
+/// are on it. A flat format has no edges, so clause three gates nothing and
+/// every package in a `requirements.txt` reaches the sweep; and the corpus is
+/// a snapshot, so the absent set grows every day it is not regenerated.
+///
+/// ponytail: a `Vec<Vec<&str>>` filled by one pass, and nothing cleverer. The
+/// ceiling is the widest band — npm holds 7,075 thirteen-character names and
+/// 33,316 across eleven to fifteen, so a thirteen-character query still runs
+/// the table against a quarter of the list. The upgrade past that is a
+/// deletion-neighbourhood index, which wants more memory than a corpus already
+/// compiled into the binary can spare.
+pub struct ByLength<'a> {
+    buckets: Vec<Vec<&'a str>>,
+}
+
+impl<'a> ByLength<'a> {
+    pub fn new(names: &[&'a str]) -> ByLength<'a> {
+        let longest = names.iter().map(|n| n.chars().count()).max().unwrap_or(0);
+        let mut buckets = vec![Vec::new(); longest + 1];
+        for &name in names {
+            buckets[name.chars().count()].push(name);
+        }
+        ByLength { buckets }
+    }
+
+    pub fn nearest(&self, eco: Ecosystem, name: &str) -> Option<(&'a str, usize)> {
+        let normalized = normalize(eco, name);
+        let mut query = distance::Query::new(&normalized);
+        let k = query.budget();
+        // A name too short to have earned an edit is not a near-miss of
+        // anything, and the sweep is skipped rather than run and thrown away.
+        if k == 0 {
+            return None;
+        }
+        let lo = query.char_len().saturating_sub(k);
+        let hi = (query.char_len() + k).min(self.buckets.len() - 1);
+        // A query longer than anything in the corpus, so `lo` is past the end.
+        let buckets = self.buckets.get(lo..=hi)?;
+
+        let mut best: Option<(&'a str, usize)> = None;
+        for &candidate in buckets.iter().flatten() {
+            let Some(d) = query.distance_to(candidate) else {
+                continue;
+            };
+            // Ties go to the shorter name, which is almost always the real
+            // package and the typo's parent — `lodash` over `lodash.merge` —
+            // and then to the byte-order-first, which is what the flat scan
+            // over a sorted list used to give for free. Spelling it out keeps
+            // the answer from depending on which bucket the sweep reached
+            // first.
+            if best.is_none_or(|(b, bd)| (d, candidate.len(), candidate) < (bd, b.len(), b)) {
+                best = Some((candidate, d));
+            }
+        }
+        best
+    }
 }
