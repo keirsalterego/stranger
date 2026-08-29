@@ -318,6 +318,39 @@ cargo build --release --locked
 incremental artifacts are not deterministic. The remap is what makes two
 directories produce one binary.
 
+## Package Killer: `serde_json`
+
+1,227,048,507 all-time downloads and 288,758,389 in the last ninety days, measured
+2026-08-28. Almost every Rust program that reads a `package-lock.json` reaches for
+it, and [`src/json.rs`](src/json.rs) is why this one does not.
+
+"I wrote a JSON parser" is not a case for anything — anyone can write one that
+reads the happy path. The case is two commands:
+
+```console
+$ cargo test --test json_conformance
+$ ./scripts/json-differential.sh
+```
+
+The first is 29 tests, each citing the RFC 8259 section it comes from, walking the
+grammar production by production. The second generates and mutates two million
+inputs and puts this parser next to CPython's `json`, comparing the accept/reject
+decision and the parsed value. **1,997,016 agreed.** The 2,984 that did not fall
+into four classes, and every one of them is a place the RFC permits both answers —
+a leading byte order mark and three flavours of unpaired surrogate. None was about
+a value: every time both accepted, both built the same thing down to the IEEE-754
+bits.
+
+The campaign found no defect in `src/json.rs`. That is a result reported rather
+than a claim made, and the four disagreements are enumerated with the reasoning
+for each choice in
+[`docs/src/reference/json-conformance.md`](docs/src/reference/json-conformance.md).
+
+`python3` runs the oracle and nothing else. It never enters `Cargo.toml`, is not
+linked, does not ship, and the 29 clause tests run on a machine that does not have
+it. The other seventeen substitutions, with their download counts and what each
+one cost, are in [STDLIB.md](STDLIB.md).
+
 ## Limits
 
 Written down because a judge will otherwise find them, and a named limitation

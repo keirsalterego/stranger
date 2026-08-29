@@ -12,7 +12,7 @@ drift and one of them starts lying.
 Download counts are what the crates.io API returned on **2026-08-28**, quoted in
 the two forms it actually reports. It has no weekly figure, so none is invented.
 
-## The nomination
+## Package Killer nomination
 
 **`serde_json` — 1,227,048,507 all-time · 288,758,389 in 90 days**
 

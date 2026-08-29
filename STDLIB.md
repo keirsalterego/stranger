@@ -17,7 +17,7 @@ way is named.
 
 ---
 
-## The nomination: `serde_json`
+## Package Killer nomination: `serde_json`
 
 **1,227,048,507 all-time · 288,758,389 in 90 days**
 
