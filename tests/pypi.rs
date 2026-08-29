@@ -297,37 +297,144 @@ fn empty_lockfiles_are_empty_not_wrong() {
 ///
 /// Clause 3 of the slopsquat rule ("nothing depends on this name") cannot do
 /// anything on a `requirements.txt`, because there are no edges for it to
-/// read. With a full corpus clause 1 hides that, so this thins the corpus the
-/// way `tests/ablation.rs` does and counts what clause 3 removes: several
-/// findings on each lockfile, and structurally zero on the flat file.
+/// read. A complete corpus hides that — clause 1 alone eliminates every
+/// candidate before clause 3 is ever consulted — so this thins the corpus the
+/// way `tests/ablation.rs` thins npm's and counts what clause 3 removes at
+/// each size.
+///
+/// The answer is 54.5–77.1% of candidates removed on the two lockfiles, and
+/// exactly nothing at a complete corpus, where clause 1 leaves clause 3 no
+/// candidates to work on. Anything quoting a figure for this belongs
+/// downstream of this test, not beside it.
+///
+/// The share removed is a published figure, so it is pinned as exact counts
+/// rather than a range. Nothing here is sampled at runtime: the fixtures are
+/// checked in and the thinning is a seeded xorshift, so a moved number means a
+/// reader or the rule changed and the docs are now wrong — it is not flake.
+///
+/// `cargo test --test pypi -- --nocapture in_degree` prints the table.
 #[test]
 fn the_in_degree_clause_only_works_where_there_is_a_graph() {
+    const SEED: u64 = 0x5EED_1234;
+    const KEEP: [u64; 5] = [1000, 900, 700, 500, 250];
+
+    // Two files that record a graph, two that structurally cannot.
+    const FILES: [&str; 4] = [
+        "poetry-m.poetry.lock",
+        "uv-m.uv.lock",
+        "reqs-s.requirements.txt",
+        "reqs-xs.requirements.txt",
+    ];
+
+    // (corpus permille, file, findings with clause 3 off, with clause 3 on).
+    // Read off the table below, not predicted.
+    const EXPECTED: &[(u64, &str, usize, usize)] = &[
+        (1000, "poetry-m.poetry.lock", 0, 0),
+        (1000, "uv-m.uv.lock", 0, 0),
+        (1000, "reqs-s.requirements.txt", 0, 0),
+        (1000, "reqs-xs.requirements.txt", 1, 1),
+        (900, "poetry-m.poetry.lock", 10, 4),
+        (900, "uv-m.uv.lock", 11, 5),
+        (900, "reqs-s.requirements.txt", 1, 1),
+        (900, "reqs-xs.requirements.txt", 3, 3),
+        (700, "poetry-m.poetry.lock", 30, 12),
+        (700, "uv-m.uv.lock", 32, 8),
+        (700, "reqs-s.requirements.txt", 3, 3),
+        (700, "reqs-xs.requirements.txt", 3, 3),
+        (500, "poetry-m.poetry.lock", 38, 16),
+        (500, "uv-m.uv.lock", 35, 8),
+        (500, "reqs-s.requirements.txt", 3, 3),
+        (500, "reqs-xs.requirements.txt", 2, 2),
+        (250, "poetry-m.poetry.lock", 48, 18),
+        (250, "uv-m.uv.lock", 45, 11),
+        (250, "reqs-s.requirements.txt", 5, 5),
+        (250, "reqs-xs.requirements.txt", 5, 5),
+    ];
+
     let full = corpus::names(Ecosystem::PyPi);
-    let names: Vec<&str> = full
+    let trees: Vec<Tree> = FILES.iter().map(|&f| load(f)).collect();
+
+    println!();
+    println!("corpus decay — pypi, {} names at 100%", full.len());
+    println!();
+    println!("| corpus kept | file | clause 3 off | on | removed | share |");
+    println!("|---|---|---|---|---|---|");
+
+    let mut rows = Vec::new();
+    for keep in KEEP {
+        let subset = thinned(full, keep, SEED);
+        for (file, tree) in FILES.iter().zip(&trees) {
+            let count = |require_no_parent| {
+                slopsquat::scan(
+                    tree,
+                    Config {
+                        require_no_parent,
+                        corpus: Some(&subset),
+                    },
+                )
+                .len()
+            };
+            let (off, on) = (count(false), count(true));
+            println!(
+                "| {}% ({}) | {file} | {off} | {on} | {} | {} |",
+                keep / 10,
+                subset.len(),
+                off - on,
+                share(off, on).map_or("n/a".to_string(), |s| format!("{s:.1}%")),
+            );
+            rows.push((keep, *file, off, on));
+        }
+    }
+    println!();
+
+    assert_eq!(rows, EXPECTED, "the published figure moved");
+
+    let flat = |f: &str| f.ends_with(".requirements.txt");
+
+    // Not "happens to be zero at the sizes we tried" — a flat file records no
+    // edge, so there is nothing for clause 3 to read at any size.
+    for (keep, file, off, on) in &rows {
+        if flat(file) {
+            assert_eq!(off, on, "{file} suppressed something at {keep}permille");
+        }
+    }
+
+    // The range the docs are allowed to quote. Both ends are rows above: uv
+    // at 90% is the floor, uv at 50% the ceiling. The complete-corpus rows
+    // drop out because they had no candidates at all — clause 1 took every
+    // one of them first, which is the honest reason clause 3 looks worthless
+    // right up until the corpus starts missing names.
+    let graphed: Vec<f64> = rows
         .iter()
-        .enumerate()
-        .filter(|(i, _)| i % 10 != 0)
-        .map(|(_, &n)| n)
+        .filter(|(_, file, ..)| !flat(file))
+        .filter_map(|&(_, _, off, on)| share(off, on))
         .collect();
+    let lo = graphed.iter().copied().fold(f64::INFINITY, f64::min);
+    let hi = graphed.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    assert_eq!(format!("{lo:.1}–{hi:.1}%"), "54.5–77.1%");
+}
 
-    let suppressed = |file: &str| -> usize {
-        let t = load(file);
-        let count = |require_no_parent| {
-            slopsquat::scan(
-                &t,
-                Config {
-                    require_no_parent,
-                    corpus: Some(&names),
-                },
-            )
-            .len()
-        };
-        count(false) - count(true)
-    };
+/// Deterministic corpus thinning, lifted from `tests/ablation.rs` so the two
+/// tables decay identically and can be read side by side. Order is preserved,
+/// so the subset is still sorted and the `binary_search` inside
+/// `corpus::contains_in` still holds.
+fn thinned(names: &[&'static str], keep_permille: u64, seed: u64) -> Vec<&'static str> {
+    let mut state = seed | 1;
+    let mut out = Vec::with_capacity(names.len());
+    for &n in names {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        if state % 1000 < keep_permille {
+            out.push(n);
+        }
+    }
+    out
+}
 
-    assert!(suppressed("poetry-m.poetry.lock") > 0);
-    assert!(suppressed("uv-m.uv.lock") > 0);
-    // Not "happens to be zero" — there is no edge in the file to find.
-    assert_eq!(suppressed("reqs-s.requirements.txt"), 0);
-    assert_eq!(suppressed("reqs-xs.requirements.txt"), 0);
+/// The fraction of candidates clause 3 removed, or `None` where there were no
+/// candidates. "Removed none of zero" is a different claim from "removed none
+/// of them" and printing `0.0%` for it would read as the clause failing.
+fn share(off: usize, on: usize) -> Option<f64> {
+    (off > 0).then(|| (off - on) as f64 / off as f64 * 100.0)
 }
