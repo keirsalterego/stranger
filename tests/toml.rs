@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 use stranger::error::Error;
@@ -178,6 +179,28 @@ fn quoted_key_with_a_dot() {
     assert!(v.get("jaraco").is_none());
 }
 
+/// The key `"a.b"` and the path `a.b` are two namespaces TOML 1.0 keeps apart,
+/// and the canonical key has to keep them apart too. Joining segments with `.`
+/// did not: both spelled `a.b`, so this came back as
+/// ``table `a.b` is defined twice`` — a poetry lockfile refused outright, and
+/// a refused lockfile is a whole dependency tree nobody audited.
+#[test]
+fn a_quoted_dot_is_not_a_path() {
+    let v = parse("\"a.b\" = 1\n[a.b]\nc = 2\n");
+    assert_eq!(v.get("a.b"), Some(&Value::Integer(1)));
+    assert_eq!(
+        v.get("a").and_then(|a| a.get("b")).and_then(|b| b.get("c")),
+        Some(&Value::Integer(2))
+    );
+    // The index suffix is the other half of the canonical form, and `[3]` was
+    // spelled with characters a quoted key may also contain: `[[p]]` records
+    // its first element as `p[0]`, which used to collide with a table named
+    // exactly that.
+    parse("[[p]]\nx = 1\n[\"p[0]\"]\ny = 2\n");
+    // The index still does its job: one `[p.d]` per element is two tables.
+    parse("[[p]]\n[p.d]\nx = 1\n[[p]]\n[p.d]\ny = 2\n");
+}
+
 #[test]
 fn arrays() {
     assert_eq!(
@@ -297,13 +320,36 @@ fn a_header_cannot_reopen_what_an_equals_defined() {
     );
     // An inline table is closed by its own brace, so a later header may not
     // extend it either.
-    assert!(why("a = { b = 1 }\n[a]\nc = 2\n").contains("defined twice"));
+    assert!(why("a = { b = 1 }\n[a]\nc = 2\n").contains("`a` is already defined as a value"));
     // Under an array element, where the canonical path carries an index.
-    assert!(why("[[p]]\nd = [1]\n[[p.d]]\nx = 1\n").contains("already defined as a value"));
+    assert!(why("[[p]]\nd = [1]\n[[p.d]]\nx = 1\n").contains("`p[0].d` is already defined"));
     // And the legal shapes still are: two `[[p]]` are two elements, and a
     // key named after a *different* element's key is not a redefinition.
     parse("[[p]]\nd = [1]\n[[p]]\nd = [2]\n");
     parse("[[p]]\nname = \"one\"\n[p.src]\nurl = \"a\"\n");
+}
+
+/// A header one segment deeper than the closing brace is the same violation
+/// wearing a longer path, and it used to be accepted: only the exact path was
+/// tested against the sealed set, never a prefix of it. `[a.c]` therefore added
+/// a key to a table TOML had closed, and the error names the brace's own path
+/// rather than the header's, because that is the line you go and look at.
+#[test]
+fn a_header_cannot_reach_past_a_sealed_value() {
+    assert!(why("a = {b = 1}\n[a.c]\nd = 2\n").contains("`a` is already defined as a value"));
+    assert_eq!(at("a = {b = 1}\n[a.c]\nd = 2\n"), (2, 1));
+    assert!(why("a = {b = 1}\n[a.c.d.e]\nf = 2\n").contains("`a` is already defined as a value"));
+    // The shape a lockfile actually offers: uv writes `source = { … }` inline
+    // under every `[[package]]`.
+    assert!(
+        why("[[p]]\nsrc = {kind = \"registry\"}\n[p.src.evil]\nrun = \"curl\"\n")
+            .contains("`p[0].src` is already defined as a value")
+    );
+    // `[[a.c]]` reaches past it the same way.
+    assert!(why("a = {b = 1}\n[[a.c]]\nd = 2\n").contains("`a` is already defined as a value"));
+    // A sibling of a sealed key is not sealed: `[a.c]` is only wrong because
+    // `a` was closed, not because anything named `c` was.
+    parse("[a]\nb = {x = 1}\n[a.c]\nd = 2\n");
 }
 
 #[test]
@@ -363,9 +409,60 @@ fn truncation_never_panics() {
 fn deep_nesting_errors_rather_than_overflowing() {
     reject(&format!("a = {}", "[".repeat(10_000)));
     reject(&format!("a = {}", "{ b = ".repeat(10_000)));
-    // A long header path is iterative, not recursive, so it has to work.
-    let path = vec!["a"; 500].join(".");
-    parse(&format!("[{path}]\nx = 1\n"));
+}
+
+/// This test used to assert the opposite — that a 500-segment header parses,
+/// "because `descend` is iterative". It is, and that was never the question.
+/// The nested `Value::Table` chain a header builds is *freed* recursively, so
+/// `[a.b.b…]` 200,000 deep returned `Ok` and then took the process down with
+/// `fatal runtime error: stack overflow` while dropping it. On a spawned
+/// thread's 2 MiB stack, release: 30,001 segments survived, 35,001 aborted.
+/// `scan_all` spawns exactly such a thread once a repo holds two lockfiles,
+/// and `panic = "abort"` leaves nothing to catch.
+#[test]
+fn header_depth_is_bounded() {
+    assert!(why(&format!("[a{}]\nx = 1\n", ".b".repeat(200_000))).contains("nesting deeper"));
+    // 64 accepted, 65 refused, at the segment that went over.
+    parse(&format!("[{}]\nx = 1\n", vec!["a"; 64].join(".")));
+    assert!(why(&format!("[{}]\nx = 1\n", vec!["a"; 65].join("."))).contains("nesting deeper"));
+    assert_eq!(
+        at(&format!("[{}]\nx = 1\n", vec!["a"; 65].join("."))),
+        (1, 130)
+    );
+    // The budget a header spends is handed back, not left on the counter: a
+    // deep header followed by a nested value is legal and has to stay legal.
+    parse(&format!("[{}]\nx = [[[1]]]\n", vec!["a"; 64].join(".")));
+}
+
+/// A megabyte on one line, in the shapes a hostile file can take it: a value,
+/// a key, an array, a comment, and an unterminated string. Every one of them
+/// has to come back — `Ok` or `Err` — without recursing or hanging. Five
+/// megabytes of input, 0.48 s in a debug build.
+#[test]
+fn a_very_long_line_stays_linear() {
+    let n = 1 << 20;
+    assert_eq!(
+        parse(&format!("a = \"{}\"", "x".repeat(n)))
+            .get("a")
+            .and_then(Value::as_str)
+            .map(str::len),
+        Some(n)
+    );
+    assert_eq!(
+        parse(&format!("{} = 1", "a".repeat(n)))
+            .as_table()
+            .map(BTreeMap::len),
+        Some(1)
+    );
+    assert_eq!(
+        parse(&format!("a = [{}]", "1,".repeat(n / 2)))
+            .get("a")
+            .and_then(Value::as_array)
+            .map(<[_]>::len),
+        Some(n / 2)
+    );
+    parse(&format!("# {}\na = 1\n", "x".repeat(n)));
+    assert!(why(&format!("a = \"{}", "x".repeat(n))).contains("unterminated"));
 }
 
 /// Package counts measured with `grep -c '^\[\[package\]\]'`, not copied from
