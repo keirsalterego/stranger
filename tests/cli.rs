@@ -354,7 +354,12 @@ fn a_hostile_name_does_not_break_the_columns() {
         .lines()
         .filter_map(|l| l.find("not in corpus").map(|b| l[..b].chars().count()))
         .collect();
-    assert!(details.len() >= 4, "{out}");
+    // Two, not four. `bell` and `csi` used to be findings here and are exactly
+    // the false positives the length budget removed: at three and four
+    // characters they get no edits at all, because a name that short is within
+    // two edits of something in every registry. Alignment is what this test is
+    // about and two rows still test it.
+    assert!(details.len() >= 2, "{out}");
     assert!(
         details.windows(2).all(|w| w[0] == w[1]),
         "detail column is ragged: {details:?}\n{out}"

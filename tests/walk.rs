@@ -6,6 +6,12 @@ const KNOWN: &[&str] = &["package-lock.json", "requirements.txt"];
 
 /// Builds a throwaway tree under the target directory so the test does not
 /// depend on anything outside the repo and cleans up after itself.
+///
+/// **`name` has to be unique per test.** `new` empties the directory first, and
+/// the harness runs these in parallel, so two tests sharing a name delete each
+/// other's tree and fail whichever loses the race — intermittently, and only
+/// under a full `cargo test`. Two of them shared `walk_depth` for exactly one
+/// commit.
 struct Tree(PathBuf);
 
 impl Tree {
@@ -254,7 +260,7 @@ fn skipped_directories_carry_their_reason() {
 /// `MAX_DEPTH` is found and its sibling one level further down is not.
 #[test]
 fn max_depth_is_where_it_says_it_is() {
-    let t = Tree::new("walk_depth");
+    let t = Tree::new("walk_max_depth");
     let at = |n: usize| (0..n).map(|i| format!("d{i}/")).collect::<String>();
     t.file(&format!("{}package-lock.json", at(walk::MAX_DEPTH)));
     t.file(&format!("{}package-lock.json", at(walk::MAX_DEPTH + 1)));
