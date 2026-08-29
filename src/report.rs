@@ -46,8 +46,11 @@ pub fn risk(findings: &[Finding]) -> u32 {
     // because there is always a worse tree than the one in front of you.
     // Integer arithmetic throughout — this number is displayed, not computed
     // with, and a float here would only invite rounding questions.
-    let n = findings.iter().filter(|f| f.severity == worst).count() as u32;
-    floor + 24 * n / (n + 8)
+    // u64 because `24 * n` in u32 wraps at 178,956,971 findings and hands back
+    // a *lower* number for a worse tree. Unreachable in practice; the fix is
+    // one character and the reasoning about why it is unreachable is not.
+    let n = findings.iter().filter(|f| f.severity == worst).count() as u64;
+    floor + (24 * n / (n + 8)) as u32
 }
 
 /// Digit grouping. `NumBuffer` + `format_into` (1.98) writes the digits into a
@@ -101,10 +104,15 @@ pub fn human(
     verbose: bool,
     quiet: bool,
 ) -> io::Result<()> {
+    // Sanitized like everything else printed here: `scrub` covers what the
+    // reader took out of the file, and this is the one display string that
+    // comes from the filesystem instead. A directory named with an escape
+    // sequence is a thing a hostile repo can contain.
     let file = tree.source.file_name().map_or_else(
         || tree.source.display().to_string(),
         |n| n.to_string_lossy().into_owned(),
     );
+    let file = term::sanitize(&file);
 
     if !quiet {
         let workspace = match tree.workspace_members() {
@@ -132,8 +140,17 @@ pub fn human(
     // and not a staircase. Findings that stay collapsed do not get a vote —
     // otherwise one long trivial-package name widens a column nobody sees.
     let shown = |f: &Finding| verbose || f.rule == Rule::Slopsquat;
-    let labels: Vec<String> = findings.iter().filter(|f| shown(f)).map(label).collect();
-    let name_w = term::column(labels.iter().map(String::as_str), NAME_MIN);
+    // One label per finding, kept alongside them — it used to be formatted
+    // once to measure the column and a second time to print the row.
+    let labels: Vec<String> = findings.iter().map(label).collect();
+    let name_w = term::column(
+        findings
+            .iter()
+            .zip(&labels)
+            .filter(|(f, _)| shown(f))
+            .map(|(_, l)| l.as_str()),
+        NAME_MIN,
+    );
     // The blocks are the rules that actually fired, sorted into report order —
     // taken from the findings rather than from a list of every rule, so there is
     // no list for a new rule to be left off of and no rule that can go missing
@@ -144,11 +161,18 @@ pub fn human(
     let head_w = term::column(rules.iter().map(|r| r.heading()), HEAD_MIN);
 
     for rule in rules {
-        let hits: Vec<&Finding> = findings.iter().filter(|f| f.rule == rule).collect();
-        if hits.is_empty() {
-            continue;
-        }
-        let style = style_of(hits.iter().fold(Severity::Low, |s, f| s.max(f.severity)));
+        // Never empty: `rules` was built from the findings themselves, so
+        // every rule in it has at least one. There used to be a guard here for
+        // the case that cannot happen.
+        let hits: Vec<(&Finding, &String)> = findings
+            .iter()
+            .zip(&labels)
+            .filter(|(f, _)| f.rule == rule)
+            .collect();
+        let style = style_of(
+            hits.iter()
+                .fold(Severity::Low, |s, (f, _)| s.max(f.severity)),
+        );
         // Pad first, paint second. The escape codes are bytes in the string,
         // and a column measured over a painted cell is a column measured over
         // eight characters nobody can see.
@@ -164,9 +188,9 @@ pub fn human(
         writeln!(w, "{}", line.trim_end())?;
         // Critical findings always get their lines — they are the answer, and
         // there are never many. The rest are a count until asked.
-        if shown(hits[0]) {
-            for f in hits {
-                writeln!(w, "     {} {}", term::pad(&label(f), name_w), f.detail)?;
+        if shown(hits[0].0) {
+            for (f, label) in hits {
+                writeln!(w, "     {} {}", term::pad(label, name_w), f.detail)?;
             }
         }
         writeln!(w)?;
@@ -203,14 +227,18 @@ fn style_of(sev: Severity) -> Style {
 
 /// No `Term` here, deliberately. JSON goes to a program, and a program that
 /// has to strip SGR codes out of a string field will not.
-pub fn json(
-    w: &mut impl Write,
-    tree: &Tree,
-    findings: &[Finding],
-    elapsed: Duration,
-) -> io::Result<()> {
+///
+/// No elapsed time either, and that is the interesting omission. Two scans of
+/// the same tree have to produce the same bytes or a diff between them is
+/// noise, and `elapsed_ms` was the only field that changed run to run — which
+/// made `diff <(stranger scan a --format json) <(stranger scan b --format
+/// json)` , the recipe DECISIONS.md offers as the reason `stranger diff` was
+/// cut, print a difference every single time. The human report still prints
+/// the timing, because "41ms" is half the pitch and a person reading a
+/// terminal is not diffing it.
+pub fn json(w: &mut impl Write, tree: &Tree, findings: &[Finding]) -> io::Result<()> {
     write!(w, "{{\"source\":")?;
-    string(w, &tree.source.display().to_string())?;
+    string(w, &term::sanitize(&tree.source.display().to_string()))?;
     write!(w, ",\"ecosystem\":")?;
     string(w, tree.ecosystem.as_str())?;
     // `workspace` is here because it is the one header number a consumer could
@@ -218,15 +246,23 @@ pub fn json(
     // third-party counts, so nothing in them says how many first-party entries
     // the reader set aside. A monorepo and a flat project with the same
     // dependency count are indistinguishable in JSON without it.
+    //
+    // `integrity` is how many third-party entries recorded an integrity field
+    // at all. Never whether one is *correct* — Rust std ships no crypto, so
+    // there is no sha512 in this binary and there is not going to be. Every
+    // reader computed this and nothing read it, which made the README's claim
+    // that "stranger reports whether the field is present" false in the
+    // honesty section of all places. Presence is half an answer; publishing
+    // half an answer beats publishing none and calling it verified.
     write!(
         w,
-        ",\"packages\":{},\"direct\":{},\"transitive\":{},\"workspace\":{},\"risk\":{},\"elapsed_ms\":{},\"findings\":[",
+        ",\"packages\":{},\"direct\":{},\"transitive\":{},\"workspace\":{},\"integrity\":{},\"risk\":{},\"findings\":[",
         tree.third_party(),
         tree.direct(),
         tree.transitive(),
         tree.workspace_members(),
+        tree.with_integrity(),
         risk(findings),
-        elapsed.as_millis(),
     )?;
     for (i, f) in findings.iter().enumerate() {
         if i > 0 {

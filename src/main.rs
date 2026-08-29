@@ -20,13 +20,17 @@ use stranger::tree;
 fn main() -> ExitCode {
     match run() {
         Ok(code) => code,
-        // `stranger scan . | head` closes the pipe as soon as head has what it
-        // wants, and every write after that is EPIPE. That is the shell
-        // working correctly, not a failure, so it exits 0 and says nothing —
-        // the alternative is an error message on every piped invocation.
-        Err(Error::Io { source, .. }) if source.kind() == io::ErrorKind::BrokenPipe => {
-            ExitCode::SUCCESS
-        }
+        // `stranger tree x | head` closes the pipe as soon as head has what
+        // it wants, and every write after that is EPIPE. That is the shell
+        // working correctly, not a failure, so it says nothing — the
+        // alternative is an error message on every piped invocation.
+        //
+        // A *scan* never reaches here: `--fail-on` computed an answer before
+        // the pipe closed, and returning 0 instead of that answer let
+        // `stranger scan --fail-on critical | head -1` report clean on a tree
+        // with criticals in it. `run` swallows the pipe itself and keeps the
+        // code. This arm covers the paths that have no answer to lose.
+        Err(e) if broken_pipe(&e) => ExitCode::SUCCESS,
         Err(e) => {
             eprintln!("stranger: {e}");
             // A usage mistake or an unreadable file is not a finding, and a CI
@@ -37,8 +41,34 @@ fn main() -> ExitCode {
     }
 }
 
+/// True for the one I/O error that means "nobody is reading any more".
+fn broken_pipe(e: &Error) -> bool {
+    matches!(e, Error::Io { source, .. } if source.kind() == io::ErrorKind::BrokenPipe)
+}
+
+/// argv as `String`s, or a usage error naming the argument that was not UTF-8.
+///
+/// `std::env::args()` *panics* on a non-UTF-8 argument, and on Linux argv is
+/// arbitrary bytes: `stranger scan $'/tmp/\xff'` aborted the process at
+/// `library/std/src/env.rs` before a line of this crate ran, exit 134. A tool
+/// whose whole argument is that it degrades gracefully cannot abort on a
+/// filename. Paths that are not UTF-8 are refused rather than scanned, which
+/// is a real limit and is named in README LIMITS.
+fn args() -> Result<Vec<String>> {
+    std::env::args_os()
+        .map(|a| {
+            a.into_string().map_err(|bad| {
+                Error::usage(format!(
+                    "argument is not valid UTF-8: {}",
+                    bad.to_string_lossy()
+                ))
+            })
+        })
+        .collect()
+}
+
 fn run() -> Result<ExitCode> {
-    let opts = match cli::parse(std::env::args())? {
+    let opts = match cli::parse(args()?)? {
         Command::Help => {
             print!("{}", cli::USAGE);
             return Ok(ExitCode::SUCCESS);
@@ -77,6 +107,10 @@ fn run() -> Result<ExitCode> {
 
     let mut worst: Option<Severity> = None;
     let mut read = 0usize;
+    // Set when stdout goes away mid-report. Everything after it is computed
+    // and not printed, because the exit code is the half of a CI gate's
+    // output that survives `| head`.
+    let mut hung_up = false;
 
     // In path order, results and failures alike — `scan_all` hands them back
     // in the order the paths came in, so the stderr stream is as reproducible
@@ -87,7 +121,13 @@ fn run() -> Result<ExitCode> {
             Ok(a) => {
                 read += 1;
                 worst = worst.max(a.findings.iter().map(|f| f.severity).max());
-                emit(&mut out, &opts, term, &a.tree, &a.findings, a.elapsed)?;
+                if !hung_up {
+                    match emit(&mut out, &opts, term, &a.tree, &a.findings, a.elapsed) {
+                        Ok(()) => {}
+                        Err(e) if broken_pipe(&e) => hung_up = true,
+                        Err(e) => return Err(e),
+                    }
+                }
             }
             // One corrupt lockfile is one lockfile's problem. Throwing away
             // fifteen siblings' findings because the sixteenth is garbage is
@@ -124,10 +164,17 @@ fn lockfiles(path: &Path) -> Result<Vec<PathBuf>> {
     } else if path.is_dir() {
         Ok(lock::discover(path))
     } else {
-        Err(Error::usage(format!(
-            "{}: no such file or directory",
-            path.display()
-        )))
+        // `symlink_metadata`, so the three cases are told apart. `is_file() ||
+        // is_dir()` being false does not mean the path is absent: /dev/null, a
+        // FIFO and a symlink pointing at nothing all fail both and all three
+        // exist. Saying "no such file or directory" about a device node sends
+        // somebody looking for a typo that is not there.
+        let what = match std::fs::symlink_metadata(path) {
+            Ok(_) => "not a regular file or directory",
+            Err(e) if e.kind() == io::ErrorKind::NotFound => "no such file or directory",
+            Err(_) => "cannot be read",
+        };
+        Err(Error::usage(format!("{}: {what}", path.display())))
     }
 }
 
@@ -252,13 +299,18 @@ struct Audit {
 fn audit(path: &Path) -> Result<Audit> {
     let started = Instant::now();
     let tree = lock::read(path)?;
-    // Called in `rules::ORDER`, so the JSON array comes out worst-first without
-    // a second sort.
     let mut findings = slopsquat::scan(&tree, slopsquat::Config::default());
     findings.extend(scripts::scan(&tree));
     findings.extend(trivial::scan(&tree));
     findings.extend(drift::scan(&tree));
     findings.extend(pinning::scan(&tree));
+    // Report order, once, here — not "the order the calls happen to be in",
+    // which is what a comment on this line used to claim. `report::human`
+    // sorts its own blocks by `rank`; the JSON array did not, so the two
+    // surfaces disagreed about order on any tree where a later rule outranked
+    // an earlier one. Stable, so the within-rule order each rule chose (the
+    // slopsquat rule sorts by name) survives.
+    findings.sort_by_key(|f| f.rule.rank());
     Ok(Audit {
         tree,
         findings,
@@ -278,7 +330,7 @@ fn emit(
         Format::Human => {
             report::human(out, term, tree, findings, elapsed, opts.verbose, opts.quiet)
         }
-        Format::Json => report::json(out, tree, findings, elapsed),
+        Format::Json => report::json(out, tree, findings),
     };
     r.map_err(|e| Error::io("stdout", e))
 }

@@ -53,8 +53,9 @@ fn unrestricted_not_osa() {
 #[test]
 fn the_names_this_tool_exists_to_catch() {
     // A transposition is distance 1 here and distance 2 under plain
-    // Levenshtein. That gap is the whole argument for Damerau: the threshold
-    // that catches `lodahs` under Levenshtein also catches half the registry.
+    // Levenshtein. What that gap buys is measured in
+    // `damerau_changes_the_distance_not_which_names_fire`, and it is not what
+    // this comment used to claim.
     assert_eq!(d("lodahs", "lodash"), 1);
     assert_eq!(d("expres", "express"), 1);
     assert_eq!(d("chalck", "chalk"), 1);
@@ -172,4 +173,60 @@ fn the_threshold_comment_is_still_true() {
     // The floor. This is a planted name in `poisoned.requirements.txt` and a
     // true positive, and a threshold of one loses it.
     assert_eq!(d("requests-http", "requests-html"), 2);
+}
+
+/// Plain Levenshtein, for the one comparison the docs make and could not
+/// previously check. Twenty lines and only a test needs it, so it lives here
+/// rather than in `src/` where it would be a second distance function nothing
+/// calls.
+fn levenshtein(a: &str, b: &str) -> usize {
+    let a: Vec<char> = a.chars().collect();
+    let b: Vec<char> = b.chars().collect();
+    let mut prev: Vec<usize> = (0..=b.len()).collect();
+    for i in 1..=a.len() {
+        let mut cur = vec![i; b.len() + 1];
+        for j in 1..=b.len() {
+            cur[j] = (prev[j] + 1)
+                .min(cur[j - 1] + 1)
+                .min(prev[j - 1] + usize::from(a[i - 1] != b[j - 1]));
+        }
+        prev = cur;
+    }
+    prev[b.len()]
+}
+
+/// What Damerau actually buys at the threshold that ships.
+///
+/// Three files argued that Damerau is load-bearing because `lodahs` is
+/// Levenshtein-2 from `lodash`, and the shipped threshold is 2 — so that
+/// argument said the rule needs a variant to reach a name the plain metric
+/// already reaches. Levenshtein is pointwise >= Damerau, so Damerau-at-k is
+/// always the *more permissive* of the two; at k = 2 plain Levenshtein is
+/// strictly more selective, returning 1 candidate for `lodahs` where Damerau
+/// returns 3.
+///
+/// What Damerau does buy: it scores the transposition 1 rather than 2. That is
+/// the reported `d=`, the tie-break among candidates, and — the part that
+/// would matter — the threshold you could drop to. At k = 1 the two metrics
+/// disagree about `lodahs` completely: Damerau finds `lodash`, Levenshtein
+/// finds nothing at all. Measured across every name the rule fires on in every
+/// fixture, at k = 2 the two metrics fire on exactly the same set.
+#[test]
+fn damerau_changes_the_distance_not_which_names_fire() {
+    let npm = corpus("npm.txt");
+    let npm: Vec<&str> = npm.lines().collect();
+
+    assert_eq!(d("lodahs", "lodash"), 1, "one transposition");
+    assert_eq!(levenshtein("lodahs", "lodash"), 2, "two substitutions");
+
+    let within_k = |k: usize, metric: fn(&str, &str) -> usize| {
+        npm.iter().filter(|&&n| metric("lodahs", n) <= k).count()
+    };
+    // At the shipped threshold, the plain metric is the tighter one.
+    assert_eq!(within_k(2, d), 3);
+    assert_eq!(within_k(2, levenshtein), 1);
+    // At k = 1 it is the other way round, and that is the case the variant is
+    // actually for.
+    assert_eq!(within_k(1, d), 1);
+    assert_eq!(within_k(1, levenshtein), 0);
 }

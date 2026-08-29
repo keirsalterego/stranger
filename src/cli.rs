@@ -27,6 +27,9 @@ options:
   -h, --help                     this
   -V, --version                  version
 
+Options take `--flag value` or `--flag=value`. A bare `--` ends the options,
+so a path that starts with `-` is still reachable.
+
 exit codes:
   0  clean, or findings below the --fail-on threshold
   1  a finding at or above the threshold
@@ -102,13 +105,21 @@ fn scan<I: Iterator<Item = String>>(mut args: I) -> Result<Command> {
         verbose: false,
     };
     let mut saw_path = false;
+    // Everything after a bare `--` is a path, however it is spelled. Without
+    // it a directory literally named `-v` is unreachable, and the convention
+    // costs one bool.
+    let mut only_paths = false;
 
     while let Some(arg) = args.next() {
-        match arg.as_str() {
+        let (flag, inline) = if only_paths {
+            (arg.as_str(), None)
+        } else {
+            split_flag(&arg)
+        };
+        match flag {
+            "--" if !only_paths => only_paths = true,
             "--format" => {
-                let v = args
-                    .next()
-                    .ok_or_else(|| Error::usage("--format needs a value"))?;
+                let v = value(inline, &mut args, "--format")?;
                 opts.format = match v.as_str() {
                     "human" => Format::Human,
                     "json" => Format::Json,
@@ -120,20 +131,27 @@ fn scan<I: Iterator<Item = String>>(mut args: I) -> Result<Command> {
                 };
             }
             "--fail-on" => {
-                let v = args
-                    .next()
-                    .ok_or_else(|| Error::usage("--fail-on needs a value"))?;
+                let v = value(inline, &mut args, "--fail-on")?;
                 opts.fail_on = Some(Severity::parse(&v).ok_or_else(|| {
                     Error::usage(format!(
                         "--fail-on takes low, medium, high or critical, not `{v}`"
                     ))
                 })?);
             }
-            "--no-color" => opts.color = Color::Never,
-            "-v" | "--verbose" => opts.verbose = true,
-            "-q" | "--quiet" => opts.quiet = true,
+            "--no-color" => {
+                no_value(inline, "--no-color")?;
+                opts.color = Color::Never;
+            }
+            "-v" | "--verbose" => {
+                no_value(inline, flag)?;
+                opts.verbose = true;
+            }
+            "-q" | "--quiet" => {
+                no_value(inline, flag)?;
+                opts.quiet = true;
+            }
             "-h" | "--help" => return Ok(Command::Help),
-            other if other.starts_with('-') => {
+            other if other.starts_with('-') && !only_paths => {
                 return Err(Error::usage(format!("unknown option `{other}`")));
             }
             path => {
@@ -151,6 +169,44 @@ fn scan<I: Iterator<Item = String>>(mut args: I) -> Result<Command> {
     Ok(Command::Scan(opts))
 }
 
+/// `--flag=value` split from `--flag value`.
+///
+/// Both spellings are conventional, and `--format=json` is the first thing a
+/// person types. Long options only: `-q=1` is not a spelling anyone uses, and
+/// a path is a positional that may legitimately contain `=` — splitting those
+/// would make `builds=2/package-lock.json` unscannable.
+fn split_flag(arg: &str) -> (&str, Option<&str>) {
+    match arg.split_once('=') {
+        Some((flag, value)) if flag.starts_with("--") && flag.len() > 2 => (flag, Some(value)),
+        _ => (arg, None),
+    }
+}
+
+/// The value of an option, from `=` or from the next argument.
+fn value<I: Iterator<Item = String>>(
+    inline: Option<&str>,
+    args: &mut I,
+    flag: &str,
+) -> Result<String> {
+    match inline {
+        Some(v) => Ok(v.to_string()),
+        None => args
+            .next()
+            .ok_or_else(|| Error::usage(format!("{flag} needs a value"))),
+    }
+}
+
+/// Refuse `--no-color=please`. A switch that silently ignores a value is a
+/// switch that lets somebody believe they turned something off.
+fn no_value(inline: Option<&str>, flag: &str) -> Result<()> {
+    match inline {
+        None => Ok(()),
+        Some(v) => Err(Error::usage(format!(
+            "{flag} is a switch and takes no value, so `={v}` means nothing"
+        ))),
+    }
+}
+
 fn tree<I: Iterator<Item = String>>(mut args: I) -> Result<Command> {
     let mut opts = TreeOptions {
         package: String::new(),
@@ -161,13 +217,18 @@ fn tree<I: Iterator<Item = String>>(mut args: I) -> Result<Command> {
         depth: crate::tree::DEFAULT_DEPTH,
     };
     let mut positional = 0;
+    let mut only_paths = false;
 
     while let Some(arg) = args.next() {
-        match arg.as_str() {
+        let (flag, inline) = if only_paths {
+            (arg.as_str(), None)
+        } else {
+            split_flag(&arg)
+        };
+        match flag {
+            "--" if !only_paths => only_paths = true,
             "--format" => {
-                let v = args
-                    .next()
-                    .ok_or_else(|| Error::usage("--format needs a value"))?;
+                let v = value(inline, &mut args, "--format")?;
                 opts.format = match v.as_str() {
                     "human" => Format::Human,
                     "json" => Format::Json,
@@ -179,27 +240,31 @@ fn tree<I: Iterator<Item = String>>(mut args: I) -> Result<Command> {
                 };
             }
             "--depth" => {
-                let v = args
-                    .next()
-                    .ok_or_else(|| Error::usage("--depth needs a value"))?;
+                let v = value(inline, &mut args, "--depth")?;
                 opts.depth = v.parse().map_err(|_| {
                     Error::usage(format!(
                         "--depth takes a whole number of levels, or 0 for no limit, not `{v}`"
                     ))
                 })?;
             }
-            "--no-color" => opts.color = Color::Never,
-            "-q" | "--quiet" => opts.quiet = true,
+            "--no-color" => {
+                no_value(inline, "--no-color")?;
+                opts.color = Color::Never;
+            }
+            "-q" | "--quiet" => {
+                no_value(inline, flag)?;
+                opts.quiet = true;
+            }
             "-h" | "--help" => return Ok(Command::Help),
             // Named rather than swept into "unknown option", because both are
             // real flags on the sibling command and "unknown" would send
             // somebody looking for a typo they did not make.
             "--fail-on" | "-v" | "--verbose" => {
                 return Err(Error::usage(format!(
-                    "`{arg}` is a scan flag; tree reports no findings to gate on"
+                    "`{flag}` is a scan flag; tree reports no findings to gate on"
                 )));
             }
-            other if other.starts_with('-') => {
+            other if other.starts_with('-') && !only_paths => {
                 return Err(Error::usage(format!("unknown option `{other}`")));
             }
             value => {

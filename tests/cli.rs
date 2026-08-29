@@ -311,14 +311,51 @@ fn json_is_parseable_by_our_own_parser() {
 }
 
 /// Colour is for terminals. A pipe gets bytes you can grep.
+///
+/// `hostile.package-lock.json` is in the list because the other two prove
+/// nothing: a fixture with no escape in it cannot fail this. That file carries
+/// a version string of `1.0.0\x1b[2K\x1b[1A...`, which erased the finding
+/// above it and the `HALLUCINATION RISK` heading with it, on a run that still
+/// exited 1.
 #[test]
 fn piped_output_carries_no_escape_codes() {
+    const HOSTILE: &str = "fixtures/hostile.package-lock.json";
     for args in [
         &["scan", POISONED][..],
         &["scan", POISONED, "--format", "json"][..],
+        &["scan", HOSTILE][..],
+        &["scan", HOSTILE, "--format", "json"][..],
+        &["scan", HOSTILE, "-v"][..],
+        &["tree", "lodahs", HOSTILE][..],
     ] {
-        assert!(!stdout(&run(args)).contains('\u{1b}'), "{args:?}");
+        let out = stdout(&run(args));
+        assert!(!out.contains('\u{1b}'), "ESC in {args:?}");
+        // The C1 range too: U+009B is a one-byte CSI wherever Latin-1 is
+        // still being decoded.
+        assert!(
+            !out.chars()
+                .any(|c| matches!(c, '\0'..='\x1f' | '\x7f'..='\u{9f}') && c != '\n'),
+            "control character in {args:?}"
+        );
     }
+}
+
+/// A hostile name must not knock the column out of alignment either — the
+/// escape bytes were being counted as display columns.
+#[test]
+fn a_hostile_name_does_not_break_the_columns() {
+    let out = stdout(&run(&["scan", "fixtures/hostile.package-lock.json", "-v"]));
+    // Character offsets, not byte offsets: U+FFFD is three bytes and one
+    // column, which is the entire point of replacing rather than dropping.
+    let details: Vec<usize> = out
+        .lines()
+        .filter_map(|l| l.find("not in corpus").map(|b| l[..b].chars().count()))
+        .collect();
+    assert!(details.len() >= 4, "{out}");
+    assert!(
+        details.windows(2).all(|w| w[0] == w[1]),
+        "detail column is ragged: {details:?}\n{out}"
+    );
 }
 
 #[test]
@@ -335,19 +372,28 @@ fn help_and_version() {
 /// to produce the same bytes or a diff between scans is noise.
 #[test]
 fn a_directory_scan_is_deterministic() {
+    // Drop the milliseconds and nothing else. Replacing the whole `risk`
+    // line — which is what this did — also dropped the risk score out of the
+    // comparison, so the one number on that line worth pinning was the one
+    // number not being pinned.
     let strip_timing = |s: String| {
         s.lines()
-            .map(|l| {
-                if l.contains("risk ") {
-                    "risk".to_string()
-                } else {
-                    l.to_string()
+            .map(|l| match (l.find("    "), l.contains("risk ")) {
+                (Some(_), true) => {
+                    let mut kept: Vec<&str> = l.split("    ").collect();
+                    kept.retain(|part| !part.trim_end().ends_with("ms"));
+                    kept.join("    ")
                 }
+                _ => l.to_string(),
             })
             .collect::<Vec<_>>()
             .join("\n")
     };
     let once = strip_timing(stdout(&run(&["scan", "fixtures"])));
+    assert!(
+        once.contains("risk 8") || once.contains("risk 7"),
+        "the score survives the timing strip, or this test compares nothing"
+    );
     for _ in 0..4 {
         assert_eq!(strip_timing(stdout(&run(&["scan", "fixtures"]))), once);
     }
@@ -484,4 +530,189 @@ fn fail_on_is_monotone_across_every_fixture() {
     }
 
     assert!(checked >= 16, "expected every fixture, checked {checked}");
+}
+
+/// Both spellings of an option value. `--format=json` is what a person types
+/// first and it used to be an "unknown option".
+#[test]
+fn options_take_an_equals_sign() {
+    let spaced = run(&[
+        "scan",
+        "fixtures/npm-s.package-lock.json",
+        "--format",
+        "json",
+    ]);
+    let joined = run(&["scan", "fixtures/npm-s.package-lock.json", "--format=json"]);
+    assert_eq!(stdout(&spaced), stdout(&joined));
+
+    let gate = run(&[
+        "scan",
+        "fixtures/poisoned.package-lock.json",
+        "--fail-on=critical",
+    ]);
+    assert_eq!(gate.status.code(), Some(1));
+}
+
+/// A switch given a value is a mistake, not a no-op — silently ignoring it
+/// lets somebody believe they turned colour off.
+#[test]
+fn a_switch_refuses_a_value() {
+    let o = run(&["scan", "fixtures", "--no-color=yes"]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(stderr(&o).contains("takes no value"), "{}", stderr(&o));
+}
+
+/// Without `--`, a directory named `-v` is unreachable.
+#[test]
+fn a_double_dash_ends_the_options() {
+    let dir = scratch("dashdash");
+    let odd = dir.join("-v");
+    write(
+        &odd.join("package-lock.json"),
+        &fixture("npm-s.package-lock.json"),
+    );
+
+    let o = Command::new(bin())
+        .args(["scan", "--", "-v"])
+        .current_dir(&dir)
+        .output()
+        .expect("stranger should run");
+    assert_eq!(o.status.code(), Some(0));
+    assert!(stdout(&o).contains("package-lock.json"), "{}", stdout(&o));
+}
+
+/// `stranger scan --fail-on critical | head -1` has to keep the answer it
+/// already computed. Every write after `head` exits is EPIPE, and mapping all
+/// of them to success reported a tree full of criticals as clean.
+#[test]
+fn a_closed_pipe_does_not_erase_the_gate() {
+    use std::process::Stdio;
+    let mut child = Command::new(bin())
+        .args(["scan", "fixtures", "--fail-on", "critical"])
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("spawn");
+    // Drop the read end without reading it: every write the child makes now
+    // fails with EPIPE, which is exactly what `| head -1` looks like.
+    drop(child.stdout.take());
+    let status = child.wait().expect("wait");
+    assert_eq!(status.code(), Some(1), "the gate answer survives the pipe");
+}
+
+/// `/dev/null` exists. Reporting "no such file or directory" about it sends
+/// somebody looking for a typo that is not there.
+#[test]
+fn a_device_node_is_not_reported_as_missing() {
+    let o = run(&["scan", "/dev/null"]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        stderr(&o).contains("not a regular file or directory"),
+        "{}",
+        stderr(&o)
+    );
+    let gone = run(&["scan", "/tmp/stranger-no-such-path-here"]);
+    assert!(stderr(&gone).contains("no such file or directory"));
+}
+
+/// `std::env::args()` panics on a non-UTF-8 argument, and on Linux argv is
+/// arbitrary bytes. It aborted the process, exit 134, before any of our code
+/// ran.
+#[cfg(unix)]
+#[test]
+fn a_non_utf8_argument_is_a_usage_error_not_an_abort() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+    let o = Command::new(bin())
+        .arg("scan")
+        .arg(OsStr::from_bytes(b"/tmp/\xff-nope"))
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output()
+        .expect("stranger should run");
+    assert_eq!(o.status.code(), Some(2), "not a signal, not 134");
+    assert!(stderr(&o).contains("not valid UTF-8"), "{}", stderr(&o));
+}
+
+/// The two output surfaces have to agree about the order of the same
+/// findings. `report::human` sorts its blocks by `Rule::rank`; the JSON array
+/// was in call order, which is not the same list on a tree where a later rule
+/// outranks an earlier one.
+#[test]
+fn json_findings_are_in_report_order() {
+    let o = run(&[
+        "scan",
+        "fixtures/npm-xl.package-lock.json",
+        "--format",
+        "json",
+    ]);
+    let body = stdout(&o);
+    let rules: Vec<&str> = body
+        .match_indices("\"rule\":\"")
+        .map(|(i, _)| {
+            let rest = &body[i + 8..];
+            &rest[..rest.find('"').expect("closed string")]
+        })
+        .collect();
+    let rank = |r: &str| match r {
+        "slopsquat" => 0,
+        "install-script" => 1,
+        "trivial" => 2,
+        "drift" => 3,
+        "pinning" => 4,
+        other => panic!("unknown rule {other}"),
+    };
+    assert!(
+        rules.windows(2).all(|w| rank(w[0]) <= rank(w[1])),
+        "{rules:?}"
+    );
+}
+
+/// The machine-readable surface has to be byte-identical between two runs of
+/// the same tree, because that is the whole justification for cutting
+/// `stranger diff` — DECISIONS.md offers `diff <(stranger scan a --format
+/// json) <(stranger scan b --format json)` in its place. `elapsed_ms` made
+/// that diff print a difference every single time.
+#[test]
+fn json_is_byte_identical_between_runs() {
+    let once = stdout(&run(&["scan", "fixtures", "--format", "json"]));
+    assert!(!once.contains("elapsed"), "no clock in the machine surface");
+    for _ in 0..3 {
+        assert_eq!(
+            stdout(&run(&["scan", "fixtures", "--format", "json"])),
+            once
+        );
+    }
+    // The human report keeps its timing, because "41ms" is half the pitch.
+    assert!(stdout(&run(&["scan", POISONED])).contains("ms    third-party"));
+}
+
+/// Every reader computes `has_integrity` and, until this landed, nothing read
+/// it — while README LIMITS claimed the tool reports whether the field is
+/// present. Presence only: std has no crypto, so no sha512 is ever computed.
+#[test]
+fn json_carries_the_integrity_count() {
+    let out = stdout(&run(&[
+        "scan",
+        "fixtures/npm-s.package-lock.json",
+        "--format",
+        "json",
+    ]));
+    let n: usize = out
+        .split("\"integrity\":")
+        .nth(1)
+        .and_then(|rest| rest.split(&[',', '}'][..]).next())
+        .expect("an integrity count")
+        .parse()
+        .expect("a number");
+    assert!(n > 0, "npm records an integrity for every registry entry");
+    // requirements.txt records no hashes at all, and saying 0 is the honest
+    // answer rather than an omission.
+    let flat = stdout(&run(&[
+        "scan",
+        "fixtures/reqs-s.requirements.txt",
+        "--format",
+        "json",
+    ]));
+    assert!(flat.contains("\"integrity\":0"), "{flat}");
 }

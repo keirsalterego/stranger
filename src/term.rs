@@ -103,6 +103,40 @@ pub fn decide(
     tty
 }
 
+/// Untrusted text, safe to hand to a terminal.
+///
+/// A lockfile is a file written by strangers — that is the whole premise — and
+/// the human report prints its package names and versions to a TTY. A version
+/// string of `1.0.0\x1b[2K\x1b[1A\x1b[2K` erases the two lines above it: the
+/// `HALLUCINATION RISK` heading and the package name scroll out of existence
+/// while the exit code still says 1. `\x1b[2J` clears the screen. A tool whose
+/// findings can be deleted by the file it is auditing is not an auditing tool,
+/// and this is the one bug in the repo that a *malicious* input could exploit
+/// rather than merely trip over.
+///
+/// Replaced with U+FFFD rather than dropped, so the cell still takes a column
+/// and the reader can see that something was there. Nothing real is lost: no
+/// registry permits a control character in a name — npm allows URL-safe
+/// characters, PyPI normalises to `[a-z0-9.-]`, crates.io to `[A-Za-z0-9_-]` —
+/// and no version scheme has one either. DEL and the C1 range go too, because
+/// `\u{9b}` is a single-byte CSI on a terminal decoding Latin-1.
+///
+/// Borrowed when there is nothing to do, which is every name in every fixture.
+pub fn sanitize(s: &str) -> Cow<'_, str> {
+    if !s.chars().any(is_control) {
+        return Cow::Borrowed(s);
+    }
+    Cow::Owned(
+        s.chars()
+            .map(|c| if is_control(c) { '\u{fffd}' } else { c })
+            .collect(),
+    )
+}
+
+fn is_control(c: char) -> bool {
+    matches!(c, '\0'..='\x1f' | '\x7f'..='\u{9f}')
+}
+
 /// Display width of a cell: one column per Unicode scalar.
 ///
 /// ponytail: `chars().count()` — wrong for three things. East Asian wide and
@@ -116,6 +150,10 @@ pub fn decide(
 /// can hand us, and counting bytes would not be — a name with an accent in it
 /// still lines up. Upgrade path: generate the table at build time if a
 /// registry that permits CJK identifiers ever turns up.
+///
+/// Assumes its argument came through `sanitize`. An escape sequence counted as
+/// eight columns is how a hostile version string knocked every row after it out
+/// of alignment, so the two belong together.
 pub fn width(s: &str) -> usize {
     s.chars().count()
 }

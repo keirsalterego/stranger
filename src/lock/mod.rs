@@ -151,6 +151,22 @@ impl Tree {
     pub fn workspace_members(&self) -> usize {
         self.packages.len() - self.third_party()
     }
+
+    /// Third-party entries that recorded an integrity field.
+    ///
+    /// Presence, never correctness. Verifying a `sha512-...` needs SHA-512 and
+    /// Rust std has no crypto at all, so the honest half of the answer is the
+    /// only half there is — and reporting it is still worth more than the
+    /// field being read by six readers and looked at by nobody, which is what
+    /// it was. First-party entries are excluded because npm does not record an
+    /// integrity for a workspace member, so counting them would put a floor
+    /// under the number that has nothing to do with the registry.
+    pub fn with_integrity(&self) -> usize {
+        self.packages
+            .iter()
+            .filter(|p| !p.first_party && p.has_integrity)
+            .count()
+    }
 }
 
 /// Lockfiles we know how to read, in the order we look for them.
@@ -200,8 +216,38 @@ pub fn read(path: &std::path::Path) -> crate::error::Result<Tree> {
     };
     // The syntax errors arrive from a parser that was handed a string and
     // never learned where it came from, so this is the first frame that can
-    // say which file `1:1` is in. One call here covers all six readers.
-    tree.map_err(|e| e.in_file(path))
+    // say which file `1:1` is in. One call here covers all seven readers.
+    tree.map(scrub).map_err(|e| e.in_file(path))
+}
+
+/// Replace control characters in everything a reader took from the file.
+///
+/// Here rather than in the renderer, and that is the point: `report.rs`,
+/// `tree.rs` and every rule's `detail` string all print package names, so
+/// "sanitise at the print site" is a rule with a dozen call sites and one of
+/// them will be missed by whoever adds the thirteenth. This is the one seam
+/// every reader already passes through, so a name that reaches the rest of the
+/// program is a name that has been through it. See `term::sanitize` for what a
+/// hostile version string does to a terminal without it.
+///
+/// The JSON writer escapes correctly and never needed this, but it gets the
+/// scrubbed string too — the two surfaces disagreeing about what a package is
+/// called would be worse than either answer.
+fn scrub(mut tree: Tree) -> Tree {
+    fn clean(s: &mut String) {
+        if let std::borrow::Cow::Owned(safe) = crate::term::sanitize(s) {
+            *s = safe;
+        }
+    }
+    for pkg in &mut tree.packages {
+        clean(&mut pkg.name);
+        clean(&mut pkg.version);
+        clean(&mut pkg.key);
+        if let Pin::Compatible(spec) | Pin::Range(spec) = &mut pkg.pinned {
+            clean(spec);
+        }
+    }
+    tree
 }
 
 /// Every known lockfile under `dir`.

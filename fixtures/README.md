@@ -26,6 +26,7 @@ present is public.
 | `pnpm-l.pnpm-lock.yaml` | 850 | pnpm, lockfileVersion 9 — one importer, 850 snapshots, 1,851 edges, 42 `hasBin`, 3 `deprecated` |
 | `gomod-m.go.mod` | 174 | go 1.25.7 — 124 `// indirect`, 26 pseudo-versions, 2 `+incompatible`, three `require` blocks |
 | `gomod-xs.go.mod` | 6 | go 1.24 — one single-line `require`, one `retract` block |
+| `hostile.package-lock.json` | 5 | npm, lockfileVersion 3 — **written to attack the reader of the report.** See below. |
 
 Neither go fixture contains a `replace`, an `exclude` or a `toolchain`, so those
 three are tested against hand-written input in `tests/gomod.rs` — handled,
@@ -59,10 +60,23 @@ npm, all three inserted as **root** dependencies with no parent:
 | `lodahs` | `lodash` | one **transposition** — Damerau distance 1, Levenshtein distance 2 |
 | `chalck` | `chalk` | one insertion |
 
-`lodahs` is the reason `distance.rs` implements Damerau-Levenshtein rather than
-plain Levenshtein. Under plain Levenshtein it is distance 2, tied with a large
-population of legitimate sibling packages, and the threshold that catches it
-catches half the registry with it. Under Damerau it is distance 1 and sits alone.
+`lodahs` is why `distance.rs` implements Damerau-Levenshtein rather than plain
+Levenshtein — but not for the reason this file gave for most of the weekend. It
+said the plain metric needs a threshold of 2 to reach `lodahs`, and that such a
+threshold "catches half the registry". The shipped threshold *is* 2. Levenshtein
+is pointwise greater than or equal to Damerau, so Damerau-at-k is always the more
+permissive of the two, and at k = 2 the plain metric is strictly the tighter one:
+against `corpus/npm.txt` it returns 1 candidate for `lodahs` where Damerau returns
+3 (`lodash`, `loadjs`, `loodash`).
+
+What Damerau actually buys is the reported distance. It scores the transposition
+1 rather than 2, which changes the `d=` in the finding, the tie-break among
+candidates, and — the part that would matter — the threshold you could drop to.
+At k = 1 the two disagree completely: Damerau finds `lodash`, plain Levenshtein
+finds nothing. Measured across every name the rule fires on in every fixture in
+this directory, at k = 2 the two metrics fire on **exactly the same set**.
+`tests/distance.rs::damerau_changes_the_distance_not_which_names_fire` holds both
+halves of that.
 
 The real `express` is still in this tree, one entry above the fake `expres`. A rule
 that flags the typo without flagging its legitimate neighbour is the actual bar.
@@ -96,6 +110,32 @@ neighbour existed, and it does.
 
 Left in place, reclassified, because a fixture that corrected a claim in its own
 documentation is worth more than one that confirmed it.
+
+## The hostile one
+
+`hostile.package-lock.json` is not from a real project and is not poisoned in the
+slopsquat sense. It is five entries whose *strings* are written to attack whoever
+reads the report, because a lockfile is a file written by strangers and the human
+renderer prints its contents straight to a terminal:
+
+| entry | what it carries |
+|---|---|
+| `lodahs` | version `1.0.0\x1b[2K\x1b[1A\x1b[2K\x1b[1A\x1b[2K\r` — erases the two report lines above it |
+| `chalck` | an SGR sequence in the `name` field, and `hasInstallScript` |
+| `csi` | `\u{9b}31m` — a one-byte CSI wherever Latin-1 is still decoded |
+| `bell` | bare BEL, backspace, newline, tab, NUL and DEL |
+| `aaa…` (300 chars) | one name longer than any terminal is wide |
+
+Before `term::sanitize`, scanning this file made the `HALLUCINATION RISK` heading
+and the first finding scroll out of existence while the process still exited 1 —
+a finding deleted by the file it was a finding about. `\x1b[2J` cleared the
+screen outright. The escape bytes also counted as display columns, so every row
+after the first was out of alignment.
+
+The file is legal JSON throughout: every escape is written in `\uXXXX` form, so
+nothing here tests the parser. It tests the renderer. Two tests in
+`tests/cli.rs` hold it — one asserting no control character reaches stdout in any
+mode, one asserting the detail column stays square.
 
 ## Measured, not remembered
 
