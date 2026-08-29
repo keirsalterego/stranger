@@ -113,15 +113,37 @@ build scripts are not `INSTALL SCRIPTS` findings, and your own package names are
 not `TRIVIAL` ones. `npm-xl` has 14 first-party entries, 7 links among them, and
 `tests/rules.rs` asserts none of them ever appears in a finding.
 
-## One lockfile, one scan
+## Discovery walks down, and the skip list is what makes that safe
 
-Discovery is not recursive, so `stranger scan .` at a workspace root finds the one
-lockfile npm actually wrote and stops. That is the right file — the per-member
-`package.json` files are not lockfiles and have no resolved versions in them.
+`stranger scan .` at a workspace root does not read only that directory. It walks
+down from there, six levels deep, sorting as it goes and never following a
+symlink, and it refuses to enter `node_modules`, `target`, `dist`, `vendor`,
+nine other names and every dot-directory.
 
-If your monorepo mixes ecosystems and keeps a `requirements.txt` beside the
-`package-lock.json`, both are found and both are scanned, each producing its own
-report block:
+On a plain npm workspace the walk still ends up with the one lockfile npm
+actually wrote at the root, because the per-member `package.json` files are not
+lockfiles and have no resolved versions in them. The recursion earns its keep on
+the layouts where that is not true — a lockfile per app, or more than one
+ecosystem:
+
+```console
+$ find /tmp/mono -type f | sort
+/tmp/mono/apps/web/package-lock.json
+/tmp/mono/node_modules/vendored/package-lock.json
+/tmp/mono/services/api/requirements.txt
+$ ./target/release/stranger scan --format json /tmp/mono | jq -r .source
+/tmp/mono/apps/web/package-lock.json
+/tmp/mono/services/api/requirements.txt
+```
+
+Three lockfiles on disk, two audited. The one under `node_modules` is somebody
+else's vendored copy, and a populated `node_modules` holds hundreds of them —
+walking into it turns one scan into four hundred irrelevant ones.
+`tests/cli.rs::a_directory_scan_skips_vendored_lockfiles` asserts the skip, and
+`a_directory_scan_is_deterministic` asserts the walk finds `Cargo.lock`,
+`uv.lock` and `requirements.txt` across the fixtures directory in sorted order.
+
+Each file found produces its own report block:
 
 ```console
 $ ./target/release/stranger scan /tmp/mixed

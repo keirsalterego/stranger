@@ -68,13 +68,22 @@ not evidence of being compromised now. Critical is reserved for
 [slopsquat](../detection/rule.md), where the finding is a name that should not
 exist.
 
-## It fires on PyPI only
+## It fires on PyPI only, and in practice on one PyPI format
 
 npm, cargo and go all record a resolved version, so every entry those readers
 produce is `Pin::Exact` and there is nothing to say. Firing on them would mean
-either a rule that never triggers or a rule that has started guessing.
+either a rule that never triggers or a rule that has started guessing. The rule
+returns immediately on any non-PyPI tree.
 
-The rule returns immediately on any non-PyPI tree.
+`poetry.lock` and `uv.lock` are PyPI, so the rule does run over them — and finds
+nothing, because those two readers set `Pin::Exact` on every entry they build and
+`Pin::Exact` is the arm this rule skips. A lockfile records one resolved version
+per package; there is no specifier left to classify.
+
+So the rule walks 233 `poetry-m` entries and 249 `uv-m` entries and returns an
+empty list from both. That is a rule doing nothing rather than a rule being
+switched off, and it is why the [limits grid](../limits.md) reads `never` for
+poetry and uv but not for `requirements.txt`.
 
 ## A direct reference is unconstrained
 
@@ -109,9 +118,30 @@ Whether the range is *deliberate*. A library publishing to PyPI is supposed to
 declare ranges; an application deploying from a `requirements.txt` is not. The
 file does not say which one it belongs to, and this rule does not guess.
 
-It also cannot see the resolved versions that a real deployment used. `pip
-freeze`, `poetry.lock` and `uv.lock` all record them. None of the three has a
-reader yet.
+It also cannot see the resolved versions that a real deployment used — not from
+this file. All three of the files that do record them are readable, so the answer
+is to point `stranger` at one of those instead.
+
+`pip freeze` writes a `requirements.txt` with `==` on every line, which is the
+same reader and produces no pinning findings at all:
+
+```console
+$ cat /tmp/freeze/requirements.txt
+flask==3.0.0
+numpy==2.1.0
+urllib3==2.2.1
+requests==2.31.0
+$ ./target/release/stranger scan /tmp/freeze
+
+  requirements.txt         4 packages   (4 direct · 0 transitive)
+
+  no findings
+  risk 0/100    0ms    third-party deps used to compute this: 0
+```
+
+That still records no graph, so the [detection rule](../detection/rule.md) stays
+on two clauses. [`poetry.lock` and `uv.lock`](../formats/poetry-uv.md) record
+both the versions and the graph, and are the file to keep if you get to choose.
 
 ```console
 $ ./target/release/stranger scan -v fixtures/reqs-xs.requirements.txt

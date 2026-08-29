@@ -40,9 +40,21 @@ parsing care changes it.
 [False positives](../detection/false-positives.md) has this costing a real one on
 a real fixture.
 
-The upgrade is a different file, not a better reader. `poetry.lock` and `uv.lock`
-both record the resolved graph and both are already in `fixtures/`. Neither has a
-reader yet.
+The upgrade is a different file, not a better reader, and both of those files
+read today. [`poetry.lock` and `uv.lock`](poetry-uv.md) record the resolved graph:
+
+```console
+$ ./target/release/stranger scan fixtures/poetry-m.poetry.lock
+
+  poetry-m.poetry.lock     233 packages   (75 direct · 158 transitive)
+
+  no findings
+  risk 0/100    9ms    third-party deps used to compute this: 0
+```
+
+158 of those 233 are transitive, and they can only be called transitive because
+the edges are in the file. That is the number `requirements.txt` cannot produce —
+it reports every package as direct — and clause 3 is the rule that spends it.
 
 ## Which rules can fire
 
