@@ -4,20 +4,27 @@ Same commit, same toolchain, two different directories, one binary.
 
 ```console
 $ make repro
-commit:  eddb9dff9cc21acf3723cfc4d2b0db3f9071f6fa
+commit:  7c32309afb2b9a05514969cdafc1c551121c69d6
 rustc:   rustc 1.98.0 (88d9e12ae 2026-08-18)
 epoch:   1787940000
 
-build A  /tmp/stranger-repro.290570/a
-         5674d7173a082cd131893ed1e972a3073e4c1adef0e99a229fc24b48b696eb29
-build B  /tmp/stranger-repro.290570/b-with-a-deliberately-longer-name
-         5674d7173a082cd131893ed1e972a3073e4c1adef0e99a229fc24b48b696eb29
+build A  /tmp/stranger-repro.894716/a
+         73e7dba9ec5be3c0e8f4dab02af9b55520a989d42667bd71bbd8f14c97084a74
+build B  /tmp/stranger-repro.894716/b-with-a-deliberately-longer-name
+         73e7dba9ec5be3c0e8f4dab02af9b55520a989d42667bd71bbd8f14c97084a74
 
 MATCH — byte-identical across two directories
 ```
 
-The hash is for whatever you have checked out. `make repro` recomputes it, so it
-cannot go stale in a document.
+The hash is for whatever you have checked out, and it moves whenever `src/` or
+`Cargo.lock` moves. **The line carrying the claim is `MATCH`, not the hash.**
+
+Which is not a hypothetical caveat: this page and the README quoted two different
+runs, at two different commits, with two different hashes, for the same claim —
+which reads like one of them was invented. They are one run now, and re-synced
+from a single `make repro` at the freeze. CI runs `scripts/repro.sh` on every pull
+request and every push to `main`, so a commit that stops reproducing fails there
+rather than being discovered by a judge.
 
 ## Two directories, not one
 

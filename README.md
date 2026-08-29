@@ -278,14 +278,14 @@ it twice and prints what it got:
 
 ```
 $ make repro
-commit:  6288840ecc3b8c05e608c1e09eae5ce81dfb31b8
+commit:  7c32309afb2b9a05514969cdafc1c551121c69d6
 rustc:   rustc 1.98.0 (88d9e12ae 2026-08-18)
 epoch:   1787940000
 
-build A  /tmp/stranger-repro.482198/a
-         230dfc8055d54ce291e7cc4fc1a2383e7cdfc760ff076216df59aea90cc33225
-build B  /tmp/stranger-repro.482198/b-with-a-deliberately-longer-name
-         230dfc8055d54ce291e7cc4fc1a2383e7cdfc760ff076216df59aea90cc33225
+build A  /tmp/stranger-repro.894716/a
+         73e7dba9ec5be3c0e8f4dab02af9b55520a989d42667bd71bbd8f14c97084a74
+build B  /tmp/stranger-repro.894716/b-with-a-deliberately-longer-name
+         73e7dba9ec5be3c0e8f4dab02af9b55520a989d42667bd71bbd8f14c97084a74
 
 MATCH — byte-identical across two directories
 ```
