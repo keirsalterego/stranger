@@ -1,0 +1,10 @@
+# Normalise line endings for source and prose.
+* text=auto eol=lf
+
+# Except these. The fixtures are real lockfiles that the tests compare byte
+# for byte, and the corpus is a sorted list the binary compiles in with
+# include_str!. A Windows checkout with core.autocrlf=true would rewrite both
+# and fail the suite in a way that reads as a bug in the tool rather than in
+# the checkout.
+fixtures/** -text
+corpus/** -text
