@@ -1,4 +1,5 @@
 use stranger::corpus;
+use stranger::distance::{self, Query, budget_for};
 use stranger::lock::Ecosystem;
 
 const ALL: &[Ecosystem] = &[Ecosystem::Npm, Ecosystem::PyPi, Ecosystem::Crates];
@@ -137,6 +138,175 @@ fn nearest_finds_the_obvious_parent() {
         nearest(Ecosystem::PyPi, "python-dateutils"),
         Some(("python-dateutil", 1))
     );
+}
+
+/// The bug `CHARS_PER_EDIT` exists for.
+///
+/// Every one of these is a real package sitting below its registry's
+/// popularity cut, and every one of them used to come out CRITICAL: a name
+/// this short is two edits from something in any registry, so clause two
+/// passed for free and the rule quietly became a two-clause rule. The parents
+/// it named are the tell — `am`, `lr`, `ci`, `h2` are junk short entries that
+/// won the shorter-name tie-break, and nothing about them is a plausible thing
+/// for a model to have mistyped.
+#[test]
+fn short_names_do_not_all_look_like_typos() {
+    for (eco, name) in [
+        (Ecosystem::PyPi, "hy"),     // the Hy lisp, on PyPI since 2013
+        (Ecosystem::Crates, "iced"), // d=2 from `cid`
+        (Ecosystem::Npm, "lru"),     // d=1 from `lr`
+        (Ecosystem::Npm, "vm"),      // d=1 from `am`
+        (Ecosystem::Npm, "fkill"),   // d=2 from `quill`
+        (Ecosystem::Crates, "ksni"), // d=2 from `jni`
+        (Ecosystem::Npm, "taze"),    // d=1 from `gaze`
+    ] {
+        assert!(!corpus::contains(eco, name), "{name} is in the corpus now");
+        assert_eq!(nearest(eco, name), None, "{name} still names a parent");
+    }
+
+    // And the floor it must not cross. Six characters buys one edit, which is
+    // every planted name in the fixtures.
+    assert_eq!(nearest(Ecosystem::Npm, "expres"), Some(("express", 1)));
+    assert_eq!(nearest(Ecosystem::PyPi, "nunpy"), Some(("numpy", 1)));
+}
+
+/// Every candidate the bucketed sweep skipped, it was entitled to skip.
+///
+/// `ByLength::nearest` only looks at the buckets within `k` of the query's
+/// length. The bound is exact — an edit moves a length by at most one — and it
+/// is also the one thing in `corpus.rs` that could be wrong without anything
+/// else noticing: an off-by-one in the range makes the rule quietly miss
+/// names, no fixture fails, no count moves, and a detection tool becomes a
+/// quiet one. So: the exhaustive sweep it replaced, over the whole list, name
+/// for name and distance for distance.
+#[test]
+fn bucketing_skips_nothing_an_exhaustive_sweep_would_find() {
+    for &eco in ALL {
+        let names = corpus::names(eco);
+        for probe in probes(names) {
+            assert_eq!(
+                corpus::nearest_in(names, eco, &probe),
+                exhaustive(names, eco, &probe),
+                "{} disagreed on {probe:?}",
+                eco.as_str()
+            );
+        }
+    }
+}
+
+/// The sweep `ByLength` replaced: every name in the list, no bucket range.
+fn exhaustive(names: &[&'static str], eco: Ecosystem, name: &str) -> Option<(&'static str, usize)> {
+    let query = corpus::normalize(eco, name);
+    let k = budget_for(query.chars().count());
+    if k == 0 {
+        return None;
+    }
+    names
+        .iter()
+        .filter_map(|&c| distance::within(&query, c, k).map(|d| (c, d)))
+        .min_by_key(|&(c, d)| (d, c.len(), c))
+}
+
+/// Near-misses spread across the whole list: every 4,001st name with one
+/// character deleted, doubled or transposed. A fixed stride rather than a
+/// seeded sample, because a corpus sweep is slow enough that a flaky version
+/// of this would get deleted rather than debugged.
+fn probes(names: &[&'static str]) -> Vec<String> {
+    let mut out = Vec::new();
+    for (i, name) in names.iter().enumerate().step_by(4_001) {
+        let mut chars: Vec<char> = name.chars().collect();
+        let at = i % chars.len();
+        match i % 3 {
+            0 => {
+                chars.remove(at);
+            }
+            1 => chars.insert(at, chars[at]),
+            _ => {
+                let last = chars.len() - 1;
+                chars.swap(at, if at == last { 0 } else { at + 1 });
+            }
+        }
+        out.push(chars.into_iter().collect());
+    }
+    // The names the rule exists to catch, the two it used to invent, and a
+    // name longer than anything in any corpus — the bucket range runs off the
+    // end of the index there and has to come back empty rather than panic.
+    out.extend(["expres", "lodahs", "chalck", "ksni", "taze", "hy", "a", ""].map(String::from));
+    out.push("z".repeat(400));
+    out
+}
+
+/// Where `distance::CHARS_PER_EDIT` comes from: the share of names that find
+/// some neighbour when you pretend they are missing.
+///
+/// A real package below the popularity cut is exactly a corpus name with the
+/// corpus name removed, so leave-one-out is the false positive rate for clause
+/// two, per length, per registry. Ignored by default — it is an all-pairs
+/// sweep of three corpora and takes about ten minutes.
+///
+/// `cargo test --release --test corpus -- --ignored --nocapture` prints it.
+#[test]
+#[ignore = "slow; ten minutes of all-pairs sweep"]
+fn length_is_the_false_positive_rate() {
+    for &eco in ALL {
+        let names = corpus::names(eco);
+        let buckets = by_length(names);
+        println!(
+            "\n## {} — {} names, leave-one-out\n",
+            eco.as_str(),
+            names.len()
+        );
+        println!("| chars | in corpus | sampled | k=1 | k=2 |");
+        println!("|---|---|---|---|---|");
+        for (len, list) in buckets.iter().enumerate().take(21).skip(1) {
+            if list.is_empty() {
+                continue;
+            }
+            // Exhaustive where the answer is interesting, a 1-in-20 stride
+            // past nine characters where it is already near the floor.
+            let step = if len <= 9 { 1 } else { 20 };
+            let sample: Vec<&str> = list.iter().copied().step_by(step).collect();
+            let hits = |k: usize| {
+                sample
+                    .iter()
+                    .filter(|&&n| has_neighbour(&buckets, n, k))
+                    .count() as f64
+                    * 100.0
+                    / sample.len() as f64
+            };
+            println!(
+                "| {len} | {} | {} | {:.1}% | {:.1}% |",
+                list.len(),
+                sample.len(),
+                hits(1),
+                hits(2)
+            );
+        }
+    }
+}
+
+fn by_length(names: &[&'static str]) -> Vec<Vec<&'static str>> {
+    let max = names.iter().map(|n| n.chars().count()).max().unwrap_or(0);
+    let mut b = vec![Vec::new(); max + 1];
+    for &n in names {
+        b[n.chars().count()].push(n);
+    }
+    b
+}
+
+/// Any neighbour within `k` other than `q` itself, which is all the rate
+/// question needs — stops at the first.
+fn has_neighbour(b: &[Vec<&'static str>], q: &str, k: usize) -> bool {
+    let mut query = Query::with_budget(q, k);
+    let lo = query.char_len().saturating_sub(k);
+    let hi = (query.char_len() + k).min(b.len() - 1);
+    match b.get(lo..=hi) {
+        None => false,
+        Some(range) => range
+            .iter()
+            .flatten()
+            .any(|&c| c != q && query.distance_to(c).is_some()),
+    }
 }
 
 /// A name that is not a near-miss of anything real gets no neighbour, and the

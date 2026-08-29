@@ -1,4 +1,6 @@
-use stranger::distance::{MAX_EDIT_DISTANCE, damerau_levenshtein as d, within};
+use stranger::distance::{
+    CHARS_PER_EDIT, MAX_EDIT_DISTANCE, budget_for, damerau_levenshtein as d, within,
+};
 
 /// std has no RNG, and this needs one. Xorshift64*, seeded from the clock so
 /// repeated runs explore different inputs, and the seed is printed so a
@@ -65,6 +67,24 @@ fn the_names_this_tool_exists_to_catch() {
     // And the ones it must not catch.
     assert!(d("requests-http", "requests") > MAX_EDIT_DISTANCE);
     assert!(d("lodash", "express") > MAX_EDIT_DISTANCE);
+}
+
+/// The budget rises one step per `CHARS_PER_EDIT` characters and stops at the
+/// ceiling, and the four lengths that matter are the ones a planted name sits
+/// on.
+#[test]
+fn budget_climbs_with_length_and_stops() {
+    assert_eq!((0..=4).map(budget_for).collect::<Vec<_>>(), [0, 0, 0, 0, 0]);
+    assert_eq!((5..=9).map(budget_for).collect::<Vec<_>>(), [1; 5]);
+    assert_eq!(budget_for(10), MAX_EDIT_DISTANCE);
+    assert_eq!(budget_for(400), MAX_EDIT_DISTANCE);
+    assert_eq!(budget_for(CHARS_PER_EDIT), 1);
+
+    // `expres`, `lodahs` and `chalck` are one edit at six characters;
+    // `requests-http` is two at thirteen; `python-dateutils` one at sixteen.
+    assert!(budget_for(6) >= d("expres", "express"));
+    assert!(budget_for(13) >= d("requests-http", "requests-html"));
+    assert!(budget_for(16) >= d("python-dateutils", "python-dateutil"));
 }
 
 /// Real sibling packages that a naive threshold flags and should not.
@@ -195,22 +215,22 @@ fn levenshtein(a: &str, b: &str) -> usize {
     prev[b.len()]
 }
 
-/// What Damerau actually buys at the threshold that ships.
+/// What Damerau actually buys at the budget that ships.
 ///
 /// Three files argued that Damerau is load-bearing because `lodahs` is
-/// Levenshtein-2 from `lodash`, and the shipped threshold is 2 — so that
-/// argument said the rule needs a variant to reach a name the plain metric
-/// already reaches. Levenshtein is pointwise >= Damerau, so Damerau-at-k is
-/// always the *more permissive* of the two; at k = 2 plain Levenshtein is
-/// strictly more selective, returning 1 candidate for `lodahs` where Damerau
-/// returns 3.
+/// Levenshtein-2 from `lodash`, and the threshold was 2 — so that argument
+/// said the rule needs a variant to reach a name the plain metric already
+/// reaches. Levenshtein is pointwise >= Damerau, so Damerau-at-k is always
+/// the *more permissive* of the two; at k = 2 plain Levenshtein is strictly
+/// more selective, returning 1 candidate for `lodahs` where Damerau returns 3.
 ///
-/// What Damerau does buy: it scores the transposition 1 rather than 2. That is
-/// the reported `d=`, the tie-break among candidates, and — the part that
-/// would matter — the threshold you could drop to. At k = 1 the two metrics
-/// disagree about `lodahs` completely: Damerau finds `lodash`, Levenshtein
-/// finds nothing at all. Measured across every name the rule fires on in every
-/// fixture, at k = 2 the two metrics fire on exactly the same set.
+/// That argument was wrong when the threshold was flat, and `budget_for` has
+/// since made it right. `lodahs` is six characters, and six characters buy one
+/// edit — and at k = 1 the two metrics disagree about it completely: Damerau
+/// finds `lodash`, Levenshtein finds nothing at all. The variant is now the
+/// only reason a planted transposition is reachable at the budget its length
+/// earns, which is a stronger claim than the one the comment used to make and
+/// the first version of this test could not have checked.
 #[test]
 fn damerau_changes_the_distance_not_which_names_fire() {
     let npm = corpus("npm.txt");
@@ -222,11 +242,12 @@ fn damerau_changes_the_distance_not_which_names_fire() {
     let within_k = |k: usize, metric: fn(&str, &str) -> usize| {
         npm.iter().filter(|&&n| metric("lodahs", n) <= k).count()
     };
-    // At the shipped threshold, the plain metric is the tighter one.
+    // At the old flat threshold, the plain metric was the tighter one.
     assert_eq!(within_k(2, d), 3);
     assert_eq!(within_k(2, levenshtein), 1);
-    // At k = 1 it is the other way round, and that is the case the variant is
-    // actually for.
+    // At the budget six characters actually earn it is the other way round,
+    // and that is the case the variant is for.
+    assert_eq!(budget_for("lodahs".len()), 1);
     assert_eq!(within_k(1, d), 1);
     assert_eq!(within_k(1, levenshtein), 0);
 }

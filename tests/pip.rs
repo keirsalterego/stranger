@@ -74,11 +74,19 @@ fn exact_pins() {
 
 #[test]
 fn constraint_kinds() {
-    let t = parse("a>=1.0\nb~=1.2\nc<2\nd!=1.5\ne\nf==1.2.*\ng>=1.0,<2\nh>=1.0,==1.4\n");
+    let t = parse(
+        "a>=1.0\nb~=1.2\nc<2\nd!=1.5\ne\nf==1.2.*\ng>=1.0,<2\nh>=1.0,==1.4\ni!=1.5,!=1.6\nj>=1.0,!=1.5\n",
+    );
     assert_eq!(pin_of(&t, "a"), Pin::Range(">=1.0".into()));
     assert_eq!(pin_of(&t, "b"), Pin::Compatible("~=1.2".into()));
     assert_eq!(pin_of(&t, "c"), Pin::Range("<2".into()));
-    assert_eq!(pin_of(&t, "d"), Pin::Range("!=1.5".into()));
+    // `!=` bounds neither end. Read as a range it scored Medium — one notch
+    // *safer* than the bare `e` below it, which admits strictly more, and
+    // enough to pass a `--fail-on high` that `e` fails.
+    assert_eq!(pin_of(&t, "d"), Pin::Unconstrained);
+    assert_eq!(pin_of(&t, "i"), Pin::Unconstrained);
+    // One real bound anywhere and it is a range again.
+    assert_eq!(pin_of(&t, "j"), Pin::Range(">=1.0,!=1.5".into()));
     assert_eq!(pin_of(&t, "e"), Pin::Unconstrained);
     // `==1.2.*` wears the exact operator and is a range of releases.
     assert_eq!(pin_of(&t, "f"), Pin::Compatible("==1.2.*".into()));
@@ -342,6 +350,23 @@ fn poisoned_unpinned_only() {
             "{pinned} names a version and must not be flagged"
         );
     }
+}
+
+/// Severity has to be monotone in what the line lets in, or `--fail-on high`
+/// can be passed by adding characters to a requirement that already failed it.
+/// `numpy!=1.5` installs what `numpy` installs on every day but one, and it
+/// used to score a notch safer.
+#[test]
+fn excluding_a_version_is_not_a_constraint() {
+    let t = parse("numpy\nnumpy2!=1.5\nnumpy3>=1.0,!=1.5\n");
+    assert_eq!(
+        unpinned(&t),
+        vec![
+            ("numpy".to_string(), Severity::High),
+            ("numpy2".to_string(), Severity::High),
+            ("numpy3".to_string(), Severity::Medium),
+        ]
+    );
 }
 
 /// The detail quotes the file rather than paraphrasing it, or there is no way

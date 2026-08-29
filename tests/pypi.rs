@@ -302,10 +302,16 @@ fn empty_lockfiles_are_empty_not_wrong() {
 /// way `tests/ablation.rs` thins npm's and counts what clause 3 removes at
 /// each size.
 ///
-/// The answer is 54.5–77.1% of candidates removed on the two lockfiles, and
+/// The answer is 45.5–80.0% of candidates removed on the two lockfiles, and
 /// exactly nothing at a complete corpus, where clause 1 leaves clause 3 no
 /// candidates to work on. Anything quoting a figure for this belongs
 /// downstream of this test, not beside it.
+///
+/// The candidate counts themselves fell by roughly two thirds when clause 2
+/// got a length-relative budget — 30 down to 10 on `poetry-m` at 70% — because
+/// most of what a decayed corpus hands clause 3 is short names that were near
+/// something by arithmetic. That is the same effect from the other side: the
+/// clause looks less impressive because it is being given less rubbish.
 ///
 /// The share removed is a published figure, so it is pinned as exact counts
 /// rather than a range. Nothing here is sampled at runtime: the fixtures are
@@ -333,22 +339,22 @@ fn the_in_degree_clause_only_works_where_there_is_a_graph() {
         (1000, "uv-m.uv.lock", 0, 0),
         (1000, "reqs-s.requirements.txt", 0, 0),
         (1000, "reqs-xs.requirements.txt", 1, 1),
-        (900, "poetry-m.poetry.lock", 10, 4),
-        (900, "uv-m.uv.lock", 11, 5),
-        (900, "reqs-s.requirements.txt", 1, 1),
-        (900, "reqs-xs.requirements.txt", 3, 3),
-        (700, "poetry-m.poetry.lock", 30, 12),
-        (700, "uv-m.uv.lock", 32, 8),
-        (700, "reqs-s.requirements.txt", 3, 3),
-        (700, "reqs-xs.requirements.txt", 3, 3),
-        (500, "poetry-m.poetry.lock", 38, 16),
-        (500, "uv-m.uv.lock", 35, 8),
-        (500, "reqs-s.requirements.txt", 3, 3),
-        (500, "reqs-xs.requirements.txt", 2, 2),
-        (250, "poetry-m.poetry.lock", 48, 18),
-        (250, "uv-m.uv.lock", 45, 11),
-        (250, "reqs-s.requirements.txt", 5, 5),
-        (250, "reqs-xs.requirements.txt", 5, 5),
+        (900, "poetry-m.poetry.lock", 3, 1),
+        (900, "uv-m.uv.lock", 4, 2),
+        (900, "reqs-s.requirements.txt", 0, 0),
+        (900, "reqs-xs.requirements.txt", 1, 1),
+        (700, "poetry-m.poetry.lock", 10, 4),
+        (700, "uv-m.uv.lock", 15, 3),
+        (700, "reqs-s.requirements.txt", 1, 1),
+        (700, "reqs-xs.requirements.txt", 1, 1),
+        (500, "poetry-m.poetry.lock", 11, 6),
+        (500, "uv-m.uv.lock", 10, 2),
+        (500, "reqs-s.requirements.txt", 1, 1),
+        (500, "reqs-xs.requirements.txt", 0, 0),
+        (250, "poetry-m.poetry.lock", 13, 5),
+        (250, "uv-m.uv.lock", 8, 2),
+        (250, "reqs-s.requirements.txt", 1, 1),
+        (250, "reqs-xs.requirements.txt", 1, 1),
     ];
 
     let full = corpus::names(Ecosystem::PyPi);
@@ -399,11 +405,11 @@ fn the_in_degree_clause_only_works_where_there_is_a_graph() {
         }
     }
 
-    // The range the docs are allowed to quote. Both ends are rows above: uv
-    // at 90% is the floor, uv at 50% the ceiling. The complete-corpus rows
-    // drop out because they had no candidates at all — clause 1 took every
-    // one of them first, which is the honest reason clause 3 looks worthless
-    // right up until the corpus starts missing names.
+    // The range the docs are allowed to quote. Both ends are rows above:
+    // poetry at 50% is the floor, uv at 70% and 50% the ceiling. The
+    // complete-corpus rows drop out because they had no candidates at all —
+    // clause 1 took every one of them first, which is the honest reason
+    // clause 3 looks worthless right up until the corpus starts missing names.
     let graphed: Vec<f64> = rows
         .iter()
         .filter(|(_, file, ..)| !flat(file))
@@ -411,7 +417,7 @@ fn the_in_degree_clause_only_works_where_there_is_a_graph() {
         .collect();
     let lo = graphed.iter().copied().fold(f64::INFINITY, f64::min);
     let hi = graphed.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-    assert_eq!(format!("{lo:.1}–{hi:.1}%"), "54.5–77.1%");
+    assert_eq!(format!("{lo:.1}–{hi:.1}%"), "45.5–80.0%");
 }
 
 /// Deterministic corpus thinning, lifted from `tests/ablation.rs` so the two
