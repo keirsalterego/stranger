@@ -28,9 +28,11 @@
 //! - hex, octal and binary integers
 //! - dotted keys (`a.b = 1`) outside a table header
 //! - inline tables spread over several lines (that is TOML 1.1)
+//! - a bare carriage return anywhere, including inside a comment: the only
+//!   CR TOML has is the one in CRLF
 //! - duplicate keys, and any header that reopens something already defined:
-//!   a `[table]` written twice, a `[[a]]` over an `a = […]`, an `[a]` over an
-//!   `a = { … }`
+//!   a `[table]` written twice, a `[[a]]` over an `a = […]`, an `[a]` — or an
+//!   `[a.c]`, which reaches past it — over an `a = { … }`
 //!
 //! # What the fixtures actually contain
 //!
@@ -64,10 +66,25 @@
 use crate::error::{Error, Result};
 use std::collections::{BTreeMap, HashSet};
 
-/// Arrays and inline tables recurse; table headers do not. Lockfiles nest
-/// three deep at the most (`wheels = [ { … } ]` is two), so this is only
+/// Arrays, inline tables and table headers all count against this. Lockfiles
+/// nest three deep at the most (`wheels = [ { … } ]` is two), so it is only
 /// here to stop a hostile file walking the parser off the stack.
+///
+/// Headers were exempt at first, on the reasoning that `descend` is a loop and
+/// a loop cannot overflow. That is true of *building* the tree and false of
+/// freeing it. `[a.b.b…]` 200,000 segments long parses clean and returns `Ok`
+/// in 333 ms; the nested `Value::Table` chain it hands back is then dropped
+/// recursively, one frame per segment, and that is where the process dies —
+/// `fatal runtime error: stack overflow`, which `panic = "abort"` makes
+/// uncatchable. On a spawned thread's 2 MiB stack a release build survived
+/// 30,001 segments and aborted on 35,001, so 70 KB of input is enough; a debug
+/// build gave out between 2,501 and 2,601, at 5 KB. The parser was never the
+/// thing that died.
 const MAX_DEPTH: u32 = 64;
+
+/// Both line-end scanners can meet one, and the sentence has to be the same
+/// from either. The reasoning is on `skip_blank`.
+const BARE_CR: &str = "a bare carriage return is not a newline";
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
@@ -134,19 +151,19 @@ pub fn parse(src: &str) -> Result<Value> {
     // form that distinguishes `package[3].source` from `package[4].source`.
     // Without the index every `[package.dependencies]` after the first would
     // look like a redefinition.
-    let mut defined: HashSet<String> = HashSet::new();
+    let mut defined: HashSet<Vec<Seg>> = HashSet::new();
     // The same paths, for keys defined with `=`. TOML calls what a `=`
     // defines an immutable namespace, and the distinction is not pedantry:
     // `a = [1]` is an array of *values*, which `[[a]]` may not push onto, and
     // `a = {b = 1}` is closed by its own brace, which `[a]` may not reopen.
     // Nothing in the tree records which of the two built a table, so it has
     // to be recorded here.
-    let mut immutable: HashSet<String> = HashSet::new();
+    let mut immutable: HashSet<Vec<Seg>> = HashSet::new();
     let mut path: Vec<String> = Vec::new();
-    let mut canon = String::new();
+    let mut canon: Vec<Seg> = Vec::new();
 
     loop {
-        p.skip_blank();
+        p.skip_blank()?;
         if p.rest.is_empty() {
             break;
         }
@@ -172,14 +189,64 @@ pub fn parse(src: &str) -> Result<Value> {
         if table.insert(key.clone(), value).is_some() {
             return Err(p.err_at(key_at, format!("duplicate key `{key}`")));
         }
-        if !canon.is_empty() {
-            canon.push('.');
-        }
-        canon.push_str(&key);
+        canon.push(Seg::Key(key));
         immutable.insert(canon.clone());
     }
 
     Ok(Value::Table(root))
+}
+
+/// One step of a canonical path: a key, or an index into an array of tables.
+///
+/// This was a `String` with the steps joined by `.` and an index written
+/// `[3]`, a spelling that cannot represent a key containing either character.
+/// `"a.b" = 1` and `[a.b]` are two different namespaces in TOML 1.0 and both
+/// flattened to `a.b`, so poetry's own `"jaraco.classes" = "*"` sitting beside
+/// a `[jaraco]` table came back as ``table `a.b` is defined twice``. A refused
+/// lockfile is a whole dependency tree left unaudited, which is worse than any
+/// finding this tool could have reported about it.
+#[derive(Clone, PartialEq, Eq, Hash)]
+enum Seg {
+    Key(String),
+    Index(usize),
+}
+
+/// A canonical path spelled the way the file spelled it, for an error message.
+fn show(path: &[Seg]) -> String {
+    let mut out = String::new();
+    for (i, seg) in path.iter().enumerate() {
+        match seg {
+            Seg::Key(k) => {
+                // Indexed rather than `out.is_empty()`, because an empty
+                // first segment — `[""."x"]` is legal, if unhinged — leaves
+                // `out` empty and would cost the *next* segment its dot.
+                if i > 0 {
+                    out.push('.');
+                }
+                out.push_str(k);
+            }
+            Seg::Index(n) => {
+                out.push('[');
+                out.push_str(&n.to_string());
+                out.push(']');
+            }
+        }
+    }
+    out
+}
+
+/// The shortest prefix of `path` that a `=` already sealed, if there is one.
+///
+/// Testing the whole path and nothing else let `a = {b = 1}` be extended by
+/// `[a.c]`: the set holds `a`, the header asks about `a.c`, and the exact
+/// answer is no. So any header *deeper* than the closing brace could add keys
+/// to a table TOML had sealed. The shape a lockfile offers: uv writes
+/// `source = { registry = "…" }` under every `[[package]]`, and
+/// `[package.source.evil]` walked straight into it.
+fn sealed_prefix<'p>(immutable: &HashSet<Vec<Seg>>, path: &'p [Seg]) -> Option<&'p [Seg]> {
+    (1..=path.len())
+        .map(|n| &path[..n])
+        .find(|prefix| immutable.contains(*prefix))
 }
 
 /// Walk `path` from the root, creating tables that do not exist yet, and
@@ -193,23 +260,18 @@ pub fn parse(src: &str) -> Result<Value> {
 fn descend<'t>(
     root: &'t mut BTreeMap<String, Value>,
     path: &[String],
-    canon: &mut String,
+    canon: &mut Vec<Seg>,
 ) -> Option<&'t mut BTreeMap<String, Value>> {
     let mut cur = root;
     for seg in path {
-        if !canon.is_empty() {
-            canon.push('.');
-        }
-        canon.push_str(seg);
+        canon.push(Seg::Key(seg.clone()));
         let slot = cur
             .entry(seg.clone())
             .or_insert_with(|| Value::Table(BTreeMap::new()));
         cur = match slot {
             Value::Table(t) => t,
             Value::Array(items) => {
-                canon.push('[');
-                canon.push_str(&items.len().saturating_sub(1).to_string());
-                canon.push(']');
+                canon.push(Seg::Index(items.len().saturating_sub(1)));
                 match items.last_mut() {
                     Some(Value::Table(t)) => t,
                     _ => return None,
@@ -283,20 +345,46 @@ impl<'a> Parser<'a> {
 
     /// Whitespace, newlines and whole comment lines. Used between statements
     /// and inside arrays, both of which may span lines.
-    fn skip_blank(&mut self) {
+    ///
+    /// A carriage return is only ever half of a CRLF here, never a line ending
+    /// on its own and never whitespace. TOML 1.0 is unambiguous about it in
+    /// both registers: the Spec section says "Newline means LF (0x0A) or CRLF
+    /// (0x0D 0x0A)", and the grammar backs it — `newline = %x0A / %x0D.0A`,
+    /// with `non-eol = %x09 / %x20-7F / non-ascii`, which is the comment body
+    /// and does not admit %x0D. (The spec has no numbered sections; those are
+    /// the `Comment` heading and the v1.0.0 ABNF.)
+    ///
+    /// It used to be lumped in with the whitespace, and the comment scanner
+    /// used to run to the next `\n`, so `# c\rname = "lodash"` was swallowed
+    /// entire and the package left the tree with no error at all. Silently
+    /// dropping a dependency is the one result a lockfile reader may never
+    /// produce, so a bare CR is now refused where it stands rather than
+    /// guessed at.
+    fn skip_blank(&mut self) -> Result<()> {
         loop {
             let n = self
                 .rest
                 .bytes()
-                .take_while(|b| matches!(b, b' ' | b'\t' | b'\n' | b'\r'))
+                .take_while(|b| matches!(b, b' ' | b'\t' | b'\n'))
                 .count();
             self.bump(n);
-            if self.peek() != Some(b'#') {
-                return;
+            match self.peek() {
+                Some(b'\r') if self.rest.starts_with("\r\n") => self.bump(2),
+                Some(b'\r') => return Err(self.err(BARE_CR)),
+                Some(b'#') => self.bump(self.comment_len()),
+                _ => return Ok(()),
             }
-            let n = self.rest.bytes().take_while(|&b| b != b'\n').count();
-            self.bump(n);
         }
+    }
+
+    /// How far a `#` comment runs: to the line ending, and a lone CR is not
+    /// one. Stopping there leaves the byte in place for whoever called this
+    /// to refuse with a position on it.
+    fn comment_len(&self) -> usize {
+        self.rest
+            .bytes()
+            .take_while(|b| !matches!(b, b'\n' | b'\r'))
+            .count()
     }
 
     fn expect(&mut self, byte: u8) -> Result<()> {
@@ -313,8 +401,7 @@ impl<'a> Parser<'a> {
     fn end_of_line(&mut self) -> Result<()> {
         self.skip_spaces();
         if self.peek() == Some(b'#') {
-            let n = self.rest.bytes().take_while(|&b| b != b'\n').count();
-            self.bump(n);
+            self.bump(self.comment_len());
         }
         match self.peek() {
             None => Ok(()),
@@ -326,6 +413,10 @@ impl<'a> Parser<'a> {
                 self.bump(2);
                 Ok(())
             }
+            // Named, not folded into "expected a newline": the offending byte
+            // is invisible in an editor, so a message that does not say the
+            // word sends you staring at a line that looks perfectly fine.
+            Some(b'\r') => Err(self.err(BARE_CR)),
             Some(_) => Err(self.err("expected a newline")),
         }
     }
@@ -343,8 +434,8 @@ impl<'a> Parser<'a> {
     fn header(
         &mut self,
         root: &mut BTreeMap<String, Value>,
-        defined: &mut HashSet<String>,
-        immutable: &HashSet<String>,
+        defined: &mut HashSet<Vec<Seg>>,
+        immutable: &HashSet<Vec<Seg>>,
     ) -> Result<Vec<String>> {
         let at = self.rest;
         self.bump(1);
@@ -353,9 +444,15 @@ impl<'a> Parser<'a> {
             self.bump(1);
         }
 
+        // A header is a statement, not a nested value, so the budget it spends
+        // is handed straight back rather than unwound one `enter` at a time.
+        // Leaking it would make a legal file — a deep header followed by an
+        // array — fail for having been preceded by something long.
+        let outer = self.depth;
         let mut path = Vec::new();
         loop {
             self.skip_spaces();
+            self.enter()?;
             path.push(self.simple_key()?);
             self.skip_spaces();
             if self.peek() == Some(b'.') {
@@ -364,13 +461,14 @@ impl<'a> Parser<'a> {
             }
             break;
         }
+        self.depth = outer;
         self.expect(b']')?;
         if array {
             self.expect(b']')?;
         }
         self.end_of_line()?;
 
-        let mut canon = String::new();
+        let mut canon = Vec::new();
         if array {
             // Every `[[x]]` pushes a fresh table, so the parent path is what
             // gets resolved and the last segment is the array itself.
@@ -379,19 +477,19 @@ impl<'a> Parser<'a> {
                 .expect("the loop above pushes at least one key");
             let parent = descend(root, parents, &mut canon)
                 .ok_or_else(|| self.err_at(at, "this header sits under a non-table"))?;
-            if !canon.is_empty() {
-                canon.push('.');
-            }
-            canon.push_str(last);
+            canon.push(Seg::Key(last.clone()));
             // `a = [1]` then `[[a]]` used to append a table to the value
             // array, producing `[1, {…}]` — a mixed array TOML has no way to
             // write down, and, for `package = []`, a lockfile that reads as
             // one package here and zero everywhere else. The `let … else`
             // below only catches `a` having been a table.
-            if immutable.contains(&canon) {
+            if let Some(sealed) = sealed_prefix(immutable, &canon) {
                 return Err(self.err_at(
                     at,
-                    format!("`{last}` is already defined as a value, not an array of tables"),
+                    format!(
+                        "`{}` is already defined as a value, not an array of tables",
+                        show(sealed)
+                    ),
                 ));
             }
             let slot = parent
@@ -401,17 +499,25 @@ impl<'a> Parser<'a> {
                 return Err(self.err_at(at, format!("`{last}` is already a table, not an array")));
             };
             items.push(Value::Table(BTreeMap::new()));
-            canon.push('[');
-            canon.push_str(&(items.len() - 1).to_string());
-            canon.push(']');
+            canon.push(Seg::Index(items.len() - 1));
             defined.insert(canon);
         } else {
             descend(root, &path, &mut canon)
                 .ok_or_else(|| self.err_at(at, "this header sits under a non-table"))?;
-            // An inline table reaches `descend` as an ordinary table, so
-            // without the second set `a = {b = 1}` followed by `[a]` would
-            // quietly grow a key TOML says cannot be added.
-            if immutable.contains(&canon) || !defined.insert(canon) {
+            // An inline table reaches `descend` as an ordinary table, and the
+            // tree keeps no record of which of `=` and `[…]` built it, so the
+            // second set is the only thing that stops `a = {b = 1}` growing a
+            // key TOML says cannot be added.
+            if let Some(sealed) = sealed_prefix(immutable, &canon) {
+                return Err(self.err_at(
+                    at,
+                    format!(
+                        "`{}` is already defined as a value, not a table",
+                        show(sealed)
+                    ),
+                ));
+            }
+            if !defined.insert(canon) {
                 let name = path.join(".");
                 return Err(self.err_at(at, format!("table `{name}` is defined twice")));
             }
@@ -443,25 +549,29 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// The two keywords are matched whole, up front, rather than dispatched on
+    /// their first byte. `Some(b'f') => word("false", …)` reported
+    /// ``expected `false` `` for `a = foo` — the right position naming a token
+    /// the file never contained, which sends you hunting for a typo in a word
+    /// you did not write. Nothing else here can name a token either, so the
+    /// fallthrough lists what a value may be instead of guessing which one was
+    /// meant.
     fn value(&mut self) -> Result<Value> {
+        if self.rest.starts_with("true") {
+            self.bump(4);
+            return Ok(Value::Bool(true));
+        }
+        if self.rest.starts_with("false") {
+            self.bump(5);
+            return Ok(Value::Bool(false));
+        }
         match self.peek() {
             Some(b'"' | b'\'') => Ok(Value::String(self.string()?)),
             Some(b'[') => self.array(),
             Some(b'{') => self.inline_table(),
-            Some(b't') => self.word("true", Value::Bool(true)),
-            Some(b'f') => self.word("false", Value::Bool(false)),
             Some(b'+' | b'-' | b'0'..=b'9') => self.integer(),
-            Some(_) => Err(self.err("expected a value")),
+            Some(_) => Err(self.err("expected a string, integer, boolean, array or inline table")),
             None => Err(self.err("unexpected end of input")),
-        }
-    }
-
-    fn word(&mut self, word: &str, v: Value) -> Result<Value> {
-        if self.rest.starts_with(word) {
-            self.bump(word.len());
-            Ok(v)
-        } else {
-            Err(self.err(format!("expected `{word}`")))
         }
     }
 
@@ -473,7 +583,7 @@ impl<'a> Parser<'a> {
         loop {
             // Checking for the close before every element is what makes both
             // `[]` and a trailing comma fall out for free.
-            self.skip_blank();
+            self.skip_blank()?;
             match self.peek() {
                 Some(b']') => {
                     self.bump(1);
@@ -483,7 +593,7 @@ impl<'a> Parser<'a> {
                 _ => {}
             }
             items.push(self.value()?);
-            self.skip_blank();
+            self.skip_blank()?;
             match self.peek() {
                 Some(b',') => self.bump(1),
                 Some(b']') => {
