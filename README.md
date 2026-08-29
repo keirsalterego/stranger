@@ -127,8 +127,19 @@ The clause that separates them is not about spelling:
 > nothing real has ever heard of it. A model put it in your manifest; no
 > maintainer ever put it in theirs.
 
-`lodash.assign` is depended upon by real packages. `lodahs` cannot be, because it
-does not exist — the only reference to it anywhere is the manifest under audit.
+`lodash.assign` is depended upon by real packages. `lodahs` is not, and cannot be:
+whatever briefly lived at that name, nothing ever built on it. The only reference
+to it in this tree is the manifest under audit.
+
+That sentence used to read "because it does not exist", which is a stronger claim
+than the rule makes and than the registry supports —
+[checked](fixtures/README.md#what-the-registries-actually-say), `lodahs` resolves
+on npm today as `0.0.1-security`, npm's own holding package for a name taken down
+by its security team. That is not a weaker fact. It is npm confirming that a real
+typosquat of `lodash` by that exact spelling existed and was removed, which is the
+best corroboration the rule could ask for. The clause was never about registration;
+it is about who depends on it.
+
 So the rule is a conjunction of three clauses:
 
 1. the name is not in a corpus of known-real names

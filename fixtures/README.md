@@ -137,6 +137,40 @@ nothing here tests the parser. It tests the renderer. Two tests in
 `tests/cli.rs` hold it — one asserting no control character reaches stdout in any
 mode, one asserting the detail column stays square.
 
+## What the registries actually say
+
+The three npm names and the two pip names are treated as ground truth throughout
+this repository, the README and the book. That is a claim about the world, so on
+**2026-08-30** it was checked against the world — one `curl` per name, dev-time,
+never at runtime, the same standing as the corpus fetch and disclosed the same way.
+
+| name | registry says | the fixture pins |
+|---|---|---|
+| `chalck` | **404.** Not registered. | `5.3.0` — does not exist |
+| `expres` | **200.** A real 2012 package, latest `0.0.5`, "Add express compatible methods to your response object" | `4.18.2` — does not exist; it mirrors `express` |
+| `lodahs` | **200**, and only as `0.0.1-security` — npm's **security holding package**, published by npm's security team for a name they took down | `4.17.21` — does not exist; it mirrors `lodash` |
+| `python-dateutils` | **404.** Not registered. | `2.9.0` — does not exist |
+| `requests-http` | **404.** Not registered. | `1.0.2` — does not exist |
+| `tensorflow-gpu` | **200.** Real, and the documented false positive it has always been. | — |
+
+Two things follow, and the second is the interesting one.
+
+**Every version in the poisoned fixtures is fabricated**, including the two whose
+names resolve. `expres@4.18.2` and `lodahs@4.17.21` are the version numbers of
+`express` and `lodash`, which is exactly the shape of the mistake the rule exists
+to catch: a model completes the version from the package it meant.
+
+**`lodahs` being a security holding package is corroboration, not a correction.**
+npm parks a name that way after removing what was there. So the registry is saying
+a real typosquat of `lodash` by that spelling existed and was taken down — which
+is a stronger statement about `lodahs` than "nobody ever registered it" would have
+been. The rule's third clause never asked whether a name is registered; it asks
+whether anything real depends on it, and nothing does.
+
+What this did change is the prose. Three files said `lodahs` "does not exist",
+which is a bigger claim than the rule makes and than the registry supports. They
+say what was checked now.
+
 ## Measured, not remembered
 
 Every npm count in the table above is `jq '.packages | length - 1'`, every cargo

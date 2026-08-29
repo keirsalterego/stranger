@@ -16,9 +16,24 @@ The clause that separates them is not about spelling at all:
 > because nothing real has ever heard of it. A model put it in your manifest; no
 > maintainer ever put it in theirs.
 
-`https-proxy-agent` is depended on by other packages. `lodahs` cannot be, because
-it does not exist — the only reference to it anywhere in the world is the manifest
-under audit.
+`https-proxy-agent` is depended on by other packages. `lodahs` is not, and that is
+the part that matters — the only reference to it in the tree under audit is the
+manifest under audit.
+
+Not "because it does not exist", which is how this page put it for most of the
+weekend. A one-off registry check on 2026-08-30 says `lodahs` resolves on npm as
+`0.0.1-security`: a holding package published by npm's security team for a name
+they took down. `expres` resolves too, as a genuine 2012 package at `0.0.5`. Both
+of the versions the fixture pins — `lodahs@4.17.21`, `expres@4.18.2` — are
+fabricated, mirroring the real `lodash` and `express` releases, and neither has
+ever been published. `chalck` does not resolve at all.
+
+The rule is unaffected, and the check makes its premise sharper rather than
+softer. Clause 3 never asked whether a name is registered. It asks whether
+anything real depends on it, and for a squat that npm has already parked under a
+security hold the answer is emphatically no. See
+[fixtures/README.md](https://github.com/keirsalterego/stranger/blob/main/fixtures/README.md)
+for the full check.
 
 ## Three clauses
 
