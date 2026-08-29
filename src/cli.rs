@@ -16,7 +16,10 @@ usage:
   stranger tree <pkg> [path]     what depends on `pkg`, and what `pkg` depends on
 
 options:
-  --format <human|json>          output format (default: human)
+  --format <human|json>          output format (default: human); a directory
+                                 scan writes one object per lockfile per line,
+                                 so the stream is NDJSON — read it a line at a
+                                 time, `jq` does, `json.load` does not
   --fail-on <level>              scan: exit 1 when a finding is at or above
                                  low | medium | high | critical
   --depth <n>                    tree: how deep to print out-edges
