@@ -248,3 +248,25 @@ fn the_trivial_percentage_matches_the_header_count() {
 
     assert_eq!(printed, format!("{:.1}%", 100.0 * hits / total), "{line}");
 }
+
+/// The JSON object has to carry everything the header prints, because a machine
+/// reading it cannot go back and look. `workspace` is the one that was missing:
+/// packages, direct and transitive are all third-party counts, so nothing among
+/// them says how many first-party entries the reader set aside, and a monorepo
+/// was indistinguishable from a flat project of the same size.
+#[test]
+fn json_carries_the_workspace_count() {
+    for (fixture, expected) in [
+        ("fixtures/npm-m.package-lock.json", 6.0),
+        ("fixtures/npm-xl.package-lock.json", 14.0),
+        ("fixtures/npm-s.package-lock.json", 0.0),
+    ] {
+        let out = stdout(&run(&["scan", fixture, "--format", "json"]));
+        let v = stranger::json::parse(&out).expect("parses");
+        assert_eq!(
+            v.get("workspace").and_then(stranger::json::Value::as_f64),
+            Some(expected),
+            "{fixture}"
+        );
+    }
+}

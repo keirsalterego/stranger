@@ -25,10 +25,7 @@ pub fn read(path: &Path, src: &str) -> Result<Tree> {
     // Version 1 kept the tree in a nested `dependencies` object and had no
     // `packages` map at all. Refusing it by name beats mis-reading it: the
     // reader would find no packages and cheerfully report a clean project.
-    match doc.get("lockfileVersion").and_then(|v| match v {
-        Value::Number(n) => Some(*n),
-        _ => None,
-    }) {
+    match doc.get("lockfileVersion").and_then(Value::as_f64) {
         Some(n) if n >= 2.0 => {}
         Some(n) => {
             return Err(Error::usage(format!(

@@ -68,6 +68,17 @@ impl Value {
             _ => None,
         }
     }
+
+    /// `f64` rather than an integer accessor, because that is what the variant
+    /// holds and narrowing here would hide the lossiness one level deeper
+    /// instead of removing it. The one caller that wants an integer,
+    /// `lockfileVersion`, compares against 2.0 and never converts.
+    pub fn as_f64(&self) -> Option<f64> {
+        match self {
+            Value::Number(n) => Some(*n),
+            _ => None,
+        }
+    }
 }
 
 pub fn parse(src: &str) -> Result<Value> {
