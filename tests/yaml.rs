@@ -202,6 +202,23 @@ fn comments() {
     // A `#` with no space before it is part of the scalar, which is what YAML
     // says and what keeps `sha512-a#b` intact.
     assert_eq!(parse("a: x#y").get("a"), Some(&s("x#y")));
+    assert!(
+        parse("a: {b: x#y}")
+            .get("a")
+            .and_then(|v| v.get("b"))
+            .is_some()
+    );
+}
+
+/// A flow key used to be the one scalar scanner that read ` #` as key text,
+/// so `{b #x: 1}` came back as the key "b #x" instead of a refusal.
+#[test]
+fn a_comment_ends_a_flow_key() {
+    assert_eq!(why("a: {b #x: 1}"), "expected ':' after a flow mapping key");
+    assert_eq!(at("a: {b #x: 1}"), (1, 7));
+    // The value side of the same line already refused it.
+    assert_eq!(why("a: {b: 1 #x}"), "expected ',' or '}'");
+    assert_eq!(at("a: {b: 1 #x}"), (1, 10));
 }
 
 /// A lockfile checked out on Windows. `\r\n` is a line ending; a lone `\r` is
@@ -274,6 +291,45 @@ fn unclosed_flow_collections() {
         why("a: {\n  b: 1\n}\n"),
         "a flow mapping may not span lines"
     );
+    // Broken after the comma, which is the shape a hand-wrapped `os:` list
+    // takes. The mapping path said this by name already; the sequence path
+    // fell through to the scalar scanner and said "expected a value".
+    assert_eq!(why("a: [x,\ny]"), "a flow sequence may not span lines");
+    assert_eq!(at("a: [x,\ny]"), (1, 4));
+    assert_eq!(why("a: {b: 1,\nc: 2}"), "a flow mapping may not span lines");
+    assert_eq!(at("a: {b: 1,\nc: 2}"), (1, 4));
+    assert_eq!(why("a: [x,"), "unclosed flow sequence");
+    assert_eq!(why("a: {b: 1,"), "unclosed flow mapping");
+}
+
+/// A trailing comma is legal YAML in both flow collections, and both used to
+/// be refused with a message that did not say why. `toml.rs` makes the same
+/// call for arrays; the difference there is that TOML forbids it in an inline
+/// table and YAML forbids it nowhere.
+#[test]
+fn trailing_commas_in_flow_collections() {
+    assert_eq!(
+        parse("a: [x, ]").get("a").and_then(Value::as_sequence),
+        Some(&[s("x")][..])
+    );
+    assert_eq!(
+        parse("a: [x,]")
+            .get("a")
+            .and_then(Value::as_sequence)
+            .map(<[_]>::len),
+        Some(1)
+    );
+    let doc = parse("a: {b: 1, }");
+    assert_eq!(doc.get("a").and_then(|v| v.get("b")), Some(&s("1")));
+    assert_eq!(
+        doc.get("a").and_then(Value::as_mapping).map(|m| m.len()),
+        Some(1)
+    );
+    // Empty is still empty, and a comma on its own is still not an entry.
+    assert_eq!(parse("a: [ ]").get("a"), Some(&Value::Sequence(vec![])));
+    assert_eq!(why("a: [,]"), "expected a value");
+    assert_eq!(why("a: {,}"), "expected ':' after a flow mapping key");
+    assert_eq!(why("a: [x,,]"), "expected a value");
 }
 
 /// An unquoted `: ` inside a value is invalid YAML, and the alternative is a
@@ -328,6 +384,44 @@ fn out_of_subset_constructs() {
     reject("a: &x {b: 1}\nc:\n  <<: *x\n");
 }
 
+/// One `---` opens the document and is skipped; everything else about
+/// documents is refused by name. Before this, `--- a: 1` parsed to the key
+/// "--- a" and the legal `---\na: 1` was refused with a message that named
+/// nothing.
+#[test]
+fn document_markers() {
+    assert_eq!(parse("---\na: 1\n").get("a"), Some(&s("1")));
+    assert_eq!(parse("--- # note\na: 1\n").get("a"), Some(&s("1")));
+    assert_eq!(parse("# note\n---\na: 1\n").get("a"), Some(&s("1")));
+    assert_eq!(parse("\u{feff}---\na: 1\n").get("a"), Some(&s("1")));
+    assert_eq!(parse("---\n"), Value::Null);
+
+    assert_eq!(
+        why("--- a: 1\n"),
+        "a document marker must be alone on its line"
+    );
+    assert_eq!(at("--- a: 1\n"), (1, 5));
+    assert_eq!(
+        why("a: 1\n---\nb: 2\n"),
+        "a second document is not part of the supported YAML subset"
+    );
+    assert_eq!(at("a: 1\n---\nb: 2\n"), (2, 1));
+    assert_eq!(
+        why("---\n---\na: 1\n"),
+        "a second document is not part of the supported YAML subset"
+    );
+    assert_eq!(
+        why("a: 1\n...\n"),
+        "a document end marker is not part of the supported YAML subset"
+    );
+    assert_eq!(at("a: 1\n...\n"), (2, 1));
+    // Neither is a marker: the break after the three characters is what
+    // decides, and an indented `---` is a scalar, not structure.
+    assert_eq!(parse("---foo: 1\n").get("---foo"), Some(&s("1")));
+    assert_eq!(parse("a: ---\n").get("a"), Some(&s("---")));
+    assert_eq!(at("a:\n  ---\n"), (2, 3));
+}
+
 #[test]
 fn duplicate_keys_are_an_error() {
     assert_eq!(why("a: 1\na: 2\n"), "duplicate key `a`");
@@ -346,6 +440,15 @@ fn malformed_lines() {
         why("a: - b\n"),
         "a sequence item may not start on its parent's line"
     );
+}
+
+/// Same as `toml.rs` and `json.rs`: the mark is skipped and does not shift
+/// the columns of the line it sits on.
+#[test]
+fn leading_byte_order_mark() {
+    assert_eq!(parse("\u{feff}a: 1\n").get("a"), Some(&s("1")));
+    assert_eq!(at("\u{feff}a: b: c\n"), (1, 5));
+    assert_eq!(at("a: b: c\n"), (1, 5));
 }
 
 #[test]

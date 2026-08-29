@@ -82,9 +82,16 @@ impl Value {
 }
 
 pub fn parse(src: &str) -> Result<Value> {
+    // RFC 8259 section 8.1 forbids a parser from *emitting* a byte-order mark
+    // and explicitly allows one to skip a leading one. A Windows editor writes
+    // it, and rejecting the file outright meant a valid `package-lock.json`
+    // came back "expected a value at 1:1" and zero packages were audited.
+    // `toml.rs` and `yaml.rs` skip it the same way, and all three set `src` to
+    // the body so the mark does not shift every column on line 1 by one.
+    let body = src.strip_prefix('\u{feff}').unwrap_or(src);
     let mut p = Parser {
-        src,
-        rest: src,
+        src: body,
+        rest: body,
         depth: 0,
     };
     p.skip_ws();
@@ -104,7 +111,15 @@ struct Parser<'a> {
 
 impl<'a> Parser<'a> {
     fn err(&self, what: impl Into<String>) -> Error {
-        let (line, col) = self.position();
+        self.err_at(self.rest, what)
+    }
+
+    /// Same as `err`, but positioned at a remainder saved earlier. A number is
+    /// scanned before it is judged, so by the time `1.` is known to be wrong
+    /// the cursor is still on the `1`; the caller passes the byte it stopped
+    /// at instead. `toml.rs` and `yaml.rs` carry the same pair.
+    fn err_at(&self, at: &str, what: impl Into<String>) -> Error {
+        let (line, col) = self.position_of(at);
         Error::Syntax {
             what: what.into(),
             line,
@@ -112,13 +127,13 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Byte offset of the remainder inside the original input, converted to a
+    /// Byte offset of a remainder inside the original input, converted to a
     /// 1-based line and character column. `substr_range` returns None only if
-    /// `rest` is not derived from `src`, which cannot happen here.
-    fn position(&self) -> (u32, u32) {
+    /// `at` is not derived from `src`, which cannot happen here.
+    fn position_of(&self, at: &str) -> (u32, u32) {
         let offset = self
             .src
-            .substr_range(self.rest)
+            .substr_range(at)
             .map_or(self.src.len(), |r| r.start);
         let consumed = &self.src[..offset];
         let line = consumed.bytes().filter(|&b| b == b'\n').count() as u32 + 1;
@@ -337,7 +352,10 @@ impl<'a> Parser<'a> {
             0xDC00..=0xDFFF => return Err(self.err("low surrogate with no high surrogate")),
             _ => first as u32,
         };
-        char::from_u32(scalar).ok_or_else(|| self.err("escape is not a Unicode scalar value"))
+        // Surrogates are the only code points `from_u32` refuses, and both
+        // halves of that range are handled above, so the failure arm carried a
+        // message no input could reach.
+        Ok(char::from_u32(scalar).expect("the surrogate range is handled above"))
     }
 
     fn hex4(&mut self) -> Result<u16> {
@@ -377,12 +395,12 @@ impl<'a> Parser<'a> {
                     n += 1;
                 }
             }
-            _ => return Err(self.err("expected a digit")),
+            _ => return Err(self.err_at(&start[n..], "expected a digit")),
         }
         if bytes.get(n) == Some(&b'.') {
             n += 1;
             if !matches!(bytes.get(n), Some(b'0'..=b'9')) {
-                return Err(self.err("expected a digit after '.'"));
+                return Err(self.err_at(&start[n..], "expected a digit after '.'"));
             }
             while matches!(bytes.get(n), Some(b'0'..=b'9')) {
                 n += 1;
@@ -394,7 +412,7 @@ impl<'a> Parser<'a> {
                 n += 1;
             }
             if !matches!(bytes.get(n), Some(b'0'..=b'9')) {
-                return Err(self.err("expected a digit in the exponent"));
+                return Err(self.err_at(&start[n..], "expected a digit in the exponent"));
             }
             while matches!(bytes.get(n), Some(b'0'..=b'9')) {
                 n += 1;
@@ -403,10 +421,14 @@ impl<'a> Parser<'a> {
 
         let text = &start[..n];
         self.bump(n);
-        // Unreachable for any slice the scan above accepts; the only inputs
-        // f64 rejects are ones that never get here.
-        text.parse::<f64>()
-            .map(Value::Number)
-            .map_err(|_| self.err("number out of range"))
+        // `f64::from_str` accepts a superset of the grammar checked above, so
+        // every slice that reaches here parses. The overflow this used to
+        // claim to catch does not exist either: `1e999` is `Ok(inf)`, not an
+        // error, and an error message no input can produce is a lie about the
+        // parser.
+        Ok(Value::Number(
+            text.parse::<f64>()
+                .expect("the scan above accepts only what f64 parses"),
+        ))
     }
 }

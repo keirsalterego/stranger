@@ -23,9 +23,11 @@
 //! - block sequences, `- item`, indented *under* their key
 //! - plain scalars, single-quoted `'…'` (with `''` for a literal quote), and
 //!   double-quoted `"…"` with the JSON escape set plus `\0`
-//! - flow mappings `{a: 1, b: 2}` and flow sequences `[a, b]`, on one line
+//! - flow mappings `{a: 1, b: 2}` and flow sequences `[a, b]`, on one line,
+//!   each with an optional trailing comma
 //! - `#` comments: a whole line, or after a value when preceded by a space
-//! - blank lines anywhere, and a leading byte-order mark
+//! - blank lines anywhere, a leading byte-order mark, and one `---` opening
+//!   the document
 //!
 //! Refused, with a position:
 //!
@@ -36,7 +38,8 @@
 //!   scalars `|` and `>` — refused *by name*, at the indicator. The plain
 //!   scalar scanner would otherwise read `&anchor 1` as the string
 //!   "&anchor 1" and be wrong without saying so
-//! - multi-line quoted scalars, and a second document after `---`
+//! - multi-line quoted scalars, and everything else about documents: a
+//!   second `---`, a `...` end marker, and content on a `---` line
 //! - a flow collection spread over more than one line
 //! - a block sequence at the same indentation as its key (`key:\n- a`)
 //! - a mapping inside a sequence item (`- a: 1`)
@@ -150,11 +153,14 @@ impl Value {
 }
 
 pub fn parse(src: &str) -> Result<Value> {
+    // The body is what positions are measured against; a mark left in front of
+    // them shifts every column on line 1. `json.rs` and `toml.rs` agree.
     let body = src.strip_prefix('\u{feff}').unwrap_or(src);
     let mut p = Parser {
-        src,
+        src: body,
         rest: body,
         depth: 0,
+        started: false,
     };
 
     let Some(indent) = p.next_content()? else {
@@ -178,6 +184,9 @@ struct Parser<'a> {
     src: &'a str,
     rest: &'a str,
     depth: u32,
+    /// Set once the document has begun — by its first content line, or by a
+    /// leading `---`. A marker after that opens a second document.
+    started: bool,
 }
 
 impl<'a> Parser<'a> {
@@ -271,6 +280,14 @@ impl<'a> Parser<'a> {
             if after.starts_with('\t') {
                 return Err(self.err_at(after, "tab used for indentation"));
             }
+            // A marker only counts at column 1, which is what leaves an
+            // indented `---` alone as the plain scalar it is.
+            if n == 0
+                && let Some(marker) = document_marker(after)
+            {
+                self.document(marker)?;
+                continue;
+            }
             match after.as_bytes().first() {
                 // Trailing spaces at end of file.
                 None => {
@@ -278,9 +295,42 @@ impl<'a> Parser<'a> {
                     return Ok(None);
                 }
                 Some(b'\n' | b'\r' | b'#') => self.skip_line(),
-                _ => return Ok(Some(n)),
+                _ => {
+                    self.started = true;
+                    return Ok(Some(n));
+                }
             }
         }
+    }
+
+    /// A `---` or `...` at column 1, with `rest` sitting on it.
+    ///
+    /// The choice here is to accept one leading `---` and refuse everything
+    /// else about documents. Accepting it is the cheap half: a YAML dumper is
+    /// free to write one, pnpm's own output does not but a hand-edited or
+    /// re-serialised lockfile can, and refusing a legal file is a false
+    /// negative on a whole dependency tree. Refusing the rest is the half that
+    /// matters — left alone, `plain_key` reads `--- a: 1` as the key "--- a"
+    /// and a second document's packages either overwrite the first's or
+    /// collide as duplicates, and both of those are wrong answers rather than
+    /// no answer.
+    fn document(&mut self, marker: &str) -> Result<()> {
+        if marker == "..." {
+            return Err(self.err("a document end marker is not part of the supported YAML subset"));
+        }
+        if self.started {
+            return Err(self.err("a second document is not part of the supported YAML subset"));
+        }
+        self.started = true;
+        self.bump(3);
+        self.skip_inline();
+        // `--- a: 1` is a document marker with a mapping crammed after it,
+        // which YAML does not allow and which skipping the line would eat.
+        if !self.at_line_end() {
+            return Err(self.err("a document marker must be alone on its line"));
+        }
+        self.skip_line();
+        Ok(())
     }
 
     /// Everything after a value on its line: spaces, an optional comment, and
@@ -651,14 +701,22 @@ impl<'a> Parser<'a> {
         let open = self.rest;
         self.bump(1);
         let mut map: BTreeMap<String, Value> = BTreeMap::new();
-        self.skip_inline();
-        if self.peek() == Some(b'}') {
-            self.bump(1);
-            self.depth -= 1;
-            return Ok(Value::Mapping(map));
-        }
         loop {
+            // Looking for the close before every entry rather than only after
+            // one is what makes `{}` and a trailing comma fall out for free —
+            // the same shape `toml::array` uses, and YAML allows both.
             self.skip_inline();
+            match self.peek() {
+                Some(b'}') => {
+                    self.bump(1);
+                    break;
+                }
+                None => return Err(self.err_at(open, "unclosed flow mapping")),
+                Some(b'\n' | b'\r') => {
+                    return Err(self.err_at(open, "a flow mapping may not span lines"));
+                }
+                _ => {}
+            }
             let key_at = self.rest;
             let key = self.flow_key(open)?;
             self.skip_inline();
@@ -697,6 +755,14 @@ impl<'a> Parser<'a> {
                         let at = &self.rest[i..];
                         return Err(self.err_at(at, "expected ':' after a flow mapping key"));
                     }
+                    // ` #` opens a comment here too — this is the fourth of
+                    // four scalar scanners and was the one that read
+                    // `{b #x: 1}` as the key "b #x". The key ended at the
+                    // space; the `:` after it is inside a comment, so the
+                    // check below is what reports it.
+                    if bytes[i] == b'#' && i > 0 && matches!(bytes[i - 1], b' ' | b'\t') {
+                        break;
+                    }
                     i += 1;
                 }
                 if i == bytes.len() {
@@ -730,14 +796,23 @@ impl<'a> Parser<'a> {
         let open = self.rest;
         self.bump(1);
         let mut items = Vec::new();
-        self.skip_inline();
-        if self.peek() == Some(b']') {
-            self.bump(1);
-            self.depth -= 1;
-            return Ok(Value::Sequence(items));
-        }
         loop {
+            // As in `flow_mapping`: `[]` and `[x, ]` both come out of checking
+            // for the close first. It also puts the line-spanning refusal on
+            // the path a broken-after-a-comma sequence takes, which used to
+            // reach `plain_flow_scalar` and come back as "expected a value".
             self.skip_inline();
+            match self.peek() {
+                Some(b']') => {
+                    self.bump(1);
+                    break;
+                }
+                None => return Err(self.err_at(open, "unclosed flow sequence")),
+                Some(b'\n' | b'\r') => {
+                    return Err(self.err_at(open, "a flow sequence may not span lines"));
+                }
+                _ => {}
+            }
             items.push(self.flow_value()?);
             self.skip_inline();
             match self.peek() {
@@ -807,6 +882,13 @@ fn scalar(text: &str) -> Value {
         "false" => Value::Bool(false),
         _ => Value::String(text.to_string()),
     }
+}
+
+/// `---` or `...` standing alone: YAML's document markers. The trailing break
+/// is what keeps `---foo: 1` and `...: 1` ordinary keys.
+fn document_marker(s: &str) -> Option<&'static str> {
+    let marker = ["---", "..."].into_iter().find(|m| s.starts_with(m))?;
+    breaks_after(s.as_bytes(), 3).then_some(marker)
 }
 
 /// A `-` that opens a block sequence entry, as opposed to one that starts a

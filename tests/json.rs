@@ -35,6 +35,20 @@ fn numbers() {
     assert_eq!(parse("1E+3"), Value::Number(1000.0));
     assert_eq!(parse("-1.5e-2"), Value::Number(-0.015));
     assert_eq!(parse("0.5"), Value::Number(0.5));
+    // RFC 8259 puts no limit on magnitude and f64 does: this is the input the
+    // parser used to carry a "number out of range" message for. It is not an
+    // error, it is infinity.
+    assert!(parse("1e999").as_f64().is_some_and(f64::is_infinite));
+}
+
+/// A number is scanned before it is judged, so the naive thing is to report
+/// the whole number's first byte. The problem in `1.` is at 1:3.
+#[test]
+fn number_errors_point_at_the_offending_byte() {
+    assert_eq!(at("1."), (1, 3));
+    assert_eq!(at("-x"), (1, 2));
+    assert_eq!(at("[0, 1e]"), (1, 7));
+    assert_eq!(at("{\"a\": 1.2e+}"), (1, 12));
 }
 
 /// Everything here is accepted by `f64::from_str` and rejected by RFC 8259,
@@ -133,6 +147,21 @@ fn error_positions_point_at_the_problem() {
     assert_eq!(at("[1, 2, x]"), (1, 8));
     // Column counts characters, not bytes, so a multi-byte name does not skew it.
     assert_eq!(at(r#"{"π": }"#), (1, 7));
+}
+
+/// RFC 8259 section 8.1 lets a parser skip a leading byte-order mark, and a
+/// lockfile saved by a Windows editor carries one. Rejecting it failed the
+/// whole file — exit 2, no findings — over three invisible bytes.
+#[test]
+fn leading_byte_order_mark() {
+    assert_eq!(parse("\u{feff}{}"), Value::Object(Default::default()));
+    assert_eq!(parse("\u{feff}[1]"), Value::Array(vec![Value::Number(1.0)]));
+    assert_eq!(parse("\u{feff}\"x\""), Value::String("x".into()));
+    // Skipped, not counted: the column is the one an editor shows.
+    assert_eq!(at("\u{feff}{\"a\": }"), (1, 7));
+    // One mark, and only at the front. Anywhere else it is not whitespace.
+    reject("\u{feff}\u{feff}{}");
+    reject("{\u{feff}}");
 }
 
 #[test]
