@@ -58,6 +58,12 @@ version list in `detail`:
 {"rule":"drift","severity":"medium","package":"brace-expansion","version":"","detail":"3 versions: 1.1.16, 2.1.2, 5.0.7"}
 ```
 
+That is `npm-xl`'s `brace-expansion`. The block at the top of this page is the
+poisoned fixture's, which drifts the same name at 1.1.12, 2.0.2 and 5.0.7 —
+different tree, different versions, same shape of finding. Every block on this
+page names the fixture it came from in the command above it; the version lists
+only match across two blocks by coincidence.
+
 An empty `version` field in the JSON is how a consumer tells this rule's findings
 apart from the others.
 

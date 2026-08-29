@@ -35,7 +35,7 @@ Cargo writes the shortest form that is unambiguous and promotes only when it mus
 ```
 
 The second appears when two entries share a name — `cargo-m` has five `hashbrown`s
-and three `windows-sys`. The third appears when two entries share a name *and* a
+and five `windows-sys`. The third appears when two entries share a name *and* a
 version and differ only in origin.
 
 Counted across all three fixtures, 5,689 dependency strings in total:
@@ -51,8 +51,11 @@ and tested against a hand-written file, and that is the honest status: handled,
 unmeasured.
 
 The second shape is very much exercised — 1,105 strings, a fifth of the corpus —
-and reading one as a bare name would resolve half of `cargo-m`'s `windows-sys`
-edges to the wrong entry. Silently: it produces no parse error, just a graph with
+and reading one as a bare name is not a near miss. All 22 of `cargo-m`'s
+`windows-sys` edges carry a version and there are five entries they could mean, so
+dropping the version collapses all 22 onto one entry. Fourteen of them point at
+0.61.2, so the luckiest possible guess still lands 8 edges on the wrong package,
+and the unluckiest lands 21. Silently, too — no parse error, just a graph with
 wrong edges, which corrupts the in-degree the
 [detection rule](../detection/rule.md) leans on.
 

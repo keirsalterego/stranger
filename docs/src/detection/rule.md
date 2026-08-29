@@ -2,11 +2,13 @@
 
 Edit distance on its own is not a rule.
 
-`lodash.merge` and `lodash.mergewith` are both real npm packages, both widely
-depended on, and four edits apart. `eslint-config-x` and `eslint-configs-x` are
-one edit apart and both real. A registry with 140,000 names in it has thousands
-of these pairs, and any threshold loose enough to catch a typo is loose enough to
-catch a legitimate sibling. Precision collapses and the tool becomes noise.
+`http-proxy-agent` and `https-proxy-agent` are both real npm packages, both
+depended on by other packages in `npm-xl`, and one edit apart. So are
+`safe-buffer` and `safer-buffer`. Take just the 1,077 distinct names the npm
+fixtures install: between them they have 9,453 neighbours within distance 2 in a
+140,066-name corpus, every one a package that exists. Any threshold loose enough
+to catch a typo is loose enough to catch a legitimate sibling. Precision collapses
+and the tool becomes noise.
 
 The clause that separates them is not about spelling at all:
 
@@ -14,8 +16,8 @@ The clause that separates them is not about spelling at all:
 > because nothing real has ever heard of it. A model put it in your manifest; no
 > maintainer ever put it in theirs.
 
-`lodash.merge` is depended on by other packages. `lodahs` cannot be, because it
-does not exist — the only reference to it anywhere in the world is the manifest
+`https-proxy-agent` is depended on by other packages. `lodahs` cannot be, because
+it does not exist — the only reference to it anywhere in the world is the manifest
 under audit.
 
 ## Three clauses
@@ -157,11 +159,12 @@ where a third-party package declared it and the rule did not.
 
 ## Why distance 2
 
-At 3, `lodash` starts matching `logass`, `nodash`, `loda` and about forty other
-real registry entries, and precision on the fixtures falls off a cliff. Two still
-catches every single-character slip — deletion, insertion, substitution,
-transposition — which is the entire population of typos a model actually
-produces.
+At 2, `lodash` is within range of 6 corpus names. At 3 it is within range of 49 —
+`lodash-es`, `lodash.eq`, `lodash.gt`, `lodash.lt`, `ldap`, `slash`, `soda` and
+forty-two more, every one of them a real package — and precision on the fixtures
+falls off a cliff. Two still catches every single-character slip — deletion,
+insertion, substitution, transposition — which is the entire population of typos
+a model actually produces.
 
 Transposition is why the distance function is Damerau and not plain Levenshtein.
 `lodahs` is one transposition from `lodash`: Damerau distance 1, Levenshtein
@@ -169,9 +172,10 @@ distance 2. Under Levenshtein it would sit in the same bucket as a large
 population of legitimate siblings, and the threshold that catches it catches half
 the registry with it.
 
-When several corpus names are within range, ties go to the shorter one, which is
-almost always the real package and the typo's parent — `lodash` over
-`lodash.merge`.
+When several corpus names are within range, ties go to the shorter one. `asn1s` is
+one edit from both `asn1` and `asn1js`, and the finding names `asn1`. That is a
+display choice and not a detection one: the finding fires on either neighbour, and
+which of them gets printed changes nothing about whether it fires.
 
 ## Distance 2 is not a small net
 
