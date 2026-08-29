@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::Path;
+use std::time::{Duration, Instant};
 use stranger::error::Error;
 use stranger::yaml::{self, Value};
 
@@ -156,6 +157,83 @@ fn flow_values_from_the_fixture() {
         doc.get("engines").and_then(|v| v.get("iojs")),
         Some(&s(">=1.0.0"))
     );
+}
+
+/// The same node, two legal spellings. pnpm writes the brace on the key's
+/// line; a reformatter is free to move it down one, and YAML says they mean
+/// the same thing.
+///
+/// Read as a block mapping, the second spelling produced the key `{integrity`
+/// — so the package had no integrity hash, its origin fell to `Elsewhere`,
+/// and the slopsquat rule skips `Elsewhere` by design. Pressing save in an
+/// editor turned findings off. `tests/pnpm.rs` checks the findings end of it.
+#[test]
+fn a_flow_collection_may_sit_under_its_key() {
+    assert_eq!(
+        parse("resolution:\n  {integrity: sha512-AAAA}\n"),
+        parse("resolution: {integrity: sha512-AAAA}\n")
+    );
+    assert_eq!(
+        parse("os:\n  [darwin, linux]\n"),
+        parse("os: [darwin, linux]\n")
+    );
+    // Deeper than the key, like anything else in a block, and it closes the
+    // moment the line ends.
+    let doc = parse("a:\n  {b: 1}\nc: 2\n");
+    assert_eq!(doc.get("a").and_then(|v| v.get("b")), Some(&s("1")));
+    assert_eq!(doc.get("c"), Some(&s("2")));
+    // Still one line: moving the brace down does not make it foldable.
+    assert_eq!(
+        why("a:\n  {b: 1\n  }\n"),
+        "a flow mapping may not span lines"
+    );
+    // And a second one under the same key has no block to be in.
+    assert_eq!(why("a:\n  {b: 1}\n  {c: 2}\n"), "unexpected indentation");
+}
+
+/// `{a: 1}: 2` is a flow mapping used as a *key*, which this subset does not
+/// have. It came back as the key `{a` — the same invented-key bug as the
+/// own-line resolution, reached from the other side.
+#[test]
+fn a_flow_indicator_may_not_open_a_plain_scalar() {
+    let msg = "a flow indicator may not open a plain scalar; quote it";
+    assert_eq!(why("a: 1\n{b: 2}: 3\n"), msg);
+    assert_eq!(at("a: 1\n{b: 2}: 3\n"), (2, 1));
+    assert_eq!(why("a: 1\n[b]: 3\n"), msg);
+    assert_eq!(why("a: }x\n"), msg);
+    assert_eq!(why("a: ,x\n"), msg);
+    // Quoting is how you say you meant the text.
+    assert_eq!(parse("a: 1\n'{b: 2}': 3\n").get("{b: 2}"), Some(&s("3")));
+    // Inside a flow collection these five bytes are structure, and the flow
+    // parsers keep saying the more useful thing about them.
+    assert_eq!(why("a: [,]"), "expected a value");
+    assert_eq!(why("a: {,}"), "expected ':' after a flow mapping key");
+}
+
+/// Of the four scanners that read unquoted text, the flow key was the one
+/// that never checked for an indicator — so a flow mapping was the way to get
+/// an anchor past a parser that refuses anchors everywhere else.
+#[test]
+fn a_flow_key_refuses_indicators() {
+    assert_eq!(
+        why("a: {&x b: 1}"),
+        "anchors are not part of the supported YAML subset"
+    );
+    assert_eq!(at("a: {&x b: 1}"), (1, 5));
+    assert_eq!(
+        why("a: {*x: 1}"),
+        "aliases are not part of the supported YAML subset"
+    );
+    assert_eq!(
+        why("a: {!!str b: 1}"),
+        "tags are not part of the supported YAML subset"
+    );
+    assert_eq!(
+        why("a: {@x: 1}"),
+        "this character is reserved in YAML; quote the scalar"
+    );
+    // Quoted, it is a key like any other — which is what pnpm writes.
+    assert!(parse("a: {'@scope/pkg': 1}").get("a").is_some());
 }
 
 /// pnpm keys are package identifiers. `split(':')` cuts three of these in the
@@ -560,4 +638,99 @@ fn deep_nesting_errors_rather_than_overflowing() {
 fn wide_input_is_fine() {
     let wide: String = (0..50_000).map(|i| format!("k{i}: {i}\n")).collect();
     assert_eq!(parse(&wide).as_mapping().map(|m| m.len()), Some(50_000));
+}
+
+/// A flow collection on one line costs time proportional to that line, not to
+/// the square of it.
+///
+/// `flow_key` and `plain_flow_scalar` used to call `line()`, which walks to
+/// the newline — once per item, on a line each item then broke out of after a
+/// few bytes. The cost of one item grew with the length of the line it sat on,
+/// so a lockfile with one long `os: [...]` line was a denial of service on the
+/// auditor rather than on anything it audits.
+///
+/// Two sizes on purpose. The small pair is what catches a regression: 71 ms
+/// after the fix and 51.6 s before it, both debug on the machine this was
+/// written on. The 5 s bound sits seventy times over the measurement and a
+/// tenth of the way to the old cost, so a loaded box has room and a quadratic
+/// scan still fails inside a minute. The megabyte is the shape the bug
+/// arrived as — 471.8 s release before, 0.14 s after, 0.5 s in debug — and it
+/// is only ever checked after the small pair, because at 1 MB a regression
+/// takes hours to get around to failing.
+#[test]
+fn flow_collections_are_linear() {
+    let seq = format!("os: [{}]\n", "a,".repeat(32_000));
+    let map = format!(
+        "m: {{{}}}\n",
+        (0..8_000).map(|i| format!("k{i}: v, ")).collect::<String>()
+    );
+    let start = Instant::now();
+    assert_eq!(
+        parse(&seq)
+            .get("os")
+            .and_then(Value::as_sequence)
+            .map(<[_]>::len),
+        Some(32_000)
+    );
+    assert_eq!(
+        parse(&map)
+            .get("m")
+            .and_then(Value::as_mapping)
+            .map(|m| m.len()),
+        Some(8_000)
+    );
+    let took = start.elapsed();
+    assert!(
+        took < Duration::from_secs(5),
+        "96 KB of flow collections took {took:?}; the scanner is quadratic again"
+    );
+
+    let long_line = format!("os: [{}]\n", "a,".repeat(500_000));
+    assert!(long_line.len() > 1_000_000);
+    let start = Instant::now();
+    assert_eq!(
+        parse(&long_line)
+            .get("os")
+            .and_then(Value::as_sequence)
+            .map(<[_]>::len),
+        Some(500_000)
+    );
+    let took = start.elapsed();
+    assert!(
+        took < Duration::from_secs(20),
+        "a 1 MB flow sequence took {took:?}"
+    );
+}
+
+/// The same hostile line, unterminated. It has to come back as a positioned
+/// error and not as a wall-clock problem — the quadratic scan was both.
+#[test]
+fn a_megabyte_on_one_line_errors_rather_than_hangs() {
+    let start = Instant::now();
+    assert_eq!(
+        why(&format!("os: [{}", "a,".repeat(500_000))),
+        "unclosed flow sequence"
+    );
+    assert_eq!(
+        why(&format!(
+            "m: {{{}",
+            (0..200_000)
+                .map(|i| format!("k{i}: v, "))
+                .collect::<String>()
+        )),
+        "unclosed flow mapping"
+    );
+    // A megabyte of key with no `:` on it, which is the block-context version
+    // of the same shape.
+    assert_eq!(
+        why(&"a".repeat(1024 * 1024)),
+        "expected ':' after a mapping key"
+    );
+    // And truncated in the middle of the own-line flow form.
+    assert_eq!(why("a:\n  {b: 1, c"), "unclosed flow mapping");
+    let took = start.elapsed();
+    assert!(
+        took < Duration::from_secs(20),
+        "refusing them took {took:?}"
+    );
 }

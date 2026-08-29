@@ -2,6 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use stranger::error::Error;
 use stranger::lock::{Ecosystem, Origin, Package, Pin, Tree, pnpm};
+use stranger::rules::slopsquat;
 
 const FIXTURE: &str = "pnpm-l.pnpm-lock.yaml";
 
@@ -146,6 +147,136 @@ fn integrity_is_recorded_for_every_package() {
 fn no_install_scripts_are_claimed() {
     let t = load();
     assert_eq!(t.packages.iter().filter(|p| p.install_script).count(), 0);
+}
+
+/// Move every flow collection onto the line below its key. `resolution: {…}`
+/// becomes `resolution:` and then the brace, indented two further columns.
+/// YAML says the two spell the same node.
+fn reformatted(src: &str) -> String {
+    let mut out = String::with_capacity(src.len() + src.len() / 16);
+    for line in src.lines() {
+        let indent = line.len() - line.trim_start().len();
+        match line.split_once(": ") {
+            Some((key, value)) if value.starts_with(['{', '[']) => {
+                out.push_str(key);
+                out.push_str(":\n");
+                out.push_str(&" ".repeat(indent + 2));
+                out.push_str(value);
+            }
+            _ => out.push_str(line),
+        }
+        out.push('\n');
+    }
+    out
+}
+
+fn slopsquat_findings(t: &Tree) -> Vec<String> {
+    // A fixed three-name corpus rather than the compiled-in one, so this test
+    // measures the reader and not the day the npm snapshot was taken. Sorted,
+    // because `corpus::contains_in` binary-searches it.
+    let names = ["chalk", "lodash", "react"];
+    slopsquat::scan(
+        t,
+        slopsquat::Config {
+            require_no_parent: true,
+            corpus: Some(&names),
+        },
+    )
+    .iter()
+    .map(|f| format!("{} {}@{} · {}", f.severity, f.package, f.version, f.detail))
+    .collect()
+}
+
+/// The same lockfile, spelled two legal ways, has to produce the same
+/// findings. This is the property; everything else in this file is a proxy
+/// for it.
+///
+/// It did not hold, and it did not hold *quietly*. Read as a block mapping,
+/// the own-line brace produced the key `{integrity`, so `has_integrity` went
+/// false and `origin` went `Registry` → `Elsewhere` — and `rules::slopsquat`
+/// skips every `Elsewhere` package by design, because a package fetched from
+/// git never passed through the registry the corpus samples. Inline: two
+/// HALLUCINATION RISK findings. Reformatted: none, and no error either. A
+/// detection tool that stops detecting when someone runs the file through a
+/// YAML formatter is worse than one that never looked.
+#[test]
+fn the_two_spellings_of_a_lockfile_agree() {
+    let inline = "\
+lockfileVersion: '9.0'
+
+importers:
+
+  .:
+    dependencies:
+      lodahs:
+        specifier: ^1.0.0
+        version: 1.0.0
+      raect:
+        specifier: ^1.0.0
+        version: 1.0.0
+      chalk:
+        specifier: ^5.0.0
+        version: 5.0.0
+
+packages:
+
+  lodahs@1.0.0:
+    resolution: {integrity: sha512-AAAA}
+  raect@1.0.0:
+    resolution: {integrity: sha512-BBBB}
+  chalk@5.0.0:
+    resolution: {integrity: sha512-CCCC}
+";
+    let own_line = reformatted(inline);
+    assert!(own_line.contains("resolution:\n      {integrity: sha512-AAAA}"));
+
+    let a = read(inline).expect("inline");
+    let b = read(&own_line).expect("own-line");
+
+    let findings = slopsquat_findings(&a);
+    // Two invented names against a corpus of three real ones. An equivalence
+    // between two empty lists would prove nothing.
+    assert_eq!(findings.len(), 2, "{findings:?}");
+    assert_eq!(findings, slopsquat_findings(&b));
+
+    // And the fields the rule reached through to get there.
+    assert!(a.packages.iter().all(|p| p.has_integrity));
+    assert!(b.packages.iter().all(|p| p.has_integrity));
+    for (x, y) in a.packages.iter().zip(&b.packages) {
+        assert_eq!((&x.key, x.origin), (&y.key, y.origin));
+    }
+}
+
+/// The same reformat, on the real 254 KB file: 1,698 lines move their brace
+/// down one — 850 `resolution:`, 406 `engines:`, 128 `os:`/`cpu:` and every
+/// `{}` snapshot. The tree that comes out has to be the same tree.
+#[test]
+fn the_reformatted_fixture_is_the_same_tree() {
+    let plain = load();
+    let src = fs::read_to_string(path(FIXTURE)).unwrap();
+    let moved_src = reformatted(&src);
+    // A `reformatted` that quietly did nothing would pass everything below.
+    assert_eq!(moved_src.lines().count() - src.lines().count(), 1_698);
+    let moved = pnpm::read(&path(FIXTURE), &moved_src).expect("reformatted fixture");
+
+    assert_eq!(moved.packages.len(), 850);
+    assert_eq!(moved.edges, plain.edges);
+    assert_eq!(moved.roots, plain.roots);
+    assert_eq!(
+        moved.packages.iter().filter(|p| p.has_integrity).count(),
+        850
+    );
+    assert_eq!(
+        moved
+            .packages
+            .iter()
+            .filter(|p| p.origin == Origin::Registry)
+            .count(),
+        850
+    );
+    for (x, y) in plain.packages.iter().zip(&moved.packages) {
+        assert_eq!(x.key, y.key);
+    }
 }
 
 /// All 850 resolutions are `{integrity: …}` with nothing else in them, which

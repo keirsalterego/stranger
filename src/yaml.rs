@@ -25,6 +25,9 @@
 //!   double-quoted `"…"` with the JSON escape set plus `\0`
 //! - flow mappings `{a: 1, b: 2}` and flow sequences `[a, b]`, on one line,
 //!   each with an optional trailing comma
+//! - a flow collection on the line *under* its key, indented past it —
+//!   `resolution:` then `{integrity: …}`. pnpm writes the inline spelling;
+//!   any reformatter may write this one, and the two produce the same node
 //! - `#` comments: a whole line, or after a value when preceded by a space
 //! - blank lines anywhere, a leading byte-order mark, and one `---` opening
 //!   the document
@@ -35,15 +38,29 @@
 //!   one whitespace bug an editor will not show you)
 //! - a dedent that lands between two open levels
 //! - anchors `&a`, aliases `*a`, tags `!!str`, directives `%YAML`, block
-//!   scalars `|` and `>` — refused *by name*, at the indicator. The plain
+//!   scalars `|` and `>` — refused *by name*, at the indicator, in all four
+//!   places unquoted text is read, flow mapping keys included. The plain
 //!   scalar scanner would otherwise read `&anchor 1` as the string
 //!   "&anchor 1" and be wrong without saying so
+//! - a plain scalar or key opening with a flow indicator `{`, `}`, `[`, `]`
+//!   or `,`. YAML forbids that too, and it is what keeps `{a: 1}: 2` — a flow
+//!   mapping used as a key, which this subset does not have — from being read
+//!   as the key `{a`
 //! - multi-line quoted scalars, and everything else about documents: a
 //!   second `---`, a `...` end marker, and content on a `---` line
 //! - a flow collection spread over more than one line
 //! - a block sequence at the same indentation as its key (`key:\n- a`)
 //! - a mapping inside a sequence item (`- a: 1`)
 //! - a duplicate key in the same mapping
+//!
+//! # The bomb that is not here
+//!
+//! Billion laughs — a dozen anchors, each aliasing the one before it,
+//! expanding to gigabytes out of a few hundred bytes — is closed, and not by
+//! a limit. There is no alias resolution machinery in this parser at all.
+//! `&a` and `*a` are refused at the indicator wherever unquoted text is read,
+//! so nothing is ever recorded to expand and nothing exists to expand it.
+//! `MAX_DEPTH` guards the stack against nesting; it is not what stops this.
 //!
 //! # Implicit typing: `true` and `false`, and nothing else
 //!
@@ -368,7 +385,22 @@ impl<'a> Parser<'a> {
     /// first line and `indent` is that line's indentation, as reported by
     /// `next_content`.
     fn block(&mut self, indent: usize) -> Result<Value> {
-        if is_dash(&self.rest[indent..]) {
+        let head = &self.rest[indent..];
+        // A flow collection is allowed to sit on the line *under* its key —
+        // `resolution:\n  {integrity: …}` is the same node as the inline
+        // `resolution: {integrity: …}` pnpm actually writes, and any YAML
+        // reformatter may produce it. Without this arm the line fell to
+        // `mapping`, whose key scanner stopped at the first `: ` and handed
+        // back the key `{integrity`. The package then had no `integrity`, so
+        // its origin dropped to `Elsewhere` and `rules::slopsquat` skipped it
+        // outright: a legal reformat of a lockfile turned findings off.
+        if matches!(head.as_bytes().first(), Some(b'{' | b'[')) {
+            self.bump(indent);
+            let v = self.inline_value()?;
+            self.end_of_line()?;
+            return Ok(v);
+        }
+        if is_dash(head) {
             self.sequence(indent)
         } else {
             self.mapping(indent)
@@ -494,6 +526,7 @@ impl<'a> Parser<'a> {
     /// naive split and the rest of the line read as its value.
     fn plain_key(&mut self) -> Result<String> {
         self.reject_indicator()?;
+        self.reject_flow_indicator()?;
         let line = self.line();
         let bytes = line.as_bytes();
         let mut i = 0;
@@ -555,6 +588,25 @@ impl<'a> Parser<'a> {
         Err(self.err(what))
     }
 
+    /// The flow indicators, which no plain scalar may open with either — YAML
+    /// puts `,[]{}` in `c-indicator`, so this is the spec's rule and not a
+    /// local convenience.
+    ///
+    /// It is a second function rather than five more arms on
+    /// `reject_indicator` because inside `{}` and `[]` these five bytes are
+    /// structure, and the flow parsers already say something better about
+    /// them: `[,]` comes back as "expected a value" and `{,}` as "expected
+    /// ':' after a flow mapping key", both pointing at the character. Only the
+    /// block-context scanners want this, so only they call it.
+    fn reject_flow_indicator(&self) -> Result<()> {
+        match self.peek() {
+            Some(b'{' | b'}' | b'[' | b']' | b',') => {
+                Err(self.err("a flow indicator may not open a plain scalar; quote it"))
+            }
+            _ => Ok(()),
+        }
+    }
+
     /// A plain scalar in block context: everything to end of line, minus a
     /// trailing comment and trailing whitespace.
     ///
@@ -564,6 +616,7 @@ impl<'a> Parser<'a> {
     /// strings that look like they parsed.
     fn plain_scalar(&mut self) -> Result<Value> {
         self.reject_indicator()?;
+        self.reject_flow_indicator()?;
         let line = self.line();
         let bytes = line.as_bytes();
         let mut i = 0;
@@ -747,39 +800,46 @@ impl<'a> Parser<'a> {
             Some(b'\'') => self.single_quoted()?,
             Some(b'"') => self.double_quoted()?,
             _ => {
-                let line = self.line();
-                let bytes = line.as_bytes();
+                // The one unquoted-text scanner that never asked. `{&a b: 1}`,
+                // `{*a: 1}` and `{!!str b: 1}` all came back as key text, so a
+                // flow mapping was the way to smuggle an anchor past a parser
+                // that refuses anchors everywhere else.
+                self.reject_indicator()?;
+                // Scanning `self.rest` and not `self.line()`. This loop runs
+                // once per entry and `line()` walks to the newline every time,
+                // so the cost of one key grew with the length of the whole
+                // line: 64,000 entries on one line took 99.7 s in release, and
+                // 92 ms once `\n` and `\r` became two more arms in the match
+                // below. `line()` is still right for the block-context
+                // scanners, which really do read to end of line.
+                let bytes = self.rest.as_bytes();
                 let mut i = 0;
-                while i < bytes.len() && !(bytes[i] == b':' && breaks_after(bytes, i + 1)) {
-                    if matches!(bytes[i], b',' | b'{' | b'}' | b'[' | b']') {
-                        let at = &self.rest[i..];
-                        return Err(self.err_at(at, "expected ':' after a flow mapping key"));
+                let key_end = loop {
+                    match bytes.get(i) {
+                        // Out of input, or off the end of the line, with no
+                        // `:` — either way the brace never closed.
+                        None => return Err(self.err_at(open, "unclosed flow mapping")),
+                        Some(b'\n' | b'\r') => {
+                            return Err(self.err_at(open, "a flow mapping may not span lines"));
+                        }
+                        Some(b':') if breaks_after(bytes, i + 1) => break i,
+                        Some(b',' | b'{' | b'}' | b'[' | b']') => {
+                            let at = &self.rest[i..];
+                            return Err(self.err_at(at, "expected ':' after a flow mapping key"));
+                        }
+                        // ` #` opens a comment here too — this is the fourth of
+                        // four scalar scanners and was the one that read
+                        // `{b #x: 1}` as the key "b #x". The key ends at the
+                        // space; the `:` after it is inside a comment, so the
+                        // `expected ':'` check below is what reports it.
+                        Some(b'#') if i > 0 && matches!(bytes[i - 1], b' ' | b'\t') => break i,
+                        Some(_) => i += 1,
                     }
-                    // ` #` opens a comment here too — this is the fourth of
-                    // four scalar scanners and was the one that read
-                    // `{b #x: 1}` as the key "b #x". The key ended at the
-                    // space; the `:` after it is inside a comment, so the
-                    // check below is what reports it.
-                    if bytes[i] == b'#' && i > 0 && matches!(bytes[i - 1], b' ' | b'\t') {
-                        break;
-                    }
-                    i += 1;
-                }
-                if i == bytes.len() {
-                    // `line` stops at the newline, so anything left over in
-                    // `rest` says the brace was still open when the line ended.
-                    let ran_off_the_line = self.rest.len() > i;
-                    return Err(self.err_at(
-                        open,
-                        if ran_off_the_line {
-                            "a flow mapping may not span lines"
-                        } else {
-                            "unclosed flow mapping"
-                        },
-                    ));
-                }
-                let k = line[..i].trim_end_matches([' ', '\t']).to_string();
-                self.bump(i);
+                };
+                let k = self.rest[..key_end]
+                    .trim_end_matches([' ', '\t'])
+                    .to_string();
+                self.bump(key_end);
                 k
             }
         };
@@ -851,12 +911,16 @@ impl<'a> Parser<'a> {
     /// refusing an unquoted `: `.
     fn plain_flow_scalar(&mut self) -> Result<Value> {
         self.reject_indicator()?;
-        let line = self.line();
-        let bytes = line.as_bytes();
+        // As in `flow_key`, over `self.rest` rather than `self.line()`. This
+        // scanner breaks at the first `,` or bracket, so every `line()` call
+        // threw its whole walk away — once per item. One 1 MB `os: [...]` line
+        // took 471.8 s in release that way, and 139 ms this way. `\n` and `\r`
+        // join the break set; the caller was going to refuse them anyway.
+        let bytes = self.rest.as_bytes();
         let mut i = 0;
         while i < bytes.len() {
             match bytes[i] {
-                b',' | b'{' | b'}' | b'[' | b']' => break,
+                b',' | b'{' | b'}' | b'[' | b']' | b'\n' | b'\r' => break,
                 b':' if breaks_after(bytes, i + 1) => {
                     let at = &self.rest[i..];
                     return Err(self.err_at(at, "':' in a flow scalar; quote it"));
@@ -865,7 +929,7 @@ impl<'a> Parser<'a> {
                 _ => i += 1,
             }
         }
-        let text = line[..i].trim_end_matches([' ', '\t']);
+        let text = self.rest[..i].trim_end_matches([' ', '\t']);
         if text.is_empty() {
             return Err(self.err("expected a value"));
         }
