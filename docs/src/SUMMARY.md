@@ -27,6 +27,7 @@
   - [Audit a lockfile you did not write](cookbook/foreign-lockfile.md)
   - [Monorepos](cookbook/monorepos.md)
   - [A project whose toolchain you do not have](cookbook/no-toolchain.md)
+  - [stranger, and the site serving this page](cookbook/itself.md)
 - [Decisions](decisions.md)
 - [Limits](limits.md)
 - [Reference]()

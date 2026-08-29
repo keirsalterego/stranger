@@ -38,8 +38,22 @@ $ grep -c '^\[\[package\]\]' Cargo.lock
 1
 ```
 
-`deps-proof.txt` regenerates that on demand with `make proof`, including a build
-with the network switched off.
+It will also make that claim about itself, in its own output, through the same
+reader it points at anybody else's project:
+
+```
+$ stranger scan Cargo.lock
+
+  Cargo.lock               0 packages   (0 direct · 0 transitive · 1 workspace)
+
+  no findings
+  risk 0/100    0ms    third-party deps used to compute this: 0
+```
+
+The one workspace entry is `stranger`. Three different questions — the resolver's,
+the lockfile's, and the auditor's — and they agree. `deps-proof.txt` regenerates
+all of it on demand with `make proof`, including a build with the network switched
+off.
 
 ## Build
 
