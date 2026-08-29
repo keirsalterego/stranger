@@ -328,6 +328,44 @@ fn out_of_subset_constructs() {
     reject("a: &x {b: 1}\nc:\n  <<: *x\n");
 }
 
+/// One `---` opens the document and is skipped; everything else about
+/// documents is refused by name. Before this, `--- a: 1` parsed to the key
+/// "--- a" and the legal `---\na: 1` was refused with a message that named
+/// nothing.
+#[test]
+fn document_markers() {
+    assert_eq!(parse("---\na: 1\n").get("a"), Some(&s("1")));
+    assert_eq!(parse("--- # note\na: 1\n").get("a"), Some(&s("1")));
+    assert_eq!(parse("# note\n---\na: 1\n").get("a"), Some(&s("1")));
+    assert_eq!(parse("\u{feff}---\na: 1\n").get("a"), Some(&s("1")));
+    assert_eq!(parse("---\n"), Value::Null);
+
+    assert_eq!(
+        why("--- a: 1\n"),
+        "a document marker must be alone on its line"
+    );
+    assert_eq!(at("--- a: 1\n"), (1, 5));
+    assert_eq!(
+        why("a: 1\n---\nb: 2\n"),
+        "a second document is not part of the supported YAML subset"
+    );
+    assert_eq!(at("a: 1\n---\nb: 2\n"), (2, 1));
+    assert_eq!(
+        why("---\n---\na: 1\n"),
+        "a second document is not part of the supported YAML subset"
+    );
+    assert_eq!(
+        why("a: 1\n...\n"),
+        "a document end marker is not part of the supported YAML subset"
+    );
+    assert_eq!(at("a: 1\n...\n"), (2, 1));
+    // Neither is a marker: the break after the three characters is what
+    // decides, and an indented `---` is a scalar, not structure.
+    assert_eq!(parse("---foo: 1\n").get("---foo"), Some(&s("1")));
+    assert_eq!(parse("a: ---\n").get("a"), Some(&s("---")));
+    assert_eq!(at("a:\n  ---\n"), (2, 3));
+}
+
 #[test]
 fn duplicate_keys_are_an_error() {
     assert_eq!(why("a: 1\na: 2\n"), "duplicate key `a`");
