@@ -255,6 +255,31 @@ fn comments() {
     assert_eq!(parse(r#"a = "x # y""#).get("a"), Some(&s("x # y")));
 }
 
+/// TOML 1.0 knows one carriage return, the one in CRLF: `newline = %x0A /
+/// %x0D.0A`, and `non-eol`, the comment body, is `%x09 / %x20-7F / non-ascii`.
+/// The comment scanner ran to the next `\n` regardless, so the first line here
+/// parsed `Ok` as `{version = "1"}` — the `name` key silently gone, no error,
+/// a package missing from the audit. That is the one failure a lockfile reader
+/// may never produce, so the byte is refused where it stands.
+#[test]
+fn a_bare_carriage_return_is_refused() {
+    let lost = "# c\rname = \"lodash\"\nversion = \"1\"\n";
+    assert!(why(lost).contains("carriage return"), "{}", why(lost));
+    assert_eq!(at(lost), (1, 4));
+    // Trailing comment, same byte, the other scanner.
+    assert!(why("a = 1 # c\rb = 2\n").contains("carriage return"));
+    // And between statements, where it used to pass for whitespace.
+    assert!(why("a = 1\n\rb = 2\n").contains("carriage return"));
+    // CRLF still works everywhere it appears: after a comment, after a value,
+    // and inside an array that spans lines.
+    let v = parse("# c\r\nname = \"lodash\"\r\nn = [1,\r\n  2]\r\n");
+    assert_eq!(v.get("name"), Some(&s("lodash")));
+    assert_eq!(
+        v.get("n").and_then(Value::as_array).map(<[_]>::len),
+        Some(2)
+    );
+}
+
 #[test]
 fn refused_scalar_types() {
     assert!(why("a = 1.5").contains("floats"));
@@ -267,6 +292,22 @@ fn refused_scalar_types() {
     assert!(why("a = 0b1101").contains("decimal"));
     reject("a = inf");
     reject("a = nan");
+}
+
+/// `a = foo` used to report ``expected `false` `` — the parser dispatched on
+/// the first byte, so a word starting with `f` was assumed to be a botched
+/// `false`. Right position, invented expectation.
+#[test]
+fn value_errors_name_the_set() {
+    let set = "expected a string, integer, boolean, array or inline table";
+    assert_eq!(why("a = foo\n"), set);
+    assert_eq!(why("a = tomorrow\n"), set);
+    assert_eq!(at("a = foo\n"), (1, 5));
+    // The keywords still parse, and a truncated one is still refused.
+    assert_eq!(parse("a = true").get("a"), Some(&Value::Bool(true)));
+    assert_eq!(parse("a = false").get("a"), Some(&Value::Bool(false)));
+    assert_eq!(why("a = tru\n"), set);
+    assert!(why("a = truely\n").contains("expected a newline"));
 }
 
 #[test]
