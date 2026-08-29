@@ -869,3 +869,83 @@ fn verbose_names_the_directories_it_would_not_enter() {
         "{loud}"
     );
 }
+/// A rule that could not fire is not the same claim as a rule that fired and
+/// found nothing, and both printed as silence. `install_script` is hardcoded
+/// false in the poetry, uv, Cargo and pnpm readers because those four files
+/// record no such flag, so `stranger scan poetry.lock` reported no install
+/// scripts on a question it had never asked — exit 0 at every level.
+#[test]
+fn a_rule_with_no_signal_in_this_format_says_so() {
+    let out = stdout(&run(&["scan", "fixtures/poetry-m.poetry.lock"]));
+    assert!(out.contains("no findings"), "{out}");
+    assert!(
+        out.contains("INSTALL SCRIPTS        — no signal in this format"),
+        "{out}"
+    );
+    // Go has no corpus, so the name rules cannot speak about a go.mod either.
+    let go = stdout(&run(&["scan", "fixtures/gomod-m.go.mod"]));
+    assert!(go.contains("HALLUCINATION RISK"), "{go}");
+    assert!(go.contains("no signal in this format"), "{go}");
+
+    // npm records the flag, so it must not be on the list there — a report
+    // that says "no signal" about everything says nothing.
+    let npm = stdout(&run(&["scan", "fixtures/npm-xs.package-lock.json"]));
+    assert!(!npm.contains("INSTALL SCRIPTS"), "{npm}");
+    assert!(
+        npm.contains("UNPINNED               — no signal in this format"),
+        "npm resolves every entry, so pinning has nothing to read: {npm}"
+    );
+
+    // Not a finding, and it must never become one: nothing here moves the exit
+    // code, because an unasked question is not evidence.
+    for level in ["low", "medium", "high", "critical"] {
+        assert_eq!(
+            run(&["scan", "fixtures/gomod-m.go.mod", "--fail-on", level])
+                .status
+                .code(),
+            Some(0),
+            "{level}"
+        );
+    }
+}
+
+/// The JSON half. A consumer reading `"findings": []` as "clean" is right about
+/// the rules that ran and wrong about the ones that could not, and it has no
+/// other way to find out.
+#[test]
+fn json_lists_the_rules_that_could_not_fire() {
+    let na = |fixture: &str| -> Vec<String> {
+        let out = stdout(&run(&["scan", fixture, "--format", "json"]));
+        stranger::json::parse(&out)
+            .expect("parses")
+            .get("not_applicable")
+            .and_then(stranger::json::Value::as_array)
+            .expect("not_applicable")
+            .iter()
+            .filter_map(|v| v.as_str().map(str::to_string))
+            .collect()
+    };
+    assert_eq!(
+        na("fixtures/poetry-m.poetry.lock"),
+        ["install-script", "pinning"]
+    );
+    assert_eq!(
+        na("fixtures/gomod-m.go.mod"),
+        ["slopsquat", "install-script", "pinning"]
+    );
+    assert_eq!(
+        na("fixtures/pnpm-l.pnpm-lock.yaml"),
+        ["install-script", "pinning"]
+    );
+    // requirements.txt is the one file here carrying a specifier rather than a
+    // resolution, so it is the only one `pinning` can speak about — and the
+    // only one whose list is a single entry.
+    assert_eq!(na("fixtures/reqs-s.requirements.txt"), ["install-script"]);
+    // package-lock.json is the only file that records install scripts, and it
+    // still cannot answer `pinning`: every entry resolves to one version.
+    assert_eq!(na("fixtures/npm-xs.package-lock.json"), ["pinning"]);
+    assert_eq!(
+        na("fixtures/cargo-s.Cargo.lock"),
+        ["install-script", "pinning"]
+    );
+}
