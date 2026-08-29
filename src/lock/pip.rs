@@ -220,7 +220,14 @@ fn requirement(logical: &str, line: u32, out: &mut Vec<Package>) -> Result<()> {
         // requirements.txt resolves through an index, and this reader does not
         // follow `--index-url`, so it cannot tell a private index from PyPI —
         // said in the module doc rather than guessed at here.
-        origin: if spec.trim_start().starts_with('@') {
+        //
+        // Read off `rest` and not `spec`: the tokens were glued together with
+        // nothing between them, so `spec` always opens with the package name
+        // and never with the `@`. That made this arm unreachable and every
+        // direct reference a registry package — `nunpy @ https://…/nunpy.whl`
+        // came out with the same CRITICAL as the plain `nunpy==1.0`, which is
+        // exactly the false positive `Origin` was added to stop.
+        origin: if rest.starts_with('@') {
             Origin::Elsewhere
         } else {
             Origin::Registry

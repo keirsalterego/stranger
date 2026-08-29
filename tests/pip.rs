@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use stranger::lock::{Ecosystem, Pin, Tree, pip};
-use stranger::rules::{Rule, Severity, pinning};
+use stranger::lock::{Ecosystem, Origin, Pin, Tree, pip};
+use stranger::rules::{Rule, Severity, pinning, slopsquat};
 
 fn load(name: &str) -> Tree {
     let path: PathBuf = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -177,6 +177,44 @@ fn direct_url_has_no_version_to_pin() {
     let t = parse("mypkg @ https://example.invalid/mypkg-1.0.whl\n");
     assert_eq!(t.packages[0].name, "mypkg");
     assert_eq!(pin_of(&t, "mypkg"), Pin::Unconstrained);
+}
+
+/// The other half of that line, and the half that was wrong: a direct
+/// reference does not come from PyPI, so the PyPI corpus has nothing to say
+/// about the name.
+///
+/// This was read off the glued spec rather than off the text after the name,
+/// and the glued spec always opens with the name — so `Origin::Elsewhere` was
+/// unreachable in this reader and every direct reference claimed to be a
+/// registry package. `Pin` alone would not have caught it: both fields come
+/// off the same `@` and only one of them was reading the right string.
+#[test]
+fn direct_url_does_not_come_from_the_registry() {
+    let t = parse("mypkg @ https://example.invalid/mypkg-1.0.whl\n");
+    assert_eq!(t.packages[0].origin, Origin::Elsewhere);
+    // A name off the index is still a name off the index.
+    let t = parse("mypkg==1.0\n");
+    assert_eq!(t.packages[0].origin, Origin::Registry);
+}
+
+/// What the origin is *for*. `nunpy` is one edit from `numpy` and in no
+/// corpus, so the name rules have every reason to shout — and no standing to,
+/// because the file says where the bytes come from and it is not PyPI.
+/// Before the fix this printed a CRITICAL byte-identical to the `nunpy==1.0`
+/// control below it.
+#[test]
+fn a_direct_reference_is_not_a_slopsquat() {
+    let url = parse("nunpy @ https://example.invalid/nunpy-1.0-py3-none-any.whl\n");
+    assert!(
+        slopsquat::scan(&url, slopsquat::Config::default()).is_empty(),
+        "the corpus cannot speak about a name it never covered"
+    );
+
+    // The control. If this stops firing the test above proves nothing.
+    let pinned = parse("nunpy==1.0\n");
+    let found = slopsquat::scan(&pinned, slopsquat::Config::default());
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0].package, "nunpy");
 }
 
 #[test]
