@@ -80,7 +80,7 @@ $ stranger scan .
 ```
 
 The walk finds every lockfile under the directory and audits them on separate
-threads — five formats and four ecosystems in one pass, if that is what is there.
+threads — six formats and four ecosystems in one pass, if that is what is there.
 It does not descend into `node_modules`, `target`, `.venv` or `dist`, because a
 populated `node_modules` holds hundreds of vendored lockfiles belonging to other
 people and auditing those is worse than auditing nothing.
@@ -240,8 +240,11 @@ the event, so it is here rather than buried.
 
 **`hasInstallScript` is a bare boolean.** lockfileVersion 3 records that a package
 runs code at install time and does not record what that code is. The tool can say
-code runs. It cannot say what it does. Eight of the 1,390 entries in the largest
-fixture carry the flag.
+code runs. It cannot say what it does.
+
+Nine of the 1,390 entries in the largest fixture carry the flag and the tool
+reports eight. The ninth is the empty-string key — the root project — and its
+install script is your own build, not a stranger's.
 
 **`Cargo.lock` records no build scripts and no dev-dependencies.** Cargo runs
 `build.rs` at compile time — the same shape `hasInstallScript` flags — and the

@@ -271,10 +271,20 @@ align package names that npm, PyPI and crates.io all restrict to ASCII. Marked
 
 ---
 
-## Not yet claimed
+## Not claimed
 
-Entries for `serde_yaml`, `indicatif`, `rayon` and `crossbeam-channel` land if
-and only if their modules do. An unwritten module gets no entry.
+This section listed `serde_yaml`, `indicatif`, `rayon` and `crossbeam-channel` as
+entries that would land if and only if their modules did. Three of the four
+landed — `yaml.rs` with the pnpm reader, and `std::thread::scope` plus
+`std::sync::mpsc` with the parallel scan — and they are written up above.
+
+**`indicatif` is not claimed**, because nothing here draws a progress bar. The
+largest fixture scans in under half a second, and a bar that finishes before it
+renders is a dependency bought for a frame. Claiming it would have meant writing a
+spinner in order to say a spinner crate had been replaced, which is the shape of
+padding rather than substitution.
+
+The rule this section exists to enforce: an unwritten module gets no entry.
 
 ---
 
