@@ -30,6 +30,16 @@
 //!
 //! `-r`/`-c` includes are not followed, `-e` editables are not packages, and
 //! `--index-url` is discussed at the point where it gets dropped.
+//!
+//! A requirement that names a *location* rather than a project — `https://…`,
+//! `git+ssh://…`, `./vendor/pkg-1.0.tar.gz` — is skipped too, and that one is
+//! worth saying out loud because it used to abort the file. pip installs all
+//! three, none of them carries a name the PyPI corpus could speak about, and
+//! `pkg @ https://…` is the only spelling that keeps a real name in front of
+//! the URL. Skipping the line and reading the rest is the same call
+//! `lock::cargo` makes for a dependency naming an entry that is not in the
+//! file, and for the same reason: one unusual line should not cost the other
+//! two hundred requirements their audit.
 
 use crate::error::{Error, Result};
 use crate::lock::{Ecosystem, Origin, Package, Pin, Tree};
@@ -156,6 +166,22 @@ fn requirement(logical: &str, line: u32, out: &mut Vec<Package>) -> Result<()> {
         .find(|c: char| !(c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-')))
         .unwrap_or(head.len());
     let (name, rest) = head.split_at(end);
+
+    // A URL, a VCS reference, or a path — `https://host/x.tar.gz`,
+    // `git+https://…`, `./vendor/pkg-1.0.tar.gz`. There is no project name in
+    // any of them to look up, so there is nothing here for the rules to say,
+    // and refusing the file over one of these took the other requirements down
+    // with it. See the module doc.
+    //
+    // The `/` is what tells them apart from a name: PEP 508 allows none in a
+    // name, an extras group or a specifier, so the only requirement that
+    // legitimately reaches a slash is `pkg @ https://…` — which announces
+    // itself with the `@` first and keeps its name. Checked before the name is
+    // validated, because `./vendor/…` fails that check for the wrong reason.
+    if !rest.starts_with('@') && rest.contains('/') {
+        return Ok(());
+    }
+
     if !name.starts_with(|c: char| c.is_ascii_alphanumeric()) {
         return Err(Error::Syntax {
             what: format!("`{head}` does not begin with a package name"),
@@ -220,7 +246,14 @@ fn requirement(logical: &str, line: u32, out: &mut Vec<Package>) -> Result<()> {
         // requirements.txt resolves through an index, and this reader does not
         // follow `--index-url`, so it cannot tell a private index from PyPI —
         // said in the module doc rather than guessed at here.
-        origin: if spec.trim_start().starts_with('@') {
+        //
+        // Read off `rest` and not `spec`: the tokens were glued together with
+        // nothing between them, so `spec` always opens with the package name
+        // and never with the `@`. That made this arm unreachable and every
+        // direct reference a registry package — `nunpy @ https://…/nunpy.whl`
+        // came out with the same CRITICAL as the plain `nunpy==1.0`, which is
+        // exactly the false positive `Origin` was added to stop.
+        origin: if rest.starts_with('@') {
             Origin::Elsewhere
         } else {
             Origin::Registry
