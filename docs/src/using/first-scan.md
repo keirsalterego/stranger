@@ -159,7 +159,7 @@ string field will not.
 ## The footer
 
 ```text
-  risk 81/100    141ms    third-party deps used to compute this: 0
+  risk 81/100    56ms    third-party deps used to compute this: 0
 ```
 
 The risk number is a band for the worst severity present, plus position inside the

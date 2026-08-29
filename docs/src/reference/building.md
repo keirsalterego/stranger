@@ -29,24 +29,37 @@ Under three seconds cold, because there is nothing to compile except this crate.
 $ make test
 ```
 
-154 tests across 13 files. 153 run by default; the corpus-decay ablation is
-`#[ignore]`d because it takes about two minutes.
+372 tests across 21 files, plus 7 unit tests inside `src/`. Five are
+`#[ignore]`d because they are slow — the corpus-decay ablation, the
+false-positive-by-length sweep, two deep fuzz campaigns and the JSON differential
+run — and each has a `make` target or a script beside it.
+
+The counts below are `grep -c '#\[test\]' tests/*.rs`, so they are re-derivable
+rather than remembered. They went stale twice before that was written down.
 
 | file | tests | what it covers |
 |---|---|---|
-| `tests/toml.rs` | 26 | the accepted subset, and every construct refused with a position |
-| `tests/pip.rs` | 24 | PEP 508 shapes, continuations, comments, markers, extras |
-| `tests/term.rs` | 17 | the four-input colour decision table, column widths |
-| `tests/json.rs` | 15 | malformed input, surrogate pairs, deep nesting, error positions |
-| `tests/semver.rs` | 13 | precedence, including prerelease ordering |
+| `tests/cli.rs` | 38 | exit codes, `-q`, `-v`, blind spots, the hostile fixture, and no escapes down a pipe |
+| `tests/yaml.rs` | 34 | the subset, the flow indicators that used to invent a key, and a linearity bound on flow collections |
+| `tests/toml.rs` | 34 | the accepted subset, every construct refused with a position, and the header depth that used to abort in `Drop` |
+| `tests/json_conformance.rs` | 30 | RFC 8259 clause by clause, each test citing its section |
+| `tests/pip.rs` | 29 | PEP 508 shapes, continuations, comments, markers, extras |
+| `tests/pnpm.rs` | 19 | the three sections, and that two legal spellings of one lockfile agree |
+| `tests/term.rs` | 18 | the four-input colour decision table, column widths, control-character replacement |
+| `tests/walk.rs` | 17 | the skip list, depth cap, sorted order, symlinks, and what it could not open |
+| `tests/tree.rs` | 17 | in-degree, out-edges, depth, near names, and the flags a reader set |
+| `tests/json.rs` | 17 | malformed input, surrogate pairs, deep nesting, error positions |
+| `tests/gomod.rs` | 17 | `require` blocks, pseudo-versions, `retract`, `replace`, `exclude` |
+| `tests/pypi.rs` | 16 | poetry and uv, and clause 3's share under corpus decay |
+| `tests/cargo.rs` | 14 | the three shapes of a dependency string, workspace members, git origins |
 | `tests/rules.rs` | 12 | all five rules against the fixtures |
-| `tests/cli.rs` | 10 | exit codes, `-q`, `-v`, and no escapes down a pipe |
+| `tests/corpus.rs` | 12 | sortedness, PEP 503 normalisation, length bucketing, the false-positive-by-length table |
+| `tests/distance.rs` | 11 | the OSA counterexample, Damerau against plain Levenshtein, three property tests |
+| `tests/semver.rs` | 10 | precedence, including prerelease ordering |
 | `tests/npm.rs` | 9 | fixture counts, nested entries, workspace members, refused versions |
-| `tests/corpus.rs` | 8 | sortedness, PEP 503 normalisation, the `lodash` gap |
-| `tests/distance.rs` | 8 | the OSA counterexample, three property tests at 20,000 cases each |
-| `tests/walk.rs` | 8 | the skip list, depth cap, sorted order, symlinks |
+| `tests/fuzz.rs` | 5 | mutation campaigns over every parser and all seven readers |
+| `tests/ablation.rs` | 4 | the three tables |
 | `tests/fixtures.rs` | 2 | every npm fixture parses and its count is what it should be |
-| `tests/ablation.rs` | 2 | the two tables |
 
 `tests/cli.rs` drives the built binary rather than the library, because exit codes
 and stdout are the actual contract with a CI job and neither is visible from
@@ -74,19 +87,32 @@ names, and a debug build makes it unpleasant.
 
 ## Benchmarks
 
-```console
-$ make bench
-fixture: fixtures/npm-xl.package-lock.json (1383 resolved entries)
-cpu: Intel(R) Core(TM) i5-10200H CPU @ 2.40GHz
-governor: powersave
+`make bench` writes `bench.md`. It reports **p50 and p99**, not a mean and a
+standard deviation: a scan is not normally distributed, the tail is where a CI job
+notices, and a mean with an 82 ms sigma — which is what this section used to
+quote — says less than either percentile does.
 
-Benchmark 1: target/release/stranger scan fixtures/npm-xl.package-lock.json
-  Time (mean ± σ):     413.0 ms ±  82.5 ms    [User: 404.8 ms, System: 3.4 ms]
-  Range (min … max):   371.2 ms … 660.2 ms    50 runs
-```
+| target | runs | p50 ms | p99 ms |
+|---|---|---|---|
+| `stranger scan fixtures/npm-xl.package-lock.json` (1,376 third-party packages) | 100 | 233.7 | 248.8 |
+| 500 names, all in the corpus | 100 | 9.5 | 10.5 |
+| 500 names, none in the corpus | 5 | 10,102.0 | 10,160.6 |
 
-Uses `hyperfine` when it is installed and falls back to a plain 50-run loop when
-it is not, so `make bench` never answers with `command not found`.
+Measured on an Intel Core i5-10200H at 2.40 GHz, 8 cores, governor
+**performance** — the governor is in the file because a `powersave` reading is a
+measurement of the governor and not of the tool. One fresh process per sample,
+five warmup runs first, page cache warm, nearest-rank percentiles with no
+interpolation.
+
+The third row is the point of the file. A name in the corpus is answered by a
+binary search; a name that is not costs a sweep, and the two 500-name rows are the
+same file shape at the same size differing only in whether the names hit. That
+cliff is why `corpus::ByLength` exists, and it halved it rather than removing it.
+
+`bench.md` is gitignored on purpose — it is a timing on one machine, not a claim
+— so `make bench` gives you your own. It uses `hyperfine` when it is installed and
+falls back to a plain timing loop when it is not, which also publishes its own
+floor, so `make bench` never answers with `command not found`.
 
 ## Lint
 

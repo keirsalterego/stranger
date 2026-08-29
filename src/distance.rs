@@ -43,8 +43,14 @@ use std::collections::BTreeMap;
 /// For shape: at k = 1, 2, 3, 4 the npm corpus holds 1, 6, 49 and 467
 /// neighbours of `lodash` and 2, 4, 44 and 145 of `express`, and the PyPI
 /// corpus holds 1, 2, 5 and 22 of `requests`. Cost follows — scanning
-/// `npm-xl` takes 221ms, 414ms, 630ms, 2,229ms — because the length prefilter
+/// `npm-xl` took 221ms, 414ms, 630ms, 2,229ms — because the length prefilter
 /// and the row-minimum early exit both loosen as `k` grows.
+///
+/// Those four timings were taken before `corpus::ByLength` and
+/// `distance::Query`; `npm-xl` is 234ms at the shipped `k` now, and the k = 3
+/// and k = 4 figures would be lower too. They are left as measured rather than
+/// re-run, because the shape is what the paragraph is for and the neighbour
+/// counts above it — which is the actual argument — do not depend on speed.
 ///
 /// The honest gap in all of it: no fixture contains a hallucinated name whose
 /// nearest real neighbour actually sits at three edits, so this prices a wider

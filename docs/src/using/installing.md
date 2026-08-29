@@ -43,12 +43,12 @@ $ CARGO_NET_OFFLINE=true cargo build --release --locked --offline
 
 ```console
 $ ls -l target/release/stranger
--rwxrwxr-x 2 keir keir 3676440 Aug 29 00:45 target/release/stranger
+-rwxrwxr-x 2 keir keir 4064792 Aug 30 01:46 target/release/stranger
 ```
 
-3.5 MiB, of which 2,960,053 bytes is the corpus of known-real package names —
+4,064,792 bytes, of which 2,960,053 is the corpus of known-real package names —
 140,066 for npm, 15,000 for PyPI, 5,000 for crates.io — compiled in with
-`include_str!`. Most of the binary is corpus. That is the reason the tool works
+`include_str!`. Nearly three quarters of the binary is corpus. That is the reason the tool works
 on a plane: no cache directory, no first-run download, no "corpus not found"
 failure mode.
 

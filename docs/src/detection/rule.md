@@ -52,7 +52,7 @@ lockfile's own edges.
 They run in the order 1, 3, 2. Clause 1 first because it is a binary search and
 it eliminates all but a couple of dozen names. Clause 3 before clause 2 because
 it is one array index and clause 2 is a linear scan of 140,066 names — on the
-`npm-xl` fixture that ordering is most of the difference between 413 ms and
+`npm-xl` fixture that ordering is most of the difference between 234 ms and
 something considerably worse.
 
 Packages marked first-party are skipped before any of it. Somebody in this

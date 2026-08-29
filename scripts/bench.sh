@@ -192,14 +192,22 @@ if [ "$CLIFF" = 1 ]; then
     echo
     echo "## The out-of-corpus cliff"
     echo
-    echo "A name that is in the corpus is found and the scan stops looking. A name"
-    echo "that is not costs a full sweep of all $(wc -l <corpus/npm.txt | tr -d ' ') npm names at the edit-distance"
-    echo "threshold, and the two rows above are the same file shape at the same size"
-    echo "with the only difference being whether the names hit. The miss row gets"
-    echo "$SLOW_RUNS runs rather than $RUNS because each one is seconds and not milliseconds."
+    echo "A name that is in the corpus is answered by a binary search. A name that"
+    echo "is not costs a sweep at the edit-distance threshold, and the two rows above"
+    echo "are the same file shape at the same size with the only difference being"
+    echo "whether the names hit. The miss row gets $SLOW_RUNS runs rather than $RUNS because"
+    echo "each one is seconds and not milliseconds."
     echo
-    echo "A package published after the corpus snapshot misses the same way. This is"
-    echo "the number to watch when length bucketing lands."
+    echo "A package published after the corpus snapshot misses the same way."
+    echo
+    echo "Length bucketing has landed and this is the number after it. A match within"
+    echo "k cannot differ in length by more than k, so the sweep only touches the"
+    echo "2k+1 buckets around the query instead of all $(wc -l <corpus/npm.txt | tr -d ' ') npm names. That halved the"
+    echo "miss row rather than removing it: npm holds 33,316 names between eleven and"
+    echo "fifteen characters, so a thirteen-character miss still runs the table"
+    echo "against a quarter of the list. The upgrade past that is a"
+    echo "deletion-neighbourhood index, which wants more memory than a corpus already"
+    echo "compiled into the binary can spare."
   } >>bench.md
 fi
 

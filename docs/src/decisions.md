@@ -37,7 +37,8 @@ oversight.
 ## The corpus is data, and it is compiled in
 
 160,066 package names ship inside the binary through `include_str!` — 2,960,053
-bytes of text in a 3.6 MB release binary. Most of the binary is corpus.
+bytes of text in a 4,064,792-byte release binary. Nearly three quarters of the
+binary is corpus.
 
 The alternative, fetching at runtime or reading a cache directory, would have made
 the central claim false. `stranger` works on a plane. There is no *corpus not
