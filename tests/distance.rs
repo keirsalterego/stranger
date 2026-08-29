@@ -126,3 +126,50 @@ fn non_ascii_names_do_not_panic() {
     assert_eq!(d("π", "π"), 0);
     assert_eq!(d("🦀🦀", "🦀"), 1);
 }
+
+fn corpus(file: &str) -> String {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("corpus")
+        .join(file);
+    std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
+}
+
+/// Every corpus claim in the `MAX_EDIT_DISTANCE` comment, checked.
+///
+/// The comment used to name `logass`, `nodash` and `loda` as npm entries that
+/// a threshold of three newly reaches. Not one of the three is in the corpus,
+/// and all three are already inside the current threshold, so the sentence was
+/// wrong in both halves and nothing in the test suite noticed for weeks. A
+/// number a comment quotes about the corpus is a number a test can hold it to,
+/// so: a corpus refresh that moves these counts is meant to fail here and send
+/// whoever ran it back to the comment.
+#[test]
+fn the_threshold_comment_is_still_true() {
+    let npm = corpus("npm.txt");
+    let npm: Vec<&str> = npm.lines().collect();
+    let pypi = corpus("pypi.txt");
+    let pypi: Vec<&str> = pypi.lines().collect();
+
+    for (name, distance) in [("logass", 2), ("nodash", 1), ("loda", 2)] {
+        assert_eq!(d(name, "lodash"), distance, "{name} vs lodash");
+        assert!(distance <= MAX_EDIT_DISTANCE, "{name} is already caught");
+        assert!(!npm.contains(&name), "{name} is not an npm package");
+    }
+
+    // Neighbours excluding the name itself, which is the figure the comment
+    // quotes. `within` is what the corpus scan actually calls.
+    let count = |names: &[&str], q: &str, k: usize| {
+        names
+            .iter()
+            .filter(|&&n| n != q && within(q, n, k).is_some())
+            .count()
+    };
+    let at = |names: &[&str], q: &'static str| [1, 2, 3, 4].map(|k| count(names, q, k));
+    assert_eq!(at(&npm, "lodash"), [1, 6, 49, 467]);
+    assert_eq!(at(&npm, "express"), [2, 4, 44, 145]);
+    assert_eq!(at(&pypi, "requests"), [1, 2, 5, 22]);
+
+    // The floor. This is a planted name in `poisoned.requirements.txt` and a
+    // true positive, and a threshold of one loses it.
+    assert_eq!(d("requests-http", "requests-html"), 2);
+}

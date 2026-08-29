@@ -16,20 +16,50 @@
 use std::collections::BTreeMap;
 
 /// Names further apart than this are not typos of each other, they are
-/// different packages. Two is not arbitrary: at three, `lodash` starts
-/// matching `logass`, `nodash`, `loda`, and about forty other real registry
-/// entries, and the rule's precision on the fixtures fell off a cliff. Two
-/// still catches every single-character slip — deletion, insertion,
-/// substitution, transposition — which is the entire population of typos a
-/// model actually produces.
+/// different packages.
+///
+/// Two is the smallest threshold that still finds every planted name in the
+/// fixtures. At one, `requests-http` goes quiet, and it is a true positive:
+/// two edits from the real `requests-html`. Three is the direction worth
+/// measuring, and the answer is lopsided. On npm, pnpm, poetry, uv and pip it
+/// changes nothing whatsoever — the findings at three are identical to the
+/// findings at two, fixture for fixture and name for name. On `cargo-l` it
+/// goes from zero findings to six. `assert2`, `mavlink`, `petname`,
+/// `ros2-client`, `rust-format` and `splitty` are all real crates, and each
+/// one lands three edits from something it has no relationship to (`adler2`,
+/// `maplit`, `uname`, `oci-client`, `num-format`, `plist`). Four adds five
+/// more, spread over `cargo-m`, `npm-xl` and `pnpm-l`.
+///
+/// That split is the corpus talking, not the threshold. `corpus/npm.txt` has
+/// 140,066 names and contains every real package in every npm fixture, so
+/// clause one of the slopsquat rule has already eliminated them before any
+/// distance is computed and `k` is left with nothing to act on.
+/// `corpus/crates-io.txt` has 5,000 — the top of crates.io, not the whole of
+/// it — so dozens of real crates survive clause one, and every widening of `k`
+/// hands one of them a nearest neighbour. Which makes the threshold the cheap
+/// knob and the corpus the real one.
+///
+/// For shape: at k = 1, 2, 3, 4 the npm corpus holds 1, 6, 49 and 467
+/// neighbours of `lodash` and 2, 4, 44 and 145 of `express`, and the PyPI
+/// corpus holds 1, 2, 5 and 22 of `requests`. Cost follows — scanning
+/// `npm-xl` takes 221ms, 414ms, 630ms, 2,229ms — because the length prefilter
+/// and the row-minimum early exit both loosen as `k` grows.
+///
+/// The honest gap in all of it: no fixture contains a hallucinated name whose
+/// nearest real neighbour actually sits at three edits, so this prices a wider
+/// threshold without ever valuing it. A fixture with a genuine d=3 typo, or a
+/// crates.io corpus as complete as the npm one, is what would tell the two
+/// apart. Two also catches every single-character slip — deletion, insertion,
+/// substitution, transposition — which is the population of typos a model
+/// actually produces.
 pub const MAX_EDIT_DISTANCE: usize = 2;
 
 /// Distance if it is at most `k`, `None` otherwise.
 ///
 /// The length check first is not just an optimisation: a distance of `k`
 /// cannot change a string's length by more than `k`, so this is exact, and it
-/// rejects the overwhelming majority of a 5,000-name corpus before any table
-/// gets allocated.
+/// rejects the overwhelming majority of the corpus — 140,066 names for npm,
+/// 15,000 for PyPI, 5,000 for crates.io — before any table gets allocated.
 pub fn within(a: &str, b: &str, k: usize) -> Option<usize> {
     let (la, lb) = (a.chars().count(), b.chars().count());
     if la.abs_diff(lb) > k {
