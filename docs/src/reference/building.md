@@ -133,17 +133,37 @@ acquired a dependency fails instead of quietly succeeding.
 ## The book
 
 ```console
-$ mdbook build docs
-$ ./docs/check-links.py
-checked 27 pages, no broken relative links
+$ make docs
+checked 32 pages, no broken relative links
+checked 30 pages, every fixture console block reproduces
 ```
 
-`check-links.py` resolves every relative markdown link against the file it appears
-in and exits non-zero on the first target that does not exist. mdBook turns a
-broken link into a 404 without complaining, so a rotted page looks exactly like a
+Two checks, both standard-library-only Python, neither of which ever enters
+`Cargo.toml`.
+
+**`check-links.py`** resolves every relative markdown link against the file it
+appears in and exits non-zero on the first target that does not exist. mdBook turns
+a broken link into a 404 without complaining, so a rotted page looks exactly like a
 fine one until somebody clicks it. External URLs are skipped, because checking
 those needs the network and this is a repository whose whole argument is that it
 does not need the network.
+
+**`check-output.py`** runs every `$ stranger scan fixtures/...` in the book and the
+README and compares what the tool actually prints against what the page says it
+prints. Elapsed milliseconds are the one thing allowed to differ, because they are
+a measurement rather than a claim.
+
+It exists because two separate rots got through in one afternoon. The
+[risk score](../using/first-scan.md) changed from a capped sum to a band, which
+renumbered every published figure — on a branch that did not yet contain the four
+new [format pages](../formats/npm.md) being written against the old score on
+another branch. Both merged green and three pages went out quoting a number the
+tool would not print. Separately, the [co-occurrence rule](../detection/rule.md)'s
+own three worked examples had stopped firing entirely when packages gained an
+origin, because their hand-written lockfiles carry no `resolved` field.
+
+Neither was catchable by review. Both are caught now, in `ci` rather than in the
+docs workflow, because the check needs the release binary.
 
 ```console
 $ make test && make lint

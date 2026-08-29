@@ -31,3 +31,4 @@ repro:
 docs:
 	@mdbook build docs
 	@./docs/check-links.py
+	@./docs/check-output.py
