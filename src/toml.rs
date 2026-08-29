@@ -126,9 +126,12 @@ impl Value {
 
 /// The document is always a table, so the return is always `Value::Table`.
 pub fn parse(src: &str) -> Result<Value> {
+    // `src` is the body, not the original: positions are computed against it,
+    // and a mark left in front of them puts every column on line 1 one to the
+    // right of where an editor shows it. `json.rs` and `yaml.rs` agree.
     let body = src.strip_prefix('\u{feff}').unwrap_or(src);
     let mut p = Parser {
-        src,
+        src: body,
         rest: body,
         depth: 0,
     };

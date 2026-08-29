@@ -316,6 +316,17 @@ fn junk_after_a_value() {
     reject("= 1");
 }
 
+/// The mark is skipped, and it is not a column. `error.rs` promises the
+/// column lines up with what an editor shows, and counting three invisible
+/// bytes as one character put every position on line 1 one to the right.
+#[test]
+fn leading_byte_order_mark() {
+    assert_eq!(parse("\u{feff}a = 1\n").get("a"), Some(&Value::Integer(1)));
+    assert_eq!(at("\u{feff}? = 1\n"), (1, 1));
+    assert_eq!(at("\u{feff}a = 1.5\n"), (1, 6));
+    assert_eq!(at("a = 1.5\n"), (1, 6));
+}
+
 #[test]
 fn error_positions_point_at_the_problem() {
     // Line 3, column 5: the `.` that starts a float.

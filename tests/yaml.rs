@@ -442,6 +442,15 @@ fn malformed_lines() {
     );
 }
 
+/// Same as `toml.rs` and `json.rs`: the mark is skipped and does not shift
+/// the columns of the line it sits on.
+#[test]
+fn leading_byte_order_mark() {
+    assert_eq!(parse("\u{feff}a: 1\n").get("a"), Some(&s("1")));
+    assert_eq!(at("\u{feff}a: b: c\n"), (1, 5));
+    assert_eq!(at("a: b: c\n"), (1, 5));
+}
+
 #[test]
 fn error_positions_point_at_the_problem() {
     // The `:` that should not be there, at character 5 of line 1.

@@ -82,9 +82,16 @@ impl Value {
 }
 
 pub fn parse(src: &str) -> Result<Value> {
+    // RFC 8259 section 8.1 forbids a parser from *emitting* a byte-order mark
+    // and explicitly allows one to skip a leading one. A Windows editor writes
+    // it, and rejecting the file outright meant a valid `package-lock.json`
+    // came back "expected a value at 1:1" and zero packages were audited.
+    // `toml.rs` and `yaml.rs` skip it the same way, and all three set `src` to
+    // the body so the mark does not shift every column on line 1 by one.
+    let body = src.strip_prefix('\u{feff}').unwrap_or(src);
     let mut p = Parser {
-        src,
-        rest: src,
+        src: body,
+        rest: body,
         depth: 0,
     };
     p.skip_ws();

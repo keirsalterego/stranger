@@ -135,6 +135,21 @@ fn error_positions_point_at_the_problem() {
     assert_eq!(at(r#"{"π": }"#), (1, 7));
 }
 
+/// RFC 8259 section 8.1 lets a parser skip a leading byte-order mark, and a
+/// lockfile saved by a Windows editor carries one. Rejecting it failed the
+/// whole file — exit 2, no findings — over three invisible bytes.
+#[test]
+fn leading_byte_order_mark() {
+    assert_eq!(parse("\u{feff}{}"), Value::Object(Default::default()));
+    assert_eq!(parse("\u{feff}[1]"), Value::Array(vec![Value::Number(1.0)]));
+    assert_eq!(parse("\u{feff}\"x\""), Value::String("x".into()));
+    // Skipped, not counted: the column is the one an editor shows.
+    assert_eq!(at("\u{feff}{\"a\": }"), (1, 7));
+    // One mark, and only at the front. Anywhere else it is not whitespace.
+    reject("\u{feff}\u{feff}{}");
+    reject("{\u{feff}}");
+}
+
 #[test]
 fn truncation_never_panics() {
     let full = r#"{"packages":{"node_modules/a":{"version":"1.0.0","dev":true}}}"#;

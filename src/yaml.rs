@@ -153,9 +153,11 @@ impl Value {
 }
 
 pub fn parse(src: &str) -> Result<Value> {
+    // The body is what positions are measured against; a mark left in front of
+    // them shifts every column on line 1. `json.rs` and `toml.rs` agree.
     let body = src.strip_prefix('\u{feff}').unwrap_or(src);
     let mut p = Parser {
-        src,
+        src: body,
         rest: body,
         depth: 0,
         started: false,
