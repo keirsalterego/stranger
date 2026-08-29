@@ -12,9 +12,9 @@ present is public.
 |---|---|---|
 | `npm-xs.package-lock.json` | 37 | npm, lockfileVersion 3 |
 | `npm-s.package-lock.json` | 405 | npm, lockfileVersion 3 |
-| `npm-m.package-lock.json` | 582 | npm, lockfileVersion 3 — 3 are `link: true` workspace members |
+| `npm-m.package-lock.json` | 582 | npm, lockfileVersion 3 — 3 `link: true`, 3 workspace directories |
 | `npm-l.package-lock.json` | 754 | npm, lockfileVersion 3 |
-| `npm-xl.package-lock.json` | 1390 | npm, lockfileVersion 3 — 7 `link: true`, 184 nested, 9 install scripts. The benchmark fixture. |
+| `npm-xl.package-lock.json` | 1390 | npm, lockfileVersion 3 — 7 `link: true`, 7 workspace directories, 184 nested, 9 install scripts. The benchmark fixture. |
 | `cargo-s.Cargo.lock` | 124 | cargo v4 — 1 workspace member, 8 version-qualified dependency strings |
 | `cargo-m.Cargo.lock` | 723 | cargo v3 — 15 workspace members, 19 git dependencies, 500 version-qualified |
 | `cargo-l.Cargo.lock` | 944 | cargo v4 — 93 workspace members, 597 version-qualified. The workspace fixture. |
@@ -30,9 +30,17 @@ public repo publishes what someone's private product is built on; `npm-m` does n
 
 ## The poisoned pair
 
-`poisoned.package-lock.json` and `poisoned.requirements.txt` are `npm-l` and
-`reqs-s` with known-bad names inserted by hand. They are the demo and the
-regression test for the slopsquat rule.
+`poisoned.package-lock.json` is `npm-l` with three known-bad names inserted by
+hand as root dependencies: 754 entries become 757. `poisoned.requirements.txt` is
+not derived from anything — it is six lines written from scratch. They are the
+demo and the regression test for the slopsquat rule.
+
+This file said for most of the weekend that the pip fixture was `reqs-s` with
+names inserted. It is not. `reqs-s` has 23 lines, every one exactly pinned; the
+poisoned file has 6 and shares exactly one of them (`numpy`, and there it carries
+no constraint at all). Poisoning `reqs-s` would have meant 23 clean lines around
+2 bad ones, which is a worse demo and a slower test than 6 lines that are all
+load-bearing.
 
 npm, all three inserted as **root** dependencies with no parent:
 
@@ -52,12 +60,19 @@ that flags the typo without flagging its legitimate neighbour is the actual bar.
 
 pip, in `poisoned.requirements.txt`:
 
+All six lines, because in a file this short every one is doing a job:
+
 | line | nearest real name | note |
 |---|---|---|
+| `requests==2.31.0` | — | real, pinned, and quiet. The control. |
+| `urllib3>=1.26` | — | unpinned, which is its own finding |
 | `python-dateutils==2.9.0` | `python-dateutil` | one insertion |
 | `requests-http==1.0.2` | `requests-html` | two edits — see the correction below |
-| `urllib3>=1.26` | — | unpinned, which is its own finding |
+| `flask~=3.0` | — | unpinned, compatible-release form |
 | `numpy` | — | no constraint at all |
+
+Which is 2 hallucination findings and 3 unpinned ones, and one line that should
+produce neither.
 
 `requests-http` was put in as a name the typo rule should **not** fire on — the
 theory being that a hallucinated name which is not a near-miss of a real one is a
@@ -83,4 +98,13 @@ reproducible by someone who is not me, and because the notes I collected before
 the window said npm-xl held 1,391 entries. It holds 1,390.
 
 The same thing happened again with `reqs-xs`, which this table said held 11
-requirements until `tests/pip.rs` counted 12.
+requirements until `tests/pip.rs` counted 12. And a third time with the two claims
+above it: that the pip fixture was poisoned `reqs-s`, and that `npm-m` has three
+workspace members.
+
+The workspace one is the more interesting mistake, because both numbers are real
+and they count different things. npm writes a monorepo member twice — once as the
+directory (`apps/admin`) and once as a `link: true` entry under `node_modules`
+pointing at it. Three of each, so `link: true` is 3 and the report's header says
+`6 workspace`. Neither number is wrong; this file just never said which one it
+was quoting. `npm-xl` is 7 and 14 by the same arithmetic.
