@@ -35,6 +35,20 @@ fn numbers() {
     assert_eq!(parse("1E+3"), Value::Number(1000.0));
     assert_eq!(parse("-1.5e-2"), Value::Number(-0.015));
     assert_eq!(parse("0.5"), Value::Number(0.5));
+    // RFC 8259 puts no limit on magnitude and f64 does: this is the input the
+    // parser used to carry a "number out of range" message for. It is not an
+    // error, it is infinity.
+    assert!(parse("1e999").as_f64().is_some_and(f64::is_infinite));
+}
+
+/// A number is scanned before it is judged, so the naive thing is to report
+/// the whole number's first byte. The problem in `1.` is at 1:3.
+#[test]
+fn number_errors_point_at_the_offending_byte() {
+    assert_eq!(at("1."), (1, 3));
+    assert_eq!(at("-x"), (1, 2));
+    assert_eq!(at("[0, 1e]"), (1, 7));
+    assert_eq!(at("{\"a\": 1.2e+}"), (1, 12));
 }
 
 /// Everything here is accepted by `f64::from_str` and rejected by RFC 8259,

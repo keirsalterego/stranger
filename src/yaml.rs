@@ -887,11 +887,8 @@ fn scalar(text: &str) -> Value {
 /// `---` or `...` standing alone: YAML's document markers. The trailing break
 /// is what keeps `---foo: 1` and `...: 1` ordinary keys.
 fn document_marker(s: &str) -> Option<&'static str> {
-    let marker = ["---", "..."]
-        .into_iter()
-        .find(|m| s.starts_with(m))
-        .filter(|_| breaks_after(s.as_bytes(), 3))?;
-    Some(marker)
+    let marker = ["---", "..."].into_iter().find(|m| s.starts_with(m))?;
+    breaks_after(s.as_bytes(), 3).then_some(marker)
 }
 
 /// A `-` that opens a block sequence entry, as opposed to one that starts a

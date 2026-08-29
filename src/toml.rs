@@ -95,13 +95,6 @@ impl Value {
         }
     }
 
-    pub fn as_integer(&self) -> Option<i64> {
-        match self {
-            Value::Integer(n) => Some(*n),
-            _ => None,
-        }
-    }
-
     pub fn as_bool(&self) -> Option<bool> {
         match self {
             Value::Bool(b) => Some(*b),
@@ -393,8 +386,8 @@ impl<'a> Parser<'a> {
             // `a = [1]` then `[[a]]` used to append a table to the value
             // array, producing `[1, {…}]` — a mixed array TOML has no way to
             // write down, and, for `package = []`, a lockfile that reads as
-            // one package here and zero everywhere else. The `else` below only
-            // catches the case where `a` is a table.
+            // one package here and zero everywhere else. The `let … else`
+            // below only catches `a` having been a table.
             if immutable.contains(&canon) {
                 return Err(self.err_at(
                     at,
