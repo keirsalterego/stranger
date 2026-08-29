@@ -16,6 +16,11 @@ the two forms it actually reports. It has no weekly figure, so none is invented.
 
 **`serde_json` — 1,227,048,507 all-time · 288,758,389 in 90 days**
 
+`rand` is bigger — 1,605,926,795 — and it is deliberately not the nomination.
+The bonus asks for one crate nailed, and five lines of xorshift is not a case
+for anything. The nomination goes to the substitution with the most work behind
+it, not to the largest number in the table.
+
 [`src/json.rs`](https://github.com/keirsalterego/stranger/blob/main/src/json.rs) is
 a complete RFC 8259 reader: escapes, `\uXXXX` with surrogate-pair recombination,
 the number grammar checked by hand before `f64::from_str` sees the slice, a nesting
