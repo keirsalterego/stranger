@@ -13,7 +13,7 @@ $ ./target/release/stranger scan --format json /tmp/mixed | jq -c '{source, pack
 
 ```console
 $ ./target/release/stranger scan --format json fixtures/poisoned.requirements.txt
-{"source":"fixtures/poisoned.requirements.txt","ecosystem":"pypi","packages":6,"direct":6,"transitive":0,"risk":64,"elapsed_ms":27,"findings":[{"rule":"slopsquat","severity":"critical","package":"python-dateutils","version":"2.9.0","detail":"not in corpus · d=1 from \"python-dateutil\" · root-only, no parent"},{"rule":"slopsquat","severity":"critical","package":"requests-http","version":"1.0.2","detail":"not in corpus · d=2 from \"requests-html\" · root-only, no parent"},{"rule":"pinning","severity":"low","package":"flask","version":"","detail":"~=3.0 · capped at the major, still floats below the cap"},{"rule":"pinning","severity":"high","package":"numpy","version":"","detail":"no version specifier · resolves to whatever is newest at install time"},{"rule":"pinning","severity":"medium","package":"urllib3","version":"","detail":">=1.26 · a range, so the file does not say what installs"}]}
+{"source":"fixtures/poisoned.requirements.txt","ecosystem":"pypi","packages":6,"direct":6,"transitive":0,"workspace":0,"risk":64,"elapsed_ms":35,"findings":[{"rule":"slopsquat","severity":"critical","package":"python-dateutils","version":"2.9.0","detail":"not in corpus · d=1 from \"python-dateutil\" · root-only, no parent"},{"rule":"slopsquat","severity":"critical","package":"requests-http","version":"1.0.2","detail":"not in corpus · d=2 from \"requests-html\" · root-only, no parent"},{"rule":"pinning","severity":"low","package":"flask","version":"","detail":"~=3.0 · capped at the major, still floats below the cap"},{"rule":"pinning","severity":"high","package":"numpy","version":"","detail":"no version specifier · resolves to whatever is newest at install time"},{"rule":"pinning","severity":"medium","package":"urllib3","version":"","detail":">=1.26 · a range, so the file does not say what installs"}]}
 ```
 
 ## The object
@@ -21,17 +21,18 @@ $ ./target/release/stranger scan --format json fixtures/poisoned.requirements.tx
 | field | type | what it is |
 |---|---|---|
 | `source` | string | the path as you gave it, not canonicalised |
-| `ecosystem` | string | `npm`, `pypi`, `crates.io` or `go`; only the first two can appear today |
+| `ecosystem` | string | `npm`, `pypi`, `crates.io` or `go`; `go` has no reader, so the first three appear |
 | `packages` | number | third-party packages; workspace members are excluded |
 | `direct` | number | named by a manifest in this repository |
 | `transitive` | number | `packages - direct` |
+| `workspace` | number | first-party entries set aside; 0 on a non-monorepo |
 | `risk` | number | 0–100, weights summed and capped |
 | `elapsed_ms` | number | wall time for this scan, as the tool measured it |
 | `findings` | array | worst rule first, then alphabetical by package within a rule |
 
-There is no workspace count in the JSON, though the human report prints one. It
-is recoverable from nothing else in the object, so a consumer that needs it needs
-the field added.
+`workspace` is the one header number that cannot be rebuilt from the others.
+`packages`, `direct` and `transitive` are all third-party counts, so without it a
+monorepo and a flat project of the same dependency count read identically.
 
 ## A finding
 

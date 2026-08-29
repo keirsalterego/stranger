@@ -195,12 +195,18 @@ pub fn json(
     string(w, &tree.source.display().to_string())?;
     write!(w, ",\"ecosystem\":")?;
     string(w, tree.ecosystem.as_str())?;
+    // `workspace` is here because it is the one header number a consumer could
+    // not rebuild from the others: packages/direct/transitive are all
+    // third-party counts, so nothing in them says how many first-party entries
+    // the reader set aside. A monorepo and a flat project with the same
+    // dependency count are indistinguishable in JSON without it.
     write!(
         w,
-        ",\"packages\":{},\"direct\":{},\"transitive\":{},\"risk\":{},\"elapsed_ms\":{},\"findings\":[",
+        ",\"packages\":{},\"direct\":{},\"transitive\":{},\"workspace\":{},\"risk\":{},\"elapsed_ms\":{},\"findings\":[",
         tree.third_party(),
         tree.direct(),
         tree.transitive(),
+        tree.workspace_members(),
         risk(findings),
         elapsed.as_millis(),
     )?;
