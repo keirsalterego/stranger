@@ -164,7 +164,7 @@ pub fn read(path: &std::path::Path) -> crate::error::Result<Tree> {
     // Suffix matching only stays unambiguous while no known name is a suffix
     // of another. None of these six is, so the arm order is documentation
     // rather than precedence — but check it before adding a seventh.
-    if name.ends_with("package-lock.json") {
+    let tree = if name.ends_with("package-lock.json") {
         npm::read(path, &src)
     } else if name.ends_with("pnpm-lock.yaml") {
         pnpm::read(path, &src)
@@ -181,7 +181,11 @@ pub fn read(path: &std::path::Path) -> crate::error::Result<Tree> {
             "{name}: not a lockfile stranger knows. It reads: {}",
             KNOWN.join(", ")
         )))
-    }
+    };
+    // The syntax errors arrive from a parser that was handed a string and
+    // never learned where it came from, so this is the first frame that can
+    // say which file `1:1` is in. One call here covers all six readers.
+    tree.map_err(|e| e.in_file(path))
 }
 
 /// Every known lockfile under `dir`.

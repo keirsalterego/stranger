@@ -30,6 +30,27 @@ fn stdout(o: &Output) -> String {
     String::from_utf8_lossy(&o.stdout).into_owned()
 }
 
+fn stderr(o: &Output) -> String {
+    String::from_utf8_lossy(&o.stderr).into_owned()
+}
+
+/// A scratch directory under `CARGO_TARGET_TMPDIR`, emptied first — these
+/// tests assert on how many lockfiles were found, so a leftover file from a
+/// previous run is a false pass waiting to happen.
+fn scratch(name: &str) -> PathBuf {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(name);
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("scratch dir");
+    dir
+}
+
+fn write(path: &Path, body: &str) {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).expect("parent dir");
+    }
+    std::fs::write(path, body).expect("write");
+}
+
 const POISONED: &str = "fixtures/poisoned.package-lock.json";
 const CLEAN: &str = "fixtures/npm-xs.package-lock.json";
 
@@ -97,6 +118,19 @@ fn a_directory_with_no_lockfile_says_so_and_exits_zero() {
     assert!(out.contains("no lockfile"), "{out}");
     assert!(out.contains("looked for"), "{out}");
     assert_eq!(o.status.code(), Some(0));
+}
+
+/// A syntax error is only "a line you can open" if it says which file. On a
+/// directory of sixteen lockfiles `expected a value at 1:1` names none of
+/// them, and the parsers cannot say — they are handed a string.
+#[test]
+fn a_syntax_error_names_its_file() {
+    let dir = scratch("cli_named");
+    let path = dir.join("package-lock.json");
+    write(&path, "garbage{");
+    let err = stderr(&run(&["scan", path.to_str().unwrap()]));
+    assert!(err.contains("package-lock.json"), "{err}");
+    assert!(err.contains("at 1:1"), "{err}");
 }
 
 #[test]
