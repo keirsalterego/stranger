@@ -80,8 +80,8 @@ stranger: --format takes `human` or `json`, not `yaml`
 $ echo $?
 2
 
-$ ./target/release/stranger scan fixtures/cargo-s.Cargo.lock
-stranger: cargo-s.Cargo.lock: not a lockfile stranger knows. It reads: package-lock.json, requirements.txt
+$ ./target/release/stranger scan /tmp/renametest/requirements-dev.txt
+stranger: requirements-dev.txt: not a lockfile stranger knows. It reads: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock
 $ echo $?
 2
 ```

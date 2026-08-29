@@ -57,14 +57,19 @@ That is not hypothetical. `Ecosystem::Go` runs in exactly that state on purpose:
 is no Go corpus and the detection rule can never fire on one. Named in
 [Limits](../limits.md) rather than shipped as a rule that silently does nothing.
 
-## A format it does not read
+## A filename it does not recognise
 
 ```console
-$ ./target/release/stranger scan fixtures/cargo-s.Cargo.lock
-stranger: cargo-s.Cargo.lock: not a lockfile stranger knows. It reads: package-lock.json, requirements.txt
+$ ./target/release/stranger scan /tmp/renametest/requirements-dev.txt
+stranger: requirements-dev.txt: not a lockfile stranger knows. It reads: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock
 $ echo $?
 2
 ```
+
+The match is on the end of the filename and nothing reads the contents to
+second-guess it, so a file renamed at the front still works and one renamed at the
+back does not. It is a name it does not know rather than a format it cannot parse —
+that file is a perfectly ordinary `requirements.txt` under another name.
 
 Pointing at a specific file you believe is a lockfile and being wrong is a usage
 error — exit 2. Scanning a directory that happens to hold nothing readable is not

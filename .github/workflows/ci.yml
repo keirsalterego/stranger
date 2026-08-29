@@ -69,6 +69,16 @@ jobs:
       - name: Build offline
         run: CARGO_NET_OFFLINE=true cargo build --release --locked --offline
 
+      # Every `$ stranger scan fixtures/...` in the book and the README is
+      # followed by what the tool printed. Nothing kept those in step, and two
+      # separate rots got through in one afternoon: the banded risk score
+      # renumbered every published figure on one branch while four new format
+      # pages were written against the old score on another, and the detection
+      # rule's own examples stopped firing when packages gained an origin.
+      # Needs the release binary, which is why it is here and not in docs.yml.
+      - name: The docs still reproduce
+        run: ./docs/check-output.py
+
       # Not `cargo test --include-ignored` — the ablation scans six fixtures
       # against a 140,000-name corpus ten times and takes about two minutes.
       # It runs here because the README quotes its numbers.

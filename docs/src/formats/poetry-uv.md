@@ -21,7 +21,7 @@ $ ./target/release/stranger scan fixtures/uv-m.uv.lock
 
   ⚠  VERSION DRIFT          1     same package at 2+ versions in one tree
 
-  risk 3/100    11ms    third-party deps used to compute this: 0
+  risk 27/100    11ms    third-party deps used to compute this: 0
 ```
 
 A clean report on a 233-package tree is a real result and is published as one.
