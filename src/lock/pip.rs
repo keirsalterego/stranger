@@ -288,6 +288,17 @@ enum Kind {
     Exact,
     Capped,
     Open,
+    /// `!=1.5` cuts one version out of the range and bounds neither end of
+    /// what is left, so a specifier made only of these constrains nothing —
+    /// `numpy!=1.5` installs the same thing `numpy` does on every day but one.
+    /// Grouped with `<` and `>` it came out Medium, one notch *safer* than the
+    /// bare name it is a rounding error away from, and could pass a
+    /// `--fail-on high` the bare name fails.
+    ///
+    /// Looser than `Open` and last in the ordering, so `>=1.0,!=1.5` is still
+    /// a range: one end is written down there, which is the whole distinction
+    /// `Open` carries.
+    Excluded,
 }
 
 /// Longest operator first: `==` must not shadow `===`, `<` must not shadow
@@ -296,7 +307,7 @@ const OPS: &[(&str, Kind)] = &[
     ("===", Kind::Exact),
     ("==", Kind::Exact),
     ("~=", Kind::Capped),
-    ("!=", Kind::Open),
+    ("!=", Kind::Excluded),
     ("<=", Kind::Open),
     (">=", Kind::Open),
     ("<", Kind::Open),
@@ -317,7 +328,7 @@ fn classify(spec: &str) -> Option<(Pin, String)> {
         return Some((Pin::Unconstrained, String::new()));
     }
 
-    let mut tightest = Kind::Open;
+    let mut tightest = Kind::Excluded;
     let mut exact = String::new();
 
     for clause in spec.split(',') {
@@ -343,6 +354,7 @@ fn classify(spec: &str) -> Option<(Pin, String)> {
         Kind::Exact => (Pin::Exact, exact),
         Kind::Capped => (Pin::Compatible(spec.to_string()), String::new()),
         Kind::Open => (Pin::Range(spec.to_string()), String::new()),
+        Kind::Excluded => (Pin::Unconstrained, String::new()),
     })
 }
 

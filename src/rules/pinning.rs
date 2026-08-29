@@ -33,17 +33,22 @@ pub fn scan(tree: &Tree) -> Vec<Finding> {
             // No bound in either direction. `pip install numpy` today and the
             // same command in March install different programs, and there is
             // nothing in the repository that records which one you tested.
+            //
+            // `numpy!=1.5` lands here too, which is why the line does not say
+            // "no version specifier" any more: it has one, and it still admits
+            // every release but a single named version. See `Kind::Excluded`
+            // in `lock::pip`.
             Pin::Unconstrained => (
                 Severity::High,
-                "no version specifier · resolves to whatever is newest at install time".to_string(),
+                "no bound in either direction · resolves to whatever is newest at install time"
+                    .to_string(),
             ),
 
             // `>=1.0` is the common case and it is open above: every release
-            // the maintainer has not published yet already matches. `<2` and
-            // `!=1.5` are open below instead, which is a smaller window but
-            // the same class of answer — the file does not say what installs.
-            // One notch under Unconstrained because at least one end is
-            // written down.
+            // the maintainer has not published yet already matches. `<2` is
+            // open below instead, which is a smaller window but the same class
+            // of answer — the file does not say what installs. One notch under
+            // Unconstrained because at least one end is written down.
             Pin::Range(spec) => (
                 Severity::Medium,
                 format!("{spec} · a range, so the file does not say what installs"),
