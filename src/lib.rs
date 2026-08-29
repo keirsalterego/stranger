@@ -17,5 +17,6 @@ pub mod rules;
 pub mod semver;
 pub mod term;
 pub mod toml;
+pub mod tree;
 pub mod walk;
 pub mod yaml;

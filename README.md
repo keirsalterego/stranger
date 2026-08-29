@@ -88,6 +88,17 @@ people and auditing those is worse than auditing nothing.
 Results come out in path order rather than whichever thread finished first. Two
 runs over one tree produce the same bytes, so a diff between scans is a diff.
 
+There is a second subcommand, and it answers the question the first one raises:
+
+```
+$ stranger tree <pkg> [path]
+```
+
+`scan` says a package has no parent. `tree` shows you. It is the same walk over
+the same lockfiles, printing who depends on one name, how many of them there
+are, and what that name depends on. [Looking at clause 3](#looking-at-clause-3)
+is what it looks like on a planted name.
+
 ## What it looks for
 
 **Hallucinated names.** A model asked to write a `package.json` will occasionally
@@ -130,6 +141,56 @@ author, as the root. Both monorepo fixtures declare `workspaces` and keep almost
 nothing in the root manifest, so a hallucinated name added to
 `apps/desktop/package.json` would otherwise arrive with an in-edge and never be
 looked at. Those edges are recorded as roots, not as evidence.
+
+## Looking at clause 3
+
+The first two clauses are checkable by hand. A name is in `corpus/npm.txt` or it
+is not, and an edit distance is arithmetic. Clause 3 is a claim about a graph,
+and until you can see the graph the only thing to do with it is believe the
+report. `stranger tree` prints the graph around one name:
+
+```
+$ stranger tree lodahs fixtures/
+
+  fixtures/poisoned.package-lock.json   npm · 757 packages
+
+  lodahs@4.17.21   node_modules/lodahs
+
+     depended on by   in-degree 0 · root-only, no parent
+                      nothing in this lockfile depends on it. The only
+                      reference to the name in the file is the manifest under
+                      audit. That is clause 3 of the co-occurrence rule: a
+                      hallucinated package is a root dependency, because
+                      nothing real has ever heard of it.
+
+     depends on       nothing
+```
+
+The same command on a package that exists gives the other answer, out of the
+same reader and the same 754-package tree:
+
+```
+$ stranger tree accepts fixtures/npm-l.package-lock.json
+
+  fixtures/npm-l.package-lock.json   npm · 754 packages
+
+  accepts@2.0.0   node_modules/accepts
+
+     depended on by   in-degree 1
+                      express@5.2.1
+
+     depends on       2 direct, to depth 3
+     ├─ mime-types@3.0.2
+     │  └─ mime-db@1.54.0
+     └─ negotiator@1.0.0
+```
+
+`--depth` moves the cut and `--depth 0` removes it. A lockfile is a graph rather
+than a tree, so a name whose dependencies were printed earlier comes back marked
+`(*)` and a cycle prints as `· cycle` — neither is followed twice, and neither is
+dropped silently. A name at several versions is several blocks, because picking
+one would hide the drift finding a scan of the same file raises. A name that is
+not there exits 0 and lists what is close.
 
 ## Does clause 3 actually do anything
 
@@ -305,7 +366,9 @@ shipping a rule that silently never triggers.
 dependency edges at all, so every package trivially has in-degree 0 and clause 3
 is vacuous there. The rule falls back to two clauses on those files and is
 correspondingly weaker — on `requirements.txt`, at least, which is the only one
-of the two where the rule runs at all.
+of the two where the rule runs at all. `stranger tree` will not print an
+in-degree on either of them: a zero nobody measured is the same mistake in a
+different place.
 
 Here is that costing a false positive, on a real fixture:
 
@@ -387,6 +450,7 @@ The findings are the output; the score is a handle.
 | `src/corpus.rs` | 160,066 known-real names, compiled in |
 | `src/lock/` | one reader per lockfile format |
 | `src/rules/` | one file per finding type |
+| `src/tree.rs` | `stranger tree` — the graph around one name |
 | `src/cli.rs` | argument parsing — replaces `clap` |
 | `src/error.rs` | one error enum — replaces `anyhow` and `thiserror` |
 

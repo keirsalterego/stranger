@@ -170,6 +170,7 @@ pub fn read(path: &Path, src: &str) -> Result<Tree> {
         packages,
         edges,
         roots,
+        records_edges: true,
     })
 }
 

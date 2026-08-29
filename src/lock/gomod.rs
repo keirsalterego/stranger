@@ -254,8 +254,11 @@ pub fn read(path: &Path, src: &str) -> Result<Tree> {
         ecosystem: Ecosystem::Go,
         source: path.to_path_buf(),
         packages,
-        // Not this reader giving up. The edges are not in the file to read.
+        // Not this reader giving up. The edges are not in the file to read,
+        // which is what `records_edges` says out loud so clause 3 does not
+        // read an in-degree of 0 as a measurement.
         edges: Vec::new(),
+        records_edges: false,
         roots,
     })
 }

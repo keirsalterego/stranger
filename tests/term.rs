@@ -100,6 +100,7 @@ fn tree() -> Tree {
         packages: vec![pkg("chalck"), pkg("ünïcödé-package-name")],
         edges: Vec::new(),
         roots: vec![0, 1],
+        records_edges: true,
     }
 }
 

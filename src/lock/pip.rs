@@ -89,6 +89,10 @@ pub fn read(path: &Path, src: &str) -> Result<Tree> {
         packages,
         edges: Vec::new(),
         roots,
+        // The one false in the codebase. See the module header: the edges are
+        // not in the file to read, so `stranger tree` says the file has no
+        // graph rather than printing an in-degree nobody measured.
+        records_edges: false,
     })
 }
 

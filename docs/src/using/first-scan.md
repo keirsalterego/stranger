@@ -109,7 +109,9 @@ terms the rule actually used, so you can disagree with it:
   function is the one it is.
 - **root-only, no parent** — nothing else in these 757 packages depends on it.
 
-All three have to hold. [The co-occurrence rule](../detection/rule.md) is why.
+All three have to hold. [The co-occurrence rule](../detection/rule.md) is why, and
+[`stranger tree lodahs`](tree.md) prints the in-edges the third one is about, so
+you do not have to take that line's word for it.
 
 Every rule writes its own `detail` in its own terms. The other four are
 [install scripts](../rules/install-scripts.md),

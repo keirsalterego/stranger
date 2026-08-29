@@ -29,7 +29,8 @@ corpus is empty on purpose and the detection rule can never fire on a Go module.
 dependency edges, so clause 3 is vacuous and the detection rule runs on two
 clauses — on `requirements.txt`, at any rate, being the one of the two where it
 runs at all. See [pip](formats/pip.md) and, for it costing a real false positive,
-[False positives](detection/false-positives.md).
+[False positives](detection/false-positives.md). `stranger tree` says the file
+has no graph rather than reporting the in-degree 0 it would find there.
 
 ## Seven formats, five rules, and most pairs are not real
 

@@ -5,6 +5,7 @@
 - [Using it]()
   - [Installing](using/installing.md)
   - [Your first scan](using/first-scan.md)
+  - [Looking at one package](using/tree.md)
   - [JSON output](using/json.md)
   - [Exit codes](using/exit-codes.md)
 - [Detection]()

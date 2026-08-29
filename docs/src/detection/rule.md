@@ -209,6 +209,8 @@ has in-degree 0, clause 3 eliminates nothing, and the rule degenerates to the tw
 clauses the ablation was written precisely because nobody trusted on their own.
 [pip](../formats/pip.md) covers the consequence and
 [False positives](false-positives.md) shows it costing a real one.
+`stranger tree` refuses to print an in-degree on one of those files at all —
+[Looking at one package](../using/tree.md#flat-formats-have-no-graph).
 
 ## Is clause 3 worth anything
 

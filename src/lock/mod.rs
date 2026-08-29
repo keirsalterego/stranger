@@ -105,6 +105,18 @@ pub struct Tree {
     /// manifest an LLM wrote lists it" is not evidence that one does.
     pub edges: Vec<(usize, usize)>,
     pub roots: Vec<usize>,
+    /// Whether this file's *format* records dependency edges at all.
+    ///
+    /// `requirements.txt` does not — it is a list, not a graph — so an empty
+    /// `edges` there means "the file does not say", while an empty `edges` on
+    /// a `poetry.lock` means "nothing here depends on anything". `stranger
+    /// tree` has to tell those apart: reporting in-degree 0 on a flat file
+    /// would dress an absence of evidence up as evidence, which is the exact
+    /// mistake clause 3 exists to avoid.
+    ///
+    /// A field rather than a match on the filename somewhere, so a seventh
+    /// reader does not compile until it has answered the question.
+    pub records_edges: bool,
 }
 
 impl Tree {

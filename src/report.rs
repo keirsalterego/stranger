@@ -251,7 +251,7 @@ pub fn json(
 /// Writing JSON is not the same job as reading it, so this is not the parser
 /// run backwards — it is eight lines that escape what RFC 8259 section 7
 /// requires and nothing else.
-fn string(w: &mut impl Write, s: &str) -> io::Result<()> {
+pub(crate) fn string(w: &mut impl Write, s: &str) -> io::Result<()> {
     write!(w, "\"")?;
     for c in s.chars() {
         match c {

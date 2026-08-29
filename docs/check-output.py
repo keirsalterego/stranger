@@ -3,10 +3,11 @@
 
     make && docs/check-output.py
 
-Every `$ stranger scan fixtures/...` line in the book and the README is followed
-by what the tool printed when somebody ran it. Nothing kept those in step with
-the tool, so they rotted silently: a page claiming output the binary no longer
-produces looks exactly like a page that is fine.
+Every `$ stranger scan fixtures/...` or `$ stranger tree ... fixtures/...` line in
+the book and the README is followed by what the tool printed when somebody ran
+it. Nothing kept those in step with the tool, so they rotted silently: a page
+claiming output the binary no longer produces looks exactly like a page that is
+fine.
 
 Two of those got through in one afternoon. The banded risk score renumbered every
 published figure on one branch while the four new format pages were being written
@@ -41,10 +42,11 @@ ROOT = Path(__file__).resolve().parent.parent
 BIN = ROOT / "target" / "release" / "stranger"
 PAGES = sorted((ROOT / "docs" / "src").rglob("*.md")) + [ROOT / "README.md"]
 
-# `stranger scan …` optionally prefixed with the path the docs use. A pipe means
-# the block quotes what `jq` made of the output rather than the output, which
-# does not compare usefully; `--format json` on its own does.
-INVOCATION = re.compile(r"^\$ (?:\./target/release/)?stranger (scan [^|$]*)$")
+# `stranger scan …` or `stranger tree …`, optionally prefixed with the path the
+# docs use. A pipe means the block quotes what `jq` or `grep` made of the output
+# rather than the output, which does not compare usefully; `--format json` on its
+# own does.
+INVOCATION = re.compile(r"^\$ (?:\./target/release/)?stranger ((?:scan|tree) [^|$]*)$")
 # `12ms` in the human report, `"elapsed_ms":12` in the JSON: the same
 # measurement, normalised the same way.
 ELAPSED = re.compile(r'\b\d+ms\b|(?<="elapsed_ms":)\d+')
