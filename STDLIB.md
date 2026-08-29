@@ -202,16 +202,26 @@ over one tree have to produce the same bytes or a diff between scans is noise.
 and compares.
 
 ### `rand` — 1,605,926,795 all-time · 401,565,502 in 90 days
-[`tests/distance.rs`](tests/distance.rs) and [`tests/ablation.rs`](tests/ablation.rs).
-A five-line xorshift64\*, seeded from `SystemTime` nanoseconds and printed so a
-failing case replays.
+[`tests/distance.rs`](tests/distance.rs), [`tests/ablation.rs`](tests/ablation.rs)
+and [`tests/fuzz.rs`](tests/fuzz.rs). Five lines of xorshift, written out three
+times because the three call sites want different things from the seed. The
+property tests seed from `SystemTime` nanoseconds and print it so a failing case
+replays; the ablation and the fuzzer seed from a constant so their published
+results reproduce. All three are the same xorshift64 — the same shifts, the same
+`| 1` guard against a zero seed — because two variants in one repository would be
+two things to reason about for no gain.
 
-**What I gave up:** a great deal, and it does not matter here. xorshift64\* is not
-cryptographically secure, has a much shorter period than ChaCha, and fails some
-statistical tests `rand`'s generators pass. It is used to generate random short
-strings for property tests and to thin a corpus deterministically. If anything in
-`stranger` ever needed randomness for a security decision, this would be the wrong
-tool — but nothing does, because the tool has no secrets and makes no nonces.
+**What I gave up:** a great deal, and it does not matter here. xorshift64 is not
+cryptographically secure, has a far shorter period than ChaCha, and fails some
+statistical tests `rand`'s generators pass. Its three jobs are generating random
+short strings for property tests, thinning a corpus deterministically, and picking
+byte offsets to corrupt. None of them cares. If anything in `stranger` ever needed
+randomness for a security decision this would be the wrong tool — but nothing does,
+because the tool has no secrets and makes no nonces.
+
+Seed 0 is the one value that breaks it, since xorshift is all zeroes forever from
+there — a fuzz run from seed 0 would corrupt byte 0 five thousand times and pass.
+All three call sites `| 1` on the way in.
 
 Worth stating plainly since the hackathon rules forbid rolling your own crypto:
 this is not crypto and is not used as crypto. `stranger` computes no hashes,
