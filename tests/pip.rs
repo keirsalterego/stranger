@@ -217,6 +217,33 @@ fn a_direct_reference_is_not_a_slopsquat() {
     assert_eq!(found[0].package, "nunpy");
 }
 
+/// A URL, a VCS reference and a path are all things pip installs and none of
+/// them is a name to audit, so they are skipped — one line, not the file.
+/// Refusing the file took `requests` down with it, which is the finding
+/// somebody actually wanted.
+#[test]
+fn a_location_requirement_is_skipped_not_fatal() {
+    let t = parse(concat!(
+        "requests==2.31.0\n",
+        "git+https://github.com/psf/requests.git@main#egg=requests\n",
+        "https://example.invalid/foo-1.0.tar.gz\n",
+        "./local/pkg-1.0.tar.gz\n",
+        "/opt/wheels/pkg-1.0-py3-none-any.whl\n",
+    ));
+    assert_eq!(t.packages.len(), 1, "{:?}", t.packages);
+    assert_eq!(t.packages[0].name, "requests");
+    assert_eq!(t.packages[0].version, "2.31.0");
+}
+
+/// The skip is narrow on purpose. A name that is merely wrong is still an
+/// error with a line number on it — `.leading-dot` and `./local/pkg` both
+/// fail the same name check, and only one of them is a path.
+#[test]
+fn skipping_locations_does_not_swallow_malformed_names() {
+    let err = pip::read(Path::new("r.txt"), "six==1.16.0\n.leading-dot==1.0\n").unwrap_err();
+    assert!(err.to_string().contains("package name"), "{err}");
+}
+
 #[test]
 fn dangling_backslash_at_eof() {
     let t = parse("six==1.16.0 \\\n");
