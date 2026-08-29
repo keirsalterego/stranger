@@ -1,5 +1,14 @@
-//! Semantic versions: parsing, precedence, and the two range operators that
-//! actually appear in lockfiles.
+//! Semantic versions: parsing and precedence.
+//!
+//! There was a range matcher here too — caret, tilde, the comparison
+//! operators — written on the assumption something would need to ask whether
+//! a version satisfied a constraint. Nothing ever did. Every reader resolves
+//! edges by name and path, because that is what a *lock*file records: the
+//! answer, not the question. It is deleted rather than kept as decoration,
+//! and it had two real bugs in it when I went to check, which is the usual
+//! fate of code nothing calls.
+//!
+//! What is left is used: `drift` sorts the versions it prints with `Ord`.
 //!
 //! The part worth getting right is precedence, and specifically prerelease
 //! precedence, which semver.org spells out in section 11 and which almost
@@ -62,10 +71,6 @@ impl Version {
             pre,
         })
     }
-
-    pub fn is_prerelease(&self) -> bool {
-        !self.pre.is_empty()
-    }
 }
 
 impl Ord for Version {
@@ -119,99 +124,4 @@ fn compare_pre(a: &[String], b: &[String]) -> Ordering {
     }
 
     a.len().cmp(&b.len())
-}
-
-/// The constraint operators that turn up in a lockfile or a manifest.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Req {
-    Exact(Version),
-    /// `^1.2.3` — the leftmost non-zero component may not change. npm and
-    /// Cargo agree on this, including the awkward `^0.x` and `^0.0.x` cases.
-    Caret(Version),
-    /// `~1.2.3` — patch may move. `~1.2` allows minor.
-    Tilde(Version),
-    GreaterEq(Version),
-    Greater(Version),
-    LessEq(Version),
-    Less(Version),
-    /// `*`, `latest`, an empty string: anything at all.
-    Any,
-}
-
-impl Req {
-    pub fn parse(s: &str) -> Option<Req> {
-        let s = s.trim();
-        if s.is_empty() || s == "*" || s == "latest" || s == "x" {
-            return Some(Req::Any);
-        }
-        // Longest operators first, or `>=` parses as `>`.
-        for (prefix, make) in [
-            (">=", Req::GreaterEq as fn(Version) -> Req),
-            ("<=", Req::LessEq),
-            ("==", Req::Exact),
-            ("^", Req::Caret),
-            ("~", Req::Tilde),
-            (">", Req::Greater),
-            ("<", Req::Less),
-            ("=", Req::Exact),
-        ] {
-            if let Some(rest) = s.strip_prefix(prefix) {
-                return Version::parse(rest).map(make);
-            }
-        }
-        Version::parse(s).map(Req::Exact)
-    }
-
-    pub fn matches(&self, v: &Version) -> bool {
-        match self {
-            Req::Any => true,
-            Req::Exact(r) => v == r,
-            Req::GreaterEq(r) => v >= r,
-            Req::Greater(r) => v > r,
-            Req::LessEq(r) => v <= r,
-            Req::Less(r) => v < r,
-            Req::Caret(r) => v >= r && caret_upper(r).is_none_or(|hi| *v < hi),
-            Req::Tilde(r) => v >= r && *v < tilde_upper(r),
-        }
-    }
-}
-
-/// `^1.2.3` -> `<2.0.0`, `^0.2.3` -> `<0.3.0`, `^0.0.3` -> `<0.0.4`.
-///
-/// The zero cases are not a special-case hack, they fall straight out of "the
-/// leftmost non-zero component may not change" — under 1.0.0 the minor is
-/// effectively the major.
-fn caret_upper(r: &Version) -> Option<Version> {
-    let bump = if r.major > 0 {
-        Version {
-            major: r.major + 1,
-            minor: 0,
-            patch: 0,
-            pre: Vec::new(),
-        }
-    } else if r.minor > 0 {
-        Version {
-            major: 0,
-            minor: r.minor + 1,
-            patch: 0,
-            pre: Vec::new(),
-        }
-    } else {
-        Version {
-            major: 0,
-            minor: 0,
-            patch: r.patch + 1,
-            pre: Vec::new(),
-        }
-    };
-    Some(bump)
-}
-
-fn tilde_upper(r: &Version) -> Version {
-    Version {
-        major: r.major,
-        minor: r.minor + 1,
-        patch: 0,
-        pre: Vec::new(),
-    }
 }

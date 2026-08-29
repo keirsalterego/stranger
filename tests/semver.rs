@@ -1,4 +1,4 @@
-use stranger::semver::{Req, Version};
+use stranger::semver::Version;
 
 fn v(s: &str) -> Version {
     Version::parse(s).unwrap_or_else(|| panic!("{s:?} should parse"))
@@ -95,60 +95,67 @@ fn core_ordering() {
 }
 
 #[test]
-fn caret_holds_the_leftmost_nonzero() {
-    let r = Req::parse("^1.2.3").unwrap();
-    assert!(r.matches(&v("1.2.3")));
-    assert!(r.matches(&v("1.9.9")));
-    assert!(!r.matches(&v("2.0.0")));
-    assert!(!r.matches(&v("1.2.2")));
-
-    let r = Req::parse("^0.2.3").unwrap();
-    assert!(r.matches(&v("0.2.9")));
-    assert!(
-        !r.matches(&v("0.3.0")),
-        "under 1.0.0 the minor acts as the major"
-    );
-
-    let r = Req::parse("^0.0.3").unwrap();
-    assert!(r.matches(&v("0.0.3")));
-    assert!(!r.matches(&v("0.0.4")));
-}
-
-#[test]
-fn tilde_moves_the_patch() {
-    let r = Req::parse("~1.2.3").unwrap();
-    assert!(r.matches(&v("1.2.9")));
-    assert!(!r.matches(&v("1.3.0")));
-}
-
-#[test]
-fn comparison_operators() {
-    assert!(Req::parse(">=1.0").unwrap().matches(&v("1.0.0")));
-    assert!(Req::parse(">=1.0").unwrap().matches(&v("9.9.9")));
-    assert!(!Req::parse(">1.0.0").unwrap().matches(&v("1.0.0")));
-    assert!(Req::parse("<2").unwrap().matches(&v("1.9.9")));
-    assert!(Req::parse("==2.31.0").unwrap().matches(&v("2.31.0")));
-}
-
-/// `>=` must not parse as `>`.
-#[test]
-fn longest_operator_wins() {
-    assert_eq!(Req::parse(">=1.0.0"), Some(Req::GreaterEq(v("1.0.0"))));
-    assert_eq!(Req::parse("<=1.0.0"), Some(Req::LessEq(v("1.0.0"))));
-    assert_eq!(Req::parse("==1.0.0"), Some(Req::Exact(v("1.0.0"))));
-}
-
-#[test]
-fn anything_matches_any() {
-    for s in ["*", "", "latest", "x"] {
-        assert_eq!(Req::parse(s), Some(Req::Any), "{s:?}");
-        assert!(Req::parse(s).unwrap().matches(&v("0.0.1")));
-    }
-}
-
-#[test]
 fn displays_back() {
     for s in ["1.2.3", "1.0.0-alpha.1", "0.0.1"] {
         assert_eq!(v(s).to_string(), s);
     }
+}
+
+/// The reason `Version` is still here at all.
+///
+/// `drift` prints one line per duplicated name listing every version of it,
+/// and it used to sort those by byte order — which puts `10.1.0` before
+/// `7.0.1`, because `1` precedes `7` one character at a time. 29 of the 448
+/// drift findings across the fixtures came out misordered, three of them on
+/// the poisoned fixture the README demos.
+#[test]
+fn drift_prints_versions_in_precedence_order() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("fixtures")
+        .join("npm-xl.package-lock.json");
+    let text = std::fs::read_to_string(&path).expect("npm-xl fixture");
+    let tree = stranger::lock::npm::read(&path, &text).expect("npm-xl parses");
+
+    let findings = stranger::rules::drift::scan(&tree);
+    assert!(
+        findings.len() > 50,
+        "expected the real fixture, got {}",
+        findings.len()
+    );
+
+    let mut checked = 0;
+    for f in &findings {
+        let listed: Vec<Version> = f
+            .detail
+            .split(": ")
+            .nth(1)
+            .expect("detail names its versions")
+            .split(", ")
+            .map(|s| Version::parse(s).unwrap_or_else(|| panic!("{s:?} in {}", f.package)))
+            .collect();
+        let mut sorted = listed.clone();
+        sorted.sort();
+        assert_eq!(listed, sorted, "{} lists versions out of order", f.package);
+        checked += listed.len();
+    }
+    assert_eq!(
+        checked, 180,
+        "npm-xl holds 76 drifted names across 180 versions"
+    );
+}
+
+/// The case that byte order gets wrong, in isolation, so a failure above is
+/// easy to read.
+#[test]
+fn ten_sorts_after_nine() {
+    let mut vs = ["10.1.0", "7.0.1", "9.1.0", "11.3.5", "8.1.0", "11.3.1"];
+    vs.sort_by_key(|s| Version::parse(s).expect("parses"));
+    assert_eq!(
+        vs,
+        ["7.0.1", "8.1.0", "9.1.0", "10.1.0", "11.3.1", "11.3.5"]
+    );
+
+    let mut bytes = vs;
+    bytes.sort_unstable();
+    assert_ne!(bytes, vs, "if these agree the test proves nothing");
 }
