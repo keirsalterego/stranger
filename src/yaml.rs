@@ -744,6 +744,14 @@ impl<'a> Parser<'a> {
                         let at = &self.rest[i..];
                         return Err(self.err_at(at, "expected ':' after a flow mapping key"));
                     }
+                    // ` #` opens a comment here too — this is the fourth of
+                    // four scalar scanners and was the one that read
+                    // `{b #x: 1}` as the key "b #x". The key ended at the
+                    // space; the `:` after it is inside a comment, so the
+                    // check below is what reports it.
+                    if bytes[i] == b'#' && i > 0 && matches!(bytes[i - 1], b' ' | b'\t') {
+                        break;
+                    }
                     i += 1;
                 }
                 if i == bytes.len() {

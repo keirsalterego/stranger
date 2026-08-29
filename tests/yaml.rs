@@ -202,6 +202,23 @@ fn comments() {
     // A `#` with no space before it is part of the scalar, which is what YAML
     // says and what keeps `sha512-a#b` intact.
     assert_eq!(parse("a: x#y").get("a"), Some(&s("x#y")));
+    assert!(
+        parse("a: {b: x#y}")
+            .get("a")
+            .and_then(|v| v.get("b"))
+            .is_some()
+    );
+}
+
+/// A flow key used to be the one scalar scanner that read ` #` as key text,
+/// so `{b #x: 1}` came back as the key "b #x" instead of a refusal.
+#[test]
+fn a_comment_ends_a_flow_key() {
+    assert_eq!(why("a: {b #x: 1}"), "expected ':' after a flow mapping key");
+    assert_eq!(at("a: {b #x: 1}"), (1, 7));
+    // The value side of the same line already refused it.
+    assert_eq!(why("a: {b: 1 #x}"), "expected ',' or '}'");
+    assert_eq!(at("a: {b: 1 #x}"), (1, 10));
 }
 
 /// A lockfile checked out on Windows. `\r\n` is a line ending; a lone `\r` is
