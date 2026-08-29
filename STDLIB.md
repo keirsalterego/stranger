@@ -56,10 +56,18 @@ limitation and not a theoretical one for other inputs.
 and three exit codes.
 
 **What I gave up:** shell completions, `--help` generated from the same source as
-the parser (so mine can drift, and only a test stops it), colored help, and
-`clap`'s genuinely good error messages for typo'd flags. What I got back is error
-text that says what was expected *here* — `--format takes 'human' or 'json', not
-'jsonn'` — rather than reprinting a grammar.
+the parser, colored help, and `clap`'s genuinely good error messages for typo'd
+flags. The help text is a `const USAGE` string sitting in the same file as the
+`match` that parses the flags, and nothing ties the two together. They agree today
+because I checked, which is maintenance rather than a guarantee: add a flag, forget
+the string, and they disagree with nothing to say so.
+`tests/cli.rs::help_and_version` asserts only that `--help` prints something
+containing `usage:`. The test that would close this — pull the option names out of
+`USAGE`, assert the parser accepts each one and rejects nothing listed — is not
+written, and it should be.
+
+What I got back is error text that says what was expected *here* — `--format takes
+'human' or 'json', not 'jsonn'` — rather than reprinting a grammar.
 
 ### `anyhow` — 909,556,524 all-time · 200,860,233 in 90 days
 ### `thiserror` — 1,377,720,340 all-time · 338,962,699 in 90 days
@@ -123,21 +131,44 @@ Sørensen-Dice — which I would want if the corpus matching ever needed a
 similarity ratio rather than an edit count.
 
 ### `semver` — 945,451,453 all-time · 198,517,936 in 90 days
-[`src/semver.rs`](src/semver.rs). Parsing, precedence, and the caret and tilde
-operators.
+[`src/semver.rs`](src/semver.rs). Version parsing and semver precedence. That is
+the whole module, and the drift rule is what uses it: when one package name is
+installed at several versions, the report has to put them in an order, and byte
+order is not that order — it sorts `2.10.0` below `2.9.0` and `1.0.0-rc.1` above
+`1.0.0`.
 
-**What I gave up:** multi-comparator ranges. `semver` handles `>=1.2, <1.5` and
-`1.2.x || 2.x`; mine handles one operator at a time, because one operator is what
-a lockfile pin and a `requirements.txt` line contain. Compound npm ranges from
-`package.json` would need more.
+Precedence is where implementations go wrong, and there are three separate ways to
+do it. `1.0.0-beta.11 > 1.0.0-beta.2` needs numeric segments compared as numbers
+rather than strings. `1.0.0-1 < 1.0.0-alpha` needs numeric to sort *below*
+alphanumeric. And `1.0.0-rc.1 < 1.0.0` needs the empty prerelease list to be the
+largest rather than the smallest, which inverts the usual intuition about empty.
+`tests/semver.rs` runs the exact ordering table from semver.org section 11, both
+pairwise and as a sort. Build metadata is dropped at parse time rather than stored
+and then carefully ignored at every comparison.
 
-The part I did not give up is prerelease precedence, which is where
-implementations usually go wrong. `1.0.0-beta.11 > 1.0.0-beta.2` requires numeric
-segments to compare as numbers rather than strings; `1.0.0-1 < 1.0.0-alpha`
-requires numeric to sort *below* alphanumeric; and `1.0.0-rc.1 < 1.0.0` requires
-the empty prerelease list to be the largest rather than the smallest, which
-inverts the usual intuition. `tests/semver.rs` runs the exact ordering table from
-semver.org section 11, both pairwise and as a sort.
+**What I gave up:** range matching — and the honest part is that I wrote it first
+and then deleted it. There was a `Req` type: caret, tilde, the four comparison
+operators, and the awkward `^0.x` / `^0.0.x` cases npm and Cargo agree on. It had
+tests and the tests passed. It went anyway, for two reasons.
+
+Nothing in `stranger` resolves a range. The tool reads lockfiles, and a lockfile is
+the output of a resolver — the version is already pinned on the line in front of
+you. `Req` answered a question this program never asks.
+
+And it was wrong in two places its passing tests never reached. `~1` came out as
+`>=1.0.0, <1.1.0` where npm and Cargo both say `<2.0.0`, because the tilde bound
+always bumped the minor regardless of how many components were given. And every
+operator matched prereleases it should have excluded: `^1.2.3` accepted
+`2.0.0-alpha`, since `2.0.0-alpha` is genuinely below the `2.0.0` upper bound and
+the rule that a range without a prerelease does not match a version with one was
+never written down. Both are the ordinary failure mode of code with no caller —
+the tests only ask what the author thought to ask.
+
+Untested-in-anger code that answers nobody's question is decoration, and this file
+is about what was traded rather than what was typed. So: no `>=1.2, <1.5`, no
+`1.2.x || 2.x`, and nothing that reads a `package.json` range. If a rule ever needs
+"how far apart are these two versions", `Req` comes back out of git history with
+those two bugs fixed, rather than sitting in the binary being nearly right.
 
 ### `itoa` — 1,265,455,201 all-time · 292,076,583 in 90 days
 [`src/report.rs`](src/report.rs), `thousands()`. `core::fmt::NumBuffer` plus
@@ -269,9 +300,25 @@ function that takes the environment as arguments rather than reading it, because
 `std::env::set_var` is `unsafe` in edition 2024 and a test that mutates the
 environment is therefore not writable in this crate at all.
 
-**What I gave up:** `owo-colors`' typed style combinators and its supports-color
-detection; `comfy-table`'s borders, spanning, wrapping and alignment. What is here
+**What I gave up (`owo-colors`, `comfy-table`):** typed style combinators and
+supports-color detection; borders, spanning, wrapping and alignment. What is here
 computes column widths from content and pads. That is all the report needs.
+
+**What I gave up (`is-terminal`):** the ability to fix it myself. The crate carries
+workarounds for the cases that are actually hard — MSYS and Cygwin pseudo-terminals
+on Windows, where the handle is a named pipe and is a terminal anyway — and it can
+ship a correction on its own release schedule. A wrong answer inside `std` waits for
+a Rust release and there is nothing I can patch in the meantime. I also gave up a
+low minimum compiler version: the crate predates the std API, so leaning on
+`IsTerminal` puts a 1.70 floor under the project. That costs nothing here, because
+`substr_range` and `format_into` already put the floor at 1.98, but it is the real
+cost anywhere the floor matters.
+
+Worth stating next to the loss: the alternative is not a slightly worse one-liner.
+It is `#![forbid(unsafe_code)]` coming off the crate root, because one `unsafe`
+block for `isatty` disables the lint for every file in the crate. At that price the
+Windows edge cases are cheap, particularly since `stranger` is developed and tested
+on Linux, where they do not arise.
 
 The width measurement is `chars().count()`, which is wrong for East Asian
 wide forms, combining marks and emoji ZWJ sequences. Correcting it means shipping

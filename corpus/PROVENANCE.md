@@ -15,6 +15,7 @@ dependencies, so this is enforced by construction rather than by discipline.
 | `crates-io.txt` | 5,000 | `crates.io/api/v1/crates?page=N&per_page=100&sort=downloads`, 50 pages |
 | `pypi.txt` | 15,000 | `hugovk.dev/top-pypi-packages/top-pypi-packages.min.json` |
 | `npm.txt` | 140,066 | union of three sources, below |
+| **total** | **160,066** | three files, three ecosystems |
 
 ## npm needed three sources, and that is the interesting part
 
