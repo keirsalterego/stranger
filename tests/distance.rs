@@ -8,12 +8,22 @@ use stranger::distance::{
 struct Rng(u64);
 
 impl Rng {
+    /// Zero is the one seed xorshift cannot take — it stays zero forever. This
+    /// used to guard with `| 1`, which avoids zero and pays half the seed space
+    /// for it, mapping every even nanosecond onto its odd neighbour. Substitute
+    /// for zero instead and leave every other seed alone; `tests/fuzz.rs` has
+    /// the same guard, and it matters more there, where the seed is chosen by
+    /// hand and 2 and 3 used to be one run counted twice.
     fn seeded() -> (Self, u64) {
-        let seed = std::time::SystemTime::now()
+        let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .subsec_nanos() as u64
-            | 1;
+            .expect("the clock is after 1970")
+            .subsec_nanos() as u64;
+        let seed = if nanos == 0 {
+            0x9E37_79B9_7F4A_7C15
+        } else {
+            nanos
+        };
         (Rng(seed), seed)
     }
     fn next(&mut self) -> u64 {

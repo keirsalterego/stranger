@@ -47,6 +47,46 @@ Numbers are `f64`, so a JSON integer beyond 2^53 loses precision. Nothing in a
 lockfile is such a number — versions and hashes are strings — but it is a real
 limitation and not a theoretical one for other inputs.
 
+### The evidence, because "I wrote a parser" is not a case
+
+Two things, both runnable.
+
+**Clause by clause.** `tests/json_conformance.rs` walks the grammar and tests each
+production, citing the section number in each test: the six structural characters,
+all **eight** two-character escapes (the RFC lists eight, not six — `"` `\` `/`
+`b` `f` `n` `r` `t`), `\uXXXX`, surrogate pairs and every way one can go wrong, the
+number grammar including leading zeros and bare `+`, the literal names, whitespace,
+nesting, and duplicate keys.
+
+**Against a reference implementation.** `scripts/json-differential.sh` feeds
+2,000,000 generated and mutated inputs to both this parser and CPython's `json`,
+configured with `parse_constant` so it rejects `NaN` and `Infinity` — which RFC
+8259 has neither of and Python accepts by default. **1,997,016 agreed. 2,984
+disagreed, in four classes, and none of them was about a value:** every time both
+accepted, both built the same thing down to the IEEE-754 bits.
+
+| n | class | who is right |
+|---|---|---|
+| 1,093 | a leading BOM: we skip it, CPython raises | neither — §8.1 says a parser MAY ignore one, and skipping means a lockfile saved on Windows gets audited |
+| 898 | lone high surrogate `"\ud83e"` | neither — §8.2 does not forbid unpaired surrogates, it calls them "not interoperable" and leaves it to the implementation |
+| 825 | lone low surrogate | same |
+| 168 | high surrogate followed by a non-surrogate escape | same |
+
+Three of the four are the same decision: a Rust `String` cannot hold an unpaired
+surrogate, so accepting one means WTF-8 or substituting U+FFFD, and silently
+rewriting a character of a package name is precisely the bug class this tool
+exists to find. Rejecting is the honest option, and the RFC permits it.
+
+The campaign found **no defect** in `src/json.rs`. That is a result reported
+rather than a claim made: the probes that went beyond the campaign — a
+100,000-digit integer, a `\u` escape truncated at every offset, one whose fourth
+byte falls mid-codepoint, the depth cap at 127, 128 and 129, and error columns
+counted in characters behind multi-byte text — were all correct too.
+
+`python3` is dev-time tooling for this and nothing else. It never enters
+`Cargo.toml`, never ships, and the 29 clause tests run on a machine that does not
+have it.
+
 ---
 
 ## Parsing and CLI
@@ -239,9 +279,8 @@ and [`tests/fuzz.rs`](tests/fuzz.rs). Five lines of xorshift, written out three
 times because the three call sites want different things from the seed. The
 property tests seed from `SystemTime` nanoseconds and print it so a failing case
 replays; the ablation and the fuzzer seed from a constant so their published
-results reproduce. All three are the same xorshift64 — the same shifts, the same
-`| 1` guard against a zero seed — because two variants in one repository would be
-two things to reason about for no gain.
+results reproduce. All three are the same xorshift64, the same shifts, because two
+variants in one repository would be two things to reason about for no gain.
 
 **What I gave up:** a great deal, and it does not matter here. xorshift64 is not
 cryptographically secure, has a far shorter period than ChaCha, and fails some
@@ -253,7 +292,21 @@ because the tool has no secrets and makes no nonces.
 
 Seed 0 is the one value that breaks it, since xorshift is all zeroes forever from
 there — a fuzz run from seed 0 would corrupt byte 0 five thousand times and pass.
-All three call sites `| 1` on the way in.
+
+The guard used to be `| 1` everywhere, which avoids zero and pays half the seed
+space for it: every even seed folds onto its odd neighbour, so seeds 2 and 3 were
+the same run. That was costing the fuzzer real coverage — two of its extra seeds
+were one seed counted twice — so it and the property tests substitute a constant
+for zero and leave every other seed alone.
+
+The corpus-thinning ablation still uses `| 1`, and that asymmetry is deliberate
+rather than an oversight left behind. It has one published constant seed, so there
+is no space to halve, and the guard is part of what the published table
+reproduces against: `SEED` is even, so dropping it thins a different tenth of the
+corpus. Changing it by accident renumbered every row — 126,004 names kept became
+126,019, and the 90% false-positive count went from 36 to 72. The comment on that
+line says so, because "make it consistent" is exactly the tidy-up that would break
+it next time.
 
 Worth stating plainly since the hackathon rules forbid rolling your own crypto:
 this is not crypto and is not used as crypto. `stranger` computes no hashes,

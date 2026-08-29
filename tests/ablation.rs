@@ -84,6 +84,16 @@ impl Score {
 /// different every run. Order is preserved, so the result is still sorted and
 /// `binary_search` still holds.
 fn thinned(names: &[&'static str], keep_permille: u64, seed: u64) -> Vec<&'static str> {
+    // `| 1` here, where `tests/fuzz.rs` and `tests/distance.rs` substitute a
+    // constant for zero instead. The difference is deliberate and it is not
+    // style: those two choose seeds, and `| 1` folds every even seed onto an
+    // odd one, which cost the fuzzer half its seed space. This one has a single
+    // published constant, so there is no space to halve — and the guard is part
+    // of what the published table reproduces against. `SEED` is even, so
+    // dropping the `| 1` thins a different 10% of the corpus and silently
+    // renumbers every row in `docs/src/detection/ablation.md`. Measured, when I
+    // changed it by accident: 126,004 names kept becomes 126,019, and the 90%
+    // false-positive count goes 36 to 72.
     let mut state = seed | 1;
     let mut out = Vec::with_capacity(names.len());
     for &n in names {
