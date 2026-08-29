@@ -1,7 +1,7 @@
 //! Rendering a scan, for a person and for a machine.
 
 use crate::lock::Tree;
-use crate::rules::{Finding, ORDER, Rule, Severity};
+use crate::rules::{Finding, Rule, Severity};
 use crate::term::{self, Style, Term};
 use std::io::{self, Write};
 use std::time::Duration;
@@ -134,15 +134,16 @@ pub fn human(
     let shown = |f: &Finding| verbose || f.rule == Rule::Slopsquat;
     let labels: Vec<String> = findings.iter().filter(|f| shown(f)).map(label).collect();
     let name_w = term::column(labels.iter().map(String::as_str), NAME_MIN);
-    let head_w = term::column(
-        ORDER
-            .iter()
-            .filter(|r| findings.iter().any(|f| f.rule == **r))
-            .map(|r| r.heading()),
-        HEAD_MIN,
-    );
+    // The blocks are the rules that actually fired, sorted into report order —
+    // taken from the findings rather than from a list of every rule, so there is
+    // no list for a new rule to be left off of and no rule that can go missing
+    // from the report without anyone noticing.
+    let mut rules: Vec<Rule> = findings.iter().map(|f| f.rule).collect();
+    rules.sort_unstable_by_key(|r| r.rank());
+    rules.dedup();
+    let head_w = term::column(rules.iter().map(|r| r.heading()), HEAD_MIN);
 
-    for &rule in ORDER {
+    for rule in rules {
         let hits: Vec<&Finding> = findings.iter().filter(|f| f.rule == rule).collect();
         if hits.is_empty() {
             continue;
