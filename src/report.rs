@@ -13,24 +13,41 @@ use std::time::Duration;
 const NAME_MIN: usize = 24;
 const HEAD_MIN: usize = 22;
 
-/// Severity weights, capped at 100.
+/// A band for the worst severity, and position inside it for volume.
 ///
-/// This is a crude number and saying so is better than dressing it up. It
-/// exists so `--fail-on` has something to compare and so a repeated scan shows
-/// movement; it is not calibrated against anything, because there is nothing
-/// honest to calibrate it against. The findings are the output. The score is a
-/// handle.
+/// This was a sum of severity weights capped at 100, and the cap did all the
+/// work: nine of the sixteen fixtures scored exactly 100, including both
+/// `poisoned.package-lock.json` and the clean `npm-l` it was built from. A
+/// number that cannot separate three planted hallucinations from its own
+/// control is not telling anyone anything.
+///
+/// So the band is the worst severity present — the same question `--fail-on`
+/// asks, which is the point: the headline number and the gate should not
+/// disagree about what is serious. Position inside the band is how many
+/// findings share that severity.
+///
+/// It is still not calibrated against anything, because there is nothing
+/// honest to calibrate it against. The findings are the output. This is a
+/// handle for `--fail-on` to sit beside and for a repeated scan to show
+/// movement against, and comparing two projects is only meaningful at the
+/// band.
 pub fn risk(findings: &[Finding]) -> u32 {
-    let total: u32 = findings
-        .iter()
-        .map(|f| match f.severity {
-            Severity::Critical => 25,
-            Severity::High => 10,
-            Severity::Medium => 3,
-            Severity::Low => 1,
-        })
-        .sum();
-    total.min(100)
+    let Some(worst) = findings.iter().map(|f| f.severity).max() else {
+        return 0;
+    };
+    let floor = match worst {
+        Severity::Critical => 75,
+        Severity::High => 50,
+        Severity::Medium => 25,
+        Severity::Low => 1,
+    };
+    // Saturating, so the band cannot be filled: one finding sits near the
+    // floor, a dozen most of the way up, and a thousand still leaves room,
+    // because there is always a worse tree than the one in front of you.
+    // Integer arithmetic throughout — this number is displayed, not computed
+    // with, and a float here would only invite rounding questions.
+    let n = findings.iter().filter(|f| f.severity == worst).count() as u32;
+    floor + 24 * n / (n + 8)
 }
 
 /// Digit grouping. `NumBuffer` + `format_into` (1.98) writes the digits into a
@@ -247,4 +264,59 @@ fn string(w: &mut impl Write, s: &str) -> io::Result<()> {
         }
     }
     write!(w, "\"")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn at(sev: Severity, n: usize) -> Vec<Finding> {
+        (0..n)
+            .map(|i| Finding {
+                rule: Rule::Slopsquat,
+                severity: sev,
+                package: format!("p{i}"),
+                version: String::new(),
+                detail: String::new(),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn nothing_scores_zero() {
+        assert_eq!(risk(&[]), 0);
+    }
+
+    /// The bands must not overlap, or the number disagrees with `--fail-on`
+    /// about what is serious — which is the whole reason they are bands.
+    #[test]
+    fn a_worse_severity_always_outranks_more_of_a_lesser_one() {
+        assert!(risk(&at(Severity::Critical, 1)) > risk(&at(Severity::High, 10_000)));
+        assert!(risk(&at(Severity::High, 1)) > risk(&at(Severity::Medium, 10_000)));
+        assert!(risk(&at(Severity::Medium, 1)) > risk(&at(Severity::Low, 10_000)));
+        assert!(risk(&at(Severity::Low, 1)) > risk(&[]));
+    }
+
+    /// The old score summed weights and capped at 100, so anything with two
+    /// rules firing hit the ceiling and stayed there. Nine of sixteen fixtures
+    /// scored exactly 100.
+    #[test]
+    fn volume_moves_the_number_without_ever_filling_the_band() {
+        let (one, ten, many) = (
+            risk(&at(Severity::High, 1)),
+            risk(&at(Severity::High, 10)),
+            risk(&at(Severity::High, 100_000)),
+        );
+        assert!(one < ten && ten < many, "{one} {ten} {many}");
+        assert!(many < 75, "a High tree must never reach the Critical band");
+    }
+
+    /// A findings list is not sorted by severity on the way in here, so the
+    /// band has to come from a max rather than from the first element.
+    #[test]
+    fn the_band_comes_from_the_worst_finding_not_the_first() {
+        let mut mixed = at(Severity::Low, 3);
+        mixed.extend(at(Severity::Critical, 1));
+        assert_eq!(risk(&mixed), risk(&at(Severity::Critical, 1)));
+    }
 }

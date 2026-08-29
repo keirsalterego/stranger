@@ -55,7 +55,10 @@ $ mkdir -p /tmp/a && cat > /tmp/a/package-lock.json <<'EOF'
   "lockfileVersion": 3,
   "packages": {
     "": { "dependencies": { "expres": "^4.18.2" } },
-    "node_modules/expres": { "version": "4.18.2" }
+    "node_modules/expres": {
+      "version": "4.18.2",
+      "resolved": "https://registry.npmjs.org/expres/-/expres-4.18.2.tgz"
+    }
   }
 }
 EOF
@@ -66,7 +69,7 @@ $ ./target/release/stranger scan /tmp/a
   ⚠  HALLUCINATION RISK     1
      expres@4.18.2            not in corpus · d=1 from "express" · root-only, no parent
 
-  risk 25/100    48ms    third-party deps used to compute this: 0
+  risk 77/100    48ms    third-party deps used to compute this: 0
 ```
 
 Now the same name, reached through a real package that claims to depend on it:
@@ -82,7 +85,10 @@ $ mkdir -p /tmp/b && cat > /tmp/b/package-lock.json <<'EOF'
       "version": "1.20.2",
       "dependencies": { "expres": "^4.18.2" }
     },
-    "node_modules/expres": { "version": "4.18.2" }
+    "node_modules/expres": {
+      "version": "4.18.2",
+      "resolved": "https://registry.npmjs.org/expres/-/expres-4.18.2.tgz"
+    }
   }
 }
 EOF
@@ -129,7 +135,10 @@ $ mkdir -p /tmp/c && cat > /tmp/c/package-lock.json <<'EOF'
     "": { "workspaces": ["apps/*"] },
     "apps/desktop": { "dependencies": { "expres": "^4.18.2" } },
     "node_modules/desktop": { "resolved": "apps/desktop", "link": true },
-    "node_modules/expres": { "version": "4.18.2" }
+    "node_modules/expres": {
+      "version": "4.18.2",
+      "resolved": "https://registry.npmjs.org/expres/-/expres-4.18.2.tgz"
+    }
   }
 }
 EOF
@@ -140,7 +149,7 @@ $ ./target/release/stranger scan /tmp/c
   ⚠  HALLUCINATION RISK     1
      expres@4.18.2            not in corpus · d=1 from "express" · root-only, no parent
 
-  risk 25/100    45ms    third-party deps used to compute this: 0
+  risk 77/100    45ms    third-party deps used to compute this: 0
 ```
 
 The workspace member declared it and the rule still fires. Compare with `/tmp/b`,
@@ -181,7 +190,7 @@ $ ./target/release/stranger scan fixtures/poisoned.requirements.txt
 
   ⚠  UNPINNED               3     no exact version recorded
 
-  risk 64/100    15ms    third-party deps used to compute this: 0
+  risk 79/100    15ms    third-party deps used to compute this: 0
 ```
 
 `requests-html` is a real PyPI package two edits away. The finding is a true

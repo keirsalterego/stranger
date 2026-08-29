@@ -19,7 +19,7 @@ $ ./target/release/stranger scan fixtures/poisoned.requirements.txt
 
   ⚠  UNPINNED               3     no exact version recorded
 
-  risk 64/100    15ms    third-party deps used to compute this: 0
+  risk 79/100    15ms    third-party deps used to compute this: 0
 ```
 
 ## The format is flat, and the detection rule pays for it

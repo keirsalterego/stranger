@@ -34,7 +34,7 @@ $ ./target/release/stranger scan fixtures/npm-s.package-lock.json
 
   ⚠  VERSION DRIFT          30    same package at 2+ versions in one tree
 
-  risk 100/100    65ms    third-party deps used to compute this: 0
+  risk 56/100    65ms    third-party deps used to compute this: 0
 ```
 
 Matching on a file path is by suffix, so `npm-s.package-lock.json` and
@@ -132,7 +132,7 @@ $ ./target/release/stranger scan -v fixtures/npm-xs.package-lock.json
      has-symbols@1.1.0        predicate-shaped, resolves nothing · size not measured, see rule docs
      hasown@2.0.4             one expression, one publisher · inlining it removes an account from your build
 
-  risk 4/100    13ms    third-party deps used to compute this: 0
+  risk 9/100    13ms    third-party deps used to compute this: 0
 ```
 
 `--format json` is never collapsed — it emits every finding whether or not you

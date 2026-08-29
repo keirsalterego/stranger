@@ -26,7 +26,7 @@ $ ./target/release/stranger scan --format json fixtures/poisoned.requirements.tx
 | `direct` | number | named by a manifest in this repository |
 | `transitive` | number | `packages - direct` |
 | `workspace` | number | first-party entries set aside; 0 on a non-monorepo |
-| `risk` | number | 0–100, weights summed and capped |
+| `risk` | number | 0–98; a band for the worst severity plus a term for volume |
 | `elapsed_ms` | number | wall time for this scan, as the tool measured it |
 | `findings` | array | worst rule first, then alphabetical by package within a rule |
 
