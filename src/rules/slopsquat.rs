@@ -105,7 +105,14 @@ pub fn scan(tree: &Tree, cfg: Config<'_>) -> Vec<Finding> {
             continue;
         };
 
-        let parent = if in_degree[i] == 0 {
+        // Clause three, said in the terms the file could actually answer.
+        // "root-only, no parent" asserts a graph was consulted; a
+        // `requirements.txt` records no edges for anyone to consult, so on a
+        // flat file that sentence dressed an absence of evidence up as
+        // evidence — the exact mistake the clause exists to avoid.
+        let parent = if !tree.records_edges {
+            "no dependency graph in this format".to_string()
+        } else if in_degree[i] == 0 {
             "root-only, no parent".to_string()
         } else {
             format!("{} parent(s)", in_degree[i])
