@@ -80,7 +80,7 @@ $ stranger scan .
 ```
 
 The walk finds every lockfile under the directory and audits them on separate
-threads — six formats and four ecosystems in one pass, if that is what is there.
+threads — six formats and three ecosystems in one pass, if that is what is there.
 It does not descend into `node_modules`, `target`, `.venv` or `dist`, because a
 populated `node_modules` holds hundreds of vendored lockfiles belonging to other
 people and auditing those is worse than auditing nothing.
@@ -104,10 +104,11 @@ anyone installs it.
 
 ## The co-occurrence rule
 
-Edit distance alone does not work. `lodash.merge` is two edits from
-`lodash.mergewith`; both are real, both are widely used. A registry the size of
-npm contains thousands of these pairs, and any threshold loose enough to catch a
-typo catches legitimate siblings with it.
+Edit distance alone does not work. `lodash.assign` is two edits from
+`lodash.assignin` — exactly the shipped `MAX_EDIT_DISTANCE` — and both names are
+in `corpus/npm.txt`, so both are real. A registry the size of npm contains
+thousands of these pairs, and any threshold loose enough to catch a typo catches
+legitimate siblings with it.
 
 The clause that separates them is not about spelling:
 
@@ -115,7 +116,7 @@ The clause that separates them is not about spelling:
 > nothing real has ever heard of it. A model put it in your manifest; no
 > maintainer ever put it in theirs.
 
-`lodash.merge` is depended upon by real packages. `lodahs` cannot be, because it
+`lodash.assign` is depended upon by real packages. `lodahs` cannot be, because it
 does not exist — the only reference to it anywhere is the manifest under audit.
 So the rule is a conjunction of three clauses:
 
@@ -132,8 +133,10 @@ looked at. Those edges are recorded as roots, not as evidence.
 
 ## Does clause 3 actually do anything
 
-Against the full 140,066-name corpus, no. Both configurations score 1.000
-precision and 1.000 recall on the fixtures, and the clause changes nothing.
+Against the full npm list, no. These fixtures are all npm, so the list in play is
+the 140,066 npm names rather than the whole 160,066-name corpus. Both
+configurations score 1.000 precision and 1.000 recall on the fixtures, and the
+clause changes nothing.
 
 That result is real and reporting it is the honest thing to do. It is also
 measuring the wrong regime: with a corpus that contains every package in every
@@ -157,7 +160,7 @@ matters deletes part of the corpus and watches which clause is holding the rule 
 | 25% (35,134) | **on** | 2 | **16** | **0.111** | 0.667 |
 | 25% (35,134) | off | 2 | 549 | 0.004 | 0.667 |
 
-At 90% coverage the clause cuts false positives from 95 to 3 — a factor of 32 —
+At 90% coverage the clause cuts false positives from 95 to 3 — a factor of 31.7 —
 and costs no recall at all.
 
 The recall drop at 50% is not the clause failing. The thinning deleted the real
@@ -196,19 +199,31 @@ toolchain.
 
 ## Reproducible build
 
+The claim is not that some particular hash is eternal. It is that two builds of
+whatever commit you have checked out come out byte-identical. `make repro` builds
+it twice and prints what it got:
+
 ```
 $ make repro
-commit:  b926c116fe08a9fb0b75a736d1064b3cd07bba5b
+commit:  6288840ecc3b8c05e608c1e09eae5ce81dfb31b8
 rustc:   rustc 1.98.0 (88d9e12ae 2026-08-18)
 epoch:   1787940000
 
-build A  /tmp/stranger-repro.265137/a
-         c04dbfdab340e4a02f9cfcfacbaa843bf80eb6a717bf961dff86a9bb40f307bb
-build B  /tmp/stranger-repro.265137/b-with-a-deliberately-longer-name
-         c04dbfdab340e4a02f9cfcfacbaa843bf80eb6a717bf961dff86a9bb40f307bb
+build A  /tmp/stranger-repro.482198/a
+         230dfc8055d54ce291e7cc4fc1a2383e7cdfc760ff076216df59aea90cc33225
+build B  /tmp/stranger-repro.482198/b-with-a-deliberately-longer-name
+         230dfc8055d54ce291e7cc4fc1a2383e7cdfc760ff076216df59aea90cc33225
 
 MATCH — byte-identical across two directories
 ```
+
+That is a real run, at the commit it names, on the rustc it names. The line
+carrying the claim is `MATCH`. The hash is a function of the checkout and the
+toolchain: it moves whenever `src/` or `Cargo.lock` moves, and a different rustc
+gives a different one. So do not diff it against a hash written down in a file —
+run `make repro` on the commit in front of you and read the last line. CI runs
+`scripts/repro.sh` on every pull request and every push to `main`, which is what
+stops a commit from silently ceasing to reproduce.
 
 Two directories rather than one, with deliberately different path lengths, because
 the absolute build path is the thing most likely to leak into a binary — it ends
@@ -223,9 +238,6 @@ cargo build --release --locked
 `SOURCE_DATE_EPOCH` is the hackathon kickoff. `CARGO_INCREMENTAL=0` because
 incremental artifacts are not deterministic. The remap is what makes two
 directories produce one binary.
-
-The hash above is for that commit; `make repro` recomputes it for whatever you
-have checked out, so it does not go stale in this file.
 
 ## Limits
 
@@ -242,9 +254,10 @@ the event, so it is here rather than buried.
 runs code at install time and does not record what that code is. The tool can say
 code runs. It cannot say what it does.
 
-Nine of the 1,390 entries in the largest fixture carry the flag and the tool
-reports eight. The ninth is the empty-string key — the root project — and its
-install script is your own build, not a stranger's.
+Nine of the 1,391 entries in the largest fixture's `packages` map carry the flag
+and the tool reports eight. The ninth is the empty-string key — the root project —
+and its install script is your own build, not a stranger's. Dropping it is also
+why the tool reports 1,390 entries from a 1,391-entry map.
 
 **`Cargo.lock` records no build scripts and no dev-dependencies.** Cargo runs
 `build.rs` at compile time — the same shape `hasInstallScript` flags — and the
@@ -304,13 +317,15 @@ asymmetry is the whole argument:
 | corpus kept | candidates clause 3 removes on `poetry-m` | on `uv-m` | on any `requirements.txt` |
 |---|---|---|---|
 | 90% | 6 of 10 | 6 of 11 | **0** |
-| 70% | 18 of 31 | 24 of 32 | **0** |
-| 50% | 22 of 39 | 27 of 35 | **0** |
-| 25% | 30 of 49 | 34 of 45 | **0** |
+| 70% | 18 of 30 | 24 of 32 | **0** |
+| 50% | 22 of 38 | 27 of 35 | **0** |
+| 25% | 30 of 48 | 34 of 45 | **0** |
 
-Sixty to seventy-five per cent of the candidates on a file with a graph, and
-exactly zero on a flat file at every corpus size, because there is no edge in the
-file to read. `tests/pypi.rs` pins that asymmetry.
+Between 55% and 77% of the candidates on a file with a graph, and exactly zero on
+a flat file at every corpus size, because there is no edge in the file to read.
+The thinning is the same seeded xorshift `tests/ablation.rs` uses, seed
+`0x5EED_1234`, so these rows are reproducible rather than different every run.
+`tests/pypi.rs` pins the asymmetry itself.
 
 **A corpus can only speak about one registry.** A package pulled from git, a
 private index or a direct URL never passed through the public registry the corpus
