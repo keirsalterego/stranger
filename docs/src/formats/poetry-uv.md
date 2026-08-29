@@ -91,6 +91,35 @@ claim — so nothing is invented. This is a real blind spot relative to npm.
 membership in uv attaches to the edge rather than the package, so `dev` is false on
 every uv entry.
 
+## What each one refuses
+
+Both readers check a marker before they read anything, and the marker is the
+point. `Cargo.lock`, `poetry.lock` and `uv.lock` are all TOML with a
+`[[package]]` array, so the file name is the only thing that says which reader
+should get it — and a renamed file would otherwise be read by the wrong one and
+silently produce a tree with no edges in it, because cargo writes its
+dependencies as strings and these two write inline tables.
+
+So poetry requires `metadata.lock-version` and uv requires `requires-python`,
+each of which appears in every file its own tool writes and in nothing else here:
+
+```console
+$ mkdir -p /tmp/refuse-py
+$ printf '[[package]]\nname = "a"\nversion = "1"\n' > /tmp/refuse-py/x.poetry.lock
+$ ./target/release/stranger scan /tmp/refuse-py/x.poetry.lock
+stranger: /tmp/refuse-py/x.poetry.lock: no `metadata.lock-version`; this is not the lockfile its name claims to be
+```
+
+An entry with no `name` is refused by ordinal, exactly as in
+[cargo](cargo.md#what-it-refuses) and for the same reason — the value tree
+carries no positions.
+
+**An absent `package` array is deliberately not an error.** A project with no
+dependencies gets a lockfile that is a header and nothing else, and refusing that
+would be a false alarm about a file that is simply empty. The marker check above
+is what makes that safe: the file has already proved it is a poetry or uv
+lockfile before the empty array is accepted as meaning zero packages.
+
 ## The TOML that makes this possible
 
 Both files, plus `Cargo.lock`, go through one [subset parser](../decisions.md).

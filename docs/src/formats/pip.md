@@ -120,6 +120,34 @@ is a fact about the file. Minting a `Package` to carry it would put a lie in the
 package count and a fake name in the report. The upgrade is a field on `Tree` and
 a rule that reads it.
 
+## What it refuses
+
+The line above is about what it *skips* — a line it can read and has nothing to
+say about. This is the other half: a line it cannot read at all. A
+`requirements.txt` is hand-edited, unlike every other format here, so the errors
+carry a position and quote the fragment.
+
+```console
+$ mkdir -p /tmp/refuse-pip
+$ printf '@ohno>=1\n' > /tmp/refuse-pip/a.requirements.txt
+$ ./target/release/stranger scan /tmp/refuse-pip/a.requirements.txt
+stranger: /tmp/refuse-pip/a.requirements.txt: `@ohno>=1` does not begin with a package name at 1:1
+$ printf 'flask =!= 3\n' > /tmp/refuse-pip/b.requirements.txt
+$ ./target/release/stranger scan /tmp/refuse-pip/b.requirements.txt
+stranger: /tmp/refuse-pip/b.requirements.txt: `flask=!=3` is not a version specifier stranger understands at 1:1
+```
+
+An unclosed extras bracket is the third, and it has its own block further down
+under [syntax errors](#syntax-errors-carry-a-position).
+
+The split between skipping and refusing is a judgement, and it is the one worth
+arguing with. A URL or a VCS reference is skipped because there is no project
+name in it for the corpus to be asked about, so the rules have nothing to say
+either way — and refusing the file over one of those used to take every other
+requirement in it down as well. A line that is *meant* to be a name and a
+specifier and is neither is refused, because reading it as anything would mean
+guessing what the author meant.
+
 ## What the format does not record
 
 - **A dependency graph.** Covered above; it is the big one.

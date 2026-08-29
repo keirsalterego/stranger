@@ -113,6 +113,44 @@ and all 93 are the workspace members. `cargo-m` has 34 without one: 15 workspace
 members and 19 git dependencies, which have a source and no checksum because a git
 revision is its own integrity claim.
 
+## What it refuses
+
+Two shapes, both of which mean the file is not the thing its name says it is.
+
+**No `[[package]]` array at all:**
+
+```console
+$ mkdir -p /tmp/refuse-cargo
+$ printf 'x = 1\n' > /tmp/refuse-cargo/Cargo.lock
+$ ./target/release/stranger scan /tmp/refuse-cargo/Cargo.lock
+stranger: /tmp/refuse-cargo/Cargo.lock: no [[package]] entries; this does not look like a Cargo.lock
+```
+
+Refusing beats the alternative for the same reason it does in the
+[npm reader](npm.md): a reader that looked for `package`, found nothing and
+carried on would report a clean project with zero dependencies, and a clean
+report on an unread file is the worst output an auditing tool can produce.
+
+**An entry with no `name` or no `version`:**
+
+```console
+$ printf '[[package]]\nversion = "1.0"\n' > /tmp/refuse-cargo/x.Cargo.lock
+$ ./target/release/stranger scan /tmp/refuse-cargo/x.Cargo.lock
+stranger: /tmp/refuse-cargo/x.Cargo.lock: [[package]] #1 has no `name`
+```
+
+The ordinal rather than a line number, and that is a real limit rather than an
+oversight: positions die at the end of `toml::parse`, which hands back a value
+tree with no spans in it. `[[package]] #1` is still something you can count to.
+Threading spans through the whole `Value` type to improve one message was not
+worth what it would cost every other user of the parser.
+
+Everything the *TOML subset* refuses is refused here too, and
+[decisions](../decisions.md) documents that subset. The important half is that it
+refuses rather than guesses: `Cargo.lock` is written by one program, so anything
+outside the subset means either a cargo change worth knowing about or a corrupt
+file, and both deserve an error rather than a partial tree.
+
 ## Which rules can fire
 
 Only two. `slopsquat` on registry crates, and `drift` — every entry records an
