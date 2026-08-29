@@ -23,7 +23,8 @@
 //! - block sequences, `- item`, indented *under* their key
 //! - plain scalars, single-quoted `'…'` (with `''` for a literal quote), and
 //!   double-quoted `"…"` with the JSON escape set plus `\0`
-//! - flow mappings `{a: 1, b: 2}` and flow sequences `[a, b]`, on one line
+//! - flow mappings `{a: 1, b: 2}` and flow sequences `[a, b]`, on one line,
+//!   each with an optional trailing comma
 //! - `#` comments: a whole line, or after a value when preceded by a space
 //! - blank lines anywhere, a leading byte-order mark, and one `---` opening
 //!   the document
@@ -698,14 +699,22 @@ impl<'a> Parser<'a> {
         let open = self.rest;
         self.bump(1);
         let mut map: BTreeMap<String, Value> = BTreeMap::new();
-        self.skip_inline();
-        if self.peek() == Some(b'}') {
-            self.bump(1);
-            self.depth -= 1;
-            return Ok(Value::Mapping(map));
-        }
         loop {
+            // Looking for the close before every entry rather than only after
+            // one is what makes `{}` and a trailing comma fall out for free —
+            // the same shape `toml::array` uses, and YAML allows both.
             self.skip_inline();
+            match self.peek() {
+                Some(b'}') => {
+                    self.bump(1);
+                    break;
+                }
+                None => return Err(self.err_at(open, "unclosed flow mapping")),
+                Some(b'\n' | b'\r') => {
+                    return Err(self.err_at(open, "a flow mapping may not span lines"));
+                }
+                _ => {}
+            }
             let key_at = self.rest;
             let key = self.flow_key(open)?;
             self.skip_inline();
@@ -785,14 +794,23 @@ impl<'a> Parser<'a> {
         let open = self.rest;
         self.bump(1);
         let mut items = Vec::new();
-        self.skip_inline();
-        if self.peek() == Some(b']') {
-            self.bump(1);
-            self.depth -= 1;
-            return Ok(Value::Sequence(items));
-        }
         loop {
+            // As in `flow_mapping`: `[]` and `[x, ]` both come out of checking
+            // for the close first. It also puts the line-spanning refusal on
+            // the path a broken-after-a-comma sequence takes, which used to
+            // reach `plain_flow_scalar` and come back as "expected a value".
             self.skip_inline();
+            match self.peek() {
+                Some(b']') => {
+                    self.bump(1);
+                    break;
+                }
+                None => return Err(self.err_at(open, "unclosed flow sequence")),
+                Some(b'\n' | b'\r') => {
+                    return Err(self.err_at(open, "a flow sequence may not span lines"));
+                }
+                _ => {}
+            }
             items.push(self.flow_value()?);
             self.skip_inline();
             match self.peek() {

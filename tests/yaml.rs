@@ -291,6 +291,45 @@ fn unclosed_flow_collections() {
         why("a: {\n  b: 1\n}\n"),
         "a flow mapping may not span lines"
     );
+    // Broken after the comma, which is the shape a hand-wrapped `os:` list
+    // takes. The mapping path said this by name already; the sequence path
+    // fell through to the scalar scanner and said "expected a value".
+    assert_eq!(why("a: [x,\ny]"), "a flow sequence may not span lines");
+    assert_eq!(at("a: [x,\ny]"), (1, 4));
+    assert_eq!(why("a: {b: 1,\nc: 2}"), "a flow mapping may not span lines");
+    assert_eq!(at("a: {b: 1,\nc: 2}"), (1, 4));
+    assert_eq!(why("a: [x,"), "unclosed flow sequence");
+    assert_eq!(why("a: {b: 1,"), "unclosed flow mapping");
+}
+
+/// A trailing comma is legal YAML in both flow collections, and both used to
+/// be refused with a message that did not say why. `toml.rs` makes the same
+/// call for arrays; the difference there is that TOML forbids it in an inline
+/// table and YAML forbids it nowhere.
+#[test]
+fn trailing_commas_in_flow_collections() {
+    assert_eq!(
+        parse("a: [x, ]").get("a").and_then(Value::as_sequence),
+        Some(&[s("x")][..])
+    );
+    assert_eq!(
+        parse("a: [x,]")
+            .get("a")
+            .and_then(Value::as_sequence)
+            .map(<[_]>::len),
+        Some(1)
+    );
+    let doc = parse("a: {b: 1, }");
+    assert_eq!(doc.get("a").and_then(|v| v.get("b")), Some(&s("1")));
+    assert_eq!(
+        doc.get("a").and_then(Value::as_mapping).map(|m| m.len()),
+        Some(1)
+    );
+    // Empty is still empty, and a comma on its own is still not an entry.
+    assert_eq!(parse("a: [ ]").get("a"), Some(&Value::Sequence(vec![])));
+    assert_eq!(why("a: [,]"), "expected a value");
+    assert_eq!(why("a: {,}"), "expected ':' after a flow mapping key");
+    assert_eq!(why("a: [x,,]"), "expected a value");
 }
 
 /// An unquoted `: ` inside a value is invalid YAML, and the alternative is a
