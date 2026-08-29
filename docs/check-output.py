@@ -45,6 +45,7 @@ Standard library only, and it never enters Cargo.toml. It is a build-time script
 for the book, not part of the tool.
 """
 
+import os
 import re
 import shutil
 import subprocess
@@ -138,6 +139,10 @@ def check(page):
     failures, verified, skipped = [], 0, []
     last_code = None
 
+    # A `chmod 000` earlier in the page is what the block after it depends on,
+    # so the whole page is what has to be skipped, not the one command.
+    needs_permissions = any("chmod 000" in c for _, c, _ in commands(src))
+
     for line_no, cmd, block in commands(src):
         want = lines("\n".join(block))
 
@@ -152,6 +157,13 @@ def check(page):
 
         if not RUNNABLE.match(cmd):
             skipped.append((line_no, cmd))
+            continue
+        # `chmod 000` does nothing to root, so the exit-codes page's blind-spot
+        # block would report findings instead of "could not look inside" and
+        # fail here with a diff that explains nothing. GitHub's runners are not
+        # root; a container might be.
+        if needs_permissions and os.geteuid() == 0:
+            skipped.append((line_no, f"{cmd}   [chmod means nothing to root]"))
             continue
         tool = missing_tool(cmd)
         if tool:
@@ -186,8 +198,6 @@ def main():
         sys.exit(f"{BIN} is not built; run `make` first")
 
     # `stranger` on its own, the way the cookbook writes it once installed.
-    import os
-
     os.environ["PATH"] = f"{BIN.parent}:{os.environ['PATH']}"
 
     total, verified, unverified = 0, 0, []
