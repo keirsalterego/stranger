@@ -126,6 +126,8 @@ is to point `stranger` at one of those instead.
 same reader and produces no pinning findings at all:
 
 ```console
+$ mkdir -p /tmp/freeze
+$ printf 'flask==3.0.0\nnumpy==2.1.0\nurllib3==2.2.1\nrequests==2.31.0\n' > /tmp/freeze/requirements.txt
 $ cat /tmp/freeze/requirements.txt
 flask==3.0.0
 numpy==2.1.0

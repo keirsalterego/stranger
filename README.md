@@ -246,6 +246,7 @@ Two conditions come attached and both are met. It is **disclosed** — see
 file is absent rather than being useless without it:
 
 ```
+$ rm -rf /tmp/empty-project && mkdir -p /tmp/empty-project
 $ stranger scan /tmp/empty-project
 
   no lockfile in /tmp/empty-project

@@ -103,9 +103,10 @@ one-liner. [Trivial packages](rules/trivial.md) has the argument.
 seven names in `lock::KNOWN` are the whole list:
 
 ```console
-$ ./target/release/stranger scan /tmp
+$ rm -rf /tmp/nolock && mkdir -p /tmp/nolock
+$ ./target/release/stranger scan /tmp/nolock
 
-  no lockfile in /tmp
+  no lockfile in /tmp/nolock
   looked for: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock, go.mod
 ```
 

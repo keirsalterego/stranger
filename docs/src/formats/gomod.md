@@ -119,7 +119,7 @@ What is left is the tree, the split, and the package list:
 
 ```console
 $ ./target/release/stranger scan --format json fixtures/gomod-xs.go.mod
-{"source":"fixtures/gomod-xs.go.mod","ecosystem":"go","packages":6,"direct":5,"transitive":1,"workspace":0,"risk":0,"elapsed_ms":0,"findings":[]}
+{"source":"fixtures/gomod-xs.go.mod","ecosystem":"go","packages":6,"direct":5,"transitive":1,"workspace":0,"integrity":0,"risk":0,"findings":[]}
 ```
 
 ## Syntax errors carry a position
@@ -128,6 +128,7 @@ An unterminated block is reported where it opened, not at end of file, because
 the opening line is the one worth going to:
 
 ```console
+$ mkdir -p /tmp/bad
 $ printf 'module example.com/m\n\nrequire (\n\tgithub.com/pkg/errors v0.9.1\n' > /tmp/bad/go.mod
 $ ./target/release/stranger scan /tmp/bad/go.mod
 stranger: /tmp/bad/go.mod: `require (` is never closed at 3:1

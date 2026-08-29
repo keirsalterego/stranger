@@ -6,6 +6,22 @@ produces two lines rather than an array, so the stream is newline-delimited JSON
 and a consumer reads it a line at a time:
 
 ```console
+$ rm -rf /tmp/mixed && mkdir -p /tmp/mixed
+$ cp fixtures/poisoned.requirements.txt /tmp/mixed/requirements.txt
+$ cat > /tmp/mixed/package-lock.json <<'EOF'
+{
+  "name": "mixed",
+  "lockfileVersion": 3,
+  "packages": {
+    "": { "name": "mixed", "dependencies": { "expres": "4.18.2" } },
+    "node_modules/expres": {
+      "version": "4.18.2",
+      "resolved": "https://registry.npmjs.org/expres/-/expres-4.18.2.tgz",
+      "integrity": "sha512-AA"
+    }
+  }
+}
+EOF
 $ ./target/release/stranger scan --format json /tmp/mixed | jq -c '{source, packages, findings: (.findings|length)}'
 {"source":"/tmp/mixed/package-lock.json","packages":1,"findings":1}
 {"source":"/tmp/mixed/requirements.txt","packages":6,"findings":5}
@@ -13,7 +29,7 @@ $ ./target/release/stranger scan --format json /tmp/mixed | jq -c '{source, pack
 
 ```console
 $ ./target/release/stranger scan --format json fixtures/poisoned.requirements.txt
-{"source":"fixtures/poisoned.requirements.txt","ecosystem":"pypi","packages":6,"direct":6,"transitive":0,"workspace":0,"risk":79,"elapsed_ms":35,"findings":[{"rule":"slopsquat","severity":"critical","package":"python-dateutils","version":"2.9.0","detail":"not in corpus · d=1 from \"python-dateutil\" · root-only, no parent"},{"rule":"slopsquat","severity":"critical","package":"requests-http","version":"1.0.2","detail":"not in corpus · d=2 from \"requests-html\" · root-only, no parent"},{"rule":"pinning","severity":"low","package":"flask","version":"","detail":"~=3.0 · capped at the major, still floats below the cap"},{"rule":"pinning","severity":"high","package":"numpy","version":"","detail":"no version specifier · resolves to whatever is newest at install time"},{"rule":"pinning","severity":"medium","package":"urllib3","version":"","detail":">=1.26 · a range, so the file does not say what installs"}]}
+{"source":"fixtures/poisoned.requirements.txt","ecosystem":"pypi","packages":6,"direct":6,"transitive":0,"workspace":0,"integrity":0,"risk":79,"findings":[{"rule":"slopsquat","severity":"critical","package":"python-dateutils","version":"2.9.0","detail":"not in corpus · d=1 from \"python-dateutil\" · root-only, no parent"},{"rule":"slopsquat","severity":"critical","package":"requests-http","version":"1.0.2","detail":"not in corpus · d=2 from \"requests-html\" · root-only, no parent"},{"rule":"pinning","severity":"low","package":"flask","version":"","detail":"~=3.0 · capped at the major, still floats below the cap"},{"rule":"pinning","severity":"high","package":"numpy","version":"","detail":"no version specifier · resolves to whatever is newest at install time"},{"rule":"pinning","severity":"medium","package":"urllib3","version":"","detail":">=1.26 · a range, so the file does not say what installs"}]}
 ```
 
 ## The object
@@ -21,13 +37,13 @@ $ ./target/release/stranger scan --format json fixtures/poisoned.requirements.tx
 | field | type | what it is |
 |---|---|---|
 | `source` | string | the path as you gave it, not canonicalised |
-| `ecosystem` | string | `npm`, `pypi`, `crates.io` or `go`; `go` has no reader, so the first three appear |
+| `ecosystem` | string | `npm`, `pypi`, `crates.io` or `go`. All four appear — `go.mod` reads; what Go has no corpus for is the [detection rule](../detection/rule.md) |
 | `packages` | number | third-party packages; workspace members are excluded |
 | `direct` | number | named by a manifest in this repository |
 | `transitive` | number | `packages - direct` |
 | `workspace` | number | first-party entries set aside; 0 on a non-monorepo |
+| `integrity` | number | third-party entries that recorded an integrity field. **Presence, never correctness** — std ships no crypto, so no hash is ever computed. See [Limits](../limits.md) |
 | `risk` | number | 0–98; a band for the worst severity plus a term for volume |
-| `elapsed_ms` | number | wall time for this scan, as the tool measured it |
 | `findings` | array | worst rule first, then alphabetical by package within a rule |
 
 `workspace` is the one header number that cannot be rebuilt from the others.

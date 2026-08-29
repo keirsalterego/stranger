@@ -77,6 +77,7 @@ and `STDLIB.md`, and pointing `stranger` at a directory with no lockfile prints
 what it looked for and exits 0:
 
 ```console
+$ rm -rf /tmp/empty && mkdir -p /tmp/empty
 $ ./target/release/stranger scan /tmp/empty
 
   no lockfile in /tmp/empty

@@ -79,6 +79,8 @@ distinction. Different file, same idea, much less code.
 ## What it refuses
 
 ```console
+$ mkdir -p /tmp/v6
+$ printf "lockfileVersion: '6.0'\n\nimporters:\n  .: {}\n" > /tmp/v6/pnpm-lock.yaml
 $ ./target/release/stranger scan /tmp/v6/pnpm-lock.yaml
 stranger: /tmp/v6/pnpm-lock.yaml: lockfileVersion 6.0 is not supported; stranger reads 9. Run `pnpm install` with pnpm 9 or newer to upgrade the file.
 ```

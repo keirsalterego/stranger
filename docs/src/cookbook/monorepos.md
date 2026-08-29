@@ -127,6 +127,11 @@ the layouts where that is not true — a lockfile per app, or more than one
 ecosystem:
 
 ```console
+$ rm -rf /tmp/mono
+$ mkdir -p /tmp/mono/apps/web /tmp/mono/services/api /tmp/mono/node_modules/vendored
+$ cp fixtures/npm-xs.package-lock.json /tmp/mono/apps/web/package-lock.json
+$ cp fixtures/npm-xs.package-lock.json /tmp/mono/node_modules/vendored/package-lock.json
+$ cp fixtures/reqs-xs.requirements.txt /tmp/mono/services/api/requirements.txt
 $ find /tmp/mono -type f | sort
 /tmp/mono/apps/web/package-lock.json
 /tmp/mono/node_modules/vendored/package-lock.json
@@ -146,6 +151,22 @@ walking into it turns one scan into four hundred irrelevant ones.
 Each file found produces its own report block:
 
 ```console
+$ rm -rf /tmp/mixed && mkdir -p /tmp/mixed
+$ cp fixtures/poisoned.requirements.txt /tmp/mixed/requirements.txt
+$ cat > /tmp/mixed/package-lock.json <<'EOF'
+{
+  "name": "mixed",
+  "lockfileVersion": 3,
+  "packages": {
+    "": { "name": "mixed", "dependencies": { "expres": "4.18.2" } },
+    "node_modules/expres": {
+      "version": "4.18.2",
+      "resolved": "https://registry.npmjs.org/expres/-/expres-4.18.2.tgz",
+      "integrity": "sha512-AA"
+    }
+  }
+}
+EOF
 $ ./target/release/stranger scan /tmp/mixed
 
   package-lock.json        1 packages   (1 direct · 0 transitive)

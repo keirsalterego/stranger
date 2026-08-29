@@ -24,6 +24,8 @@ records a resolved version, so every entry is exactly pinned.
 **lockfileVersion 1**, by name:
 
 ```console
+$ mkdir -p /tmp/v1
+$ echo '{"lockfileVersion": 1, "dependencies": {}}' > /tmp/v1/package-lock.json
 $ ./target/release/stranger scan /tmp/v1
 stranger: /tmp/v1/package-lock.json: lockfileVersion 1 is not supported; stranger reads 2 and 3. Run `npm install` with npm 7 or newer to upgrade the file.
 ```
@@ -40,6 +42,8 @@ refused too.
 **A filename that is not one of the seven it knows:**
 
 ```console
+$ mkdir -p /tmp/renametest
+$ printf 'flask==3.0.0\n' > /tmp/renametest/requirements-dev.txt
 $ ./target/release/stranger scan /tmp/renametest/requirements-dev.txt
 stranger: requirements-dev.txt: not a lockfile stranger knows. It reads: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock, go.mod
 ```

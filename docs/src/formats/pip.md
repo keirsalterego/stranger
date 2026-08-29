@@ -147,9 +147,10 @@ python-dateutils
 ## Syntax errors carry a position
 
 ```console
+$ mkdir -p /tmp/bad
 $ printf 'flask[async>=3.0\n' > /tmp/bad/requirements.txt
 $ ./target/release/stranger scan /tmp/bad/requirements.txt
-stranger: `flask[async>=3.0` has an unclosed `[` in its extras at 1:1
+stranger: /tmp/bad/requirements.txt: `flask[async>=3.0` has an unclosed `[` in its extras at 1:1
 ```
 
 Line and column are 1-based, counted on the logical line. For a joined line the

@@ -67,23 +67,27 @@ only match across two blocks by coincidence.
 An empty `version` field in the JSON is how a consumer tells this rule's findings
 apart from the others.
 
-## Versions are compared for equality, never for order
+## Versions are compared for equality, but listed in order
 
-The list is sorted in byte order, not semver order, which shows:
+Whether two versions differ is the whole rule — it never asks which is newer. The
+*list* is sorted anyway, with `src/semver.rs`, because a human reads it:
 
 ```console
 $ ./target/release/stranger scan --format json fixtures/poisoned.package-lock.json | jq -r '.findings[] | select(.rule=="drift" and .package=="minimatch") | .detail'
-3 versions: 10.2.5, 3.1.2, 9.0.5
+3 versions: 3.1.2, 9.0.5, 10.2.5
 ```
 
-`10.2.5` sorts first because `1` sorts before `3`. The rule never asks which of
-two versions is newer, only whether they differ, so a semver comparator would buy
-nothing here except a wrong answer on the first `1.0.0-rc.1` it met.
+This page said the opposite for most of the weekend, and was quoting
+`10.2.5, 3.1.2, 9.0.5` to prove it — byte order, where `1` sorts before `3` and
+the newest release leads the list. That was true when it was written. It stopped
+being true when `drift.rs` started sorting with the comparator, and nothing
+noticed until the checker started running the block.
 
-`src/semver.rs` does exist and does implement precedence correctly, including the
-prerelease rules from section 11 that most implementations get wrong by accident.
-No rule calls it yet. When one needs "how far apart are these two versions", it
-is there.
+So `src/semver.rs` is called: `drift.rs` imports `Version` and sorts with it. It
+implements precedence including the prerelease rules from section 11 that most
+implementations get wrong by accident, build metadata is ignored for ordering as
+the spec requires, and a version it cannot parse sorts last rather than throwing
+the finding away.
 
 ## What it cannot see
 

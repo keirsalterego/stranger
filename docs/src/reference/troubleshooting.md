@@ -7,6 +7,7 @@ one of seven known names. A file renamed at the *front* still reads; one renamed
 the back does not.
 
 ```console
+$ rm -rf /tmp/project && mkdir -p /tmp/project
 $ ./target/release/stranger scan /tmp/project
 
   no lockfile in /tmp/project
@@ -46,6 +47,8 @@ red on the directories the tool has nothing to say about.
 ## "lockfileVersion 1 is not supported"
 
 ```console
+$ mkdir -p /tmp/v1
+$ echo '{"lockfileVersion": 1, "dependencies": {}}' > /tmp/v1/package-lock.json
 $ ./target/release/stranger scan /tmp/v1
 stranger: /tmp/v1/package-lock.json: lockfileVersion 1 is not supported; stranger reads 2 and 3. Run `npm install` with npm 7 or newer to upgrade the file.
 ```
@@ -57,6 +60,8 @@ and cannot be read the same way.
 ## "not a lockfile stranger knows"
 
 ```console
+$ mkdir -p /tmp/renametest
+$ printf 'flask==3.0.0\n' > /tmp/renametest/requirements-dev.txt
 $ ./target/release/stranger scan /tmp/renametest/requirements-dev.txt
 stranger: requirements-dev.txt: not a lockfile stranger knows. It reads: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock, go.mod
 ```
@@ -77,9 +82,10 @@ The file parsed as JSON and had a `lockfileVersion` of 2 or more, but no
 ## A syntax error with a line and column
 
 ```console
+$ mkdir -p /tmp/bad
 $ echo '{"lockfileVersion":3, "packages" 1}' > /tmp/bad/package-lock.json
 $ ./target/release/stranger scan /tmp/bad/package-lock.json
-stranger: expected ':' at 1:34
+stranger: /tmp/bad/package-lock.json: expected ':' at 1:34
 ```
 
 pip errors quote the fragment as well as the position:
@@ -87,7 +93,7 @@ pip errors quote the fragment as well as the position:
 ```console
 $ printf 'flask[async>=3.0\n' > /tmp/bad/requirements.txt
 $ ./target/release/stranger scan /tmp/bad/requirements.txt
-stranger: `flask[async>=3.0` has an unclosed `[` in its extras at 1:1
+stranger: /tmp/bad/requirements.txt: `flask[async>=3.0` has an unclosed `[` in its extras at 1:1
 ```
 
 Line and column are 1-based and the column counts characters, not bytes, so it

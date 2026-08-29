@@ -33,6 +33,7 @@ compiled as source, nothing executes, and the corpus is embedded with
 for and exits 0:
 
 ```console
+$ rm -rf /tmp/empty && mkdir -p /tmp/empty
 $ ./target/release/stranger scan /tmp/empty
 
   no lockfile in /tmp/empty
@@ -63,6 +64,8 @@ rule that silently does nothing.
 ## A filename it does not recognise
 
 ```console
+$ mkdir -p /tmp/renametest
+$ printf 'flask==3.0.0\n' > /tmp/renametest/requirements-dev.txt
 $ ./target/release/stranger scan /tmp/renametest/requirements-dev.txt
 stranger: requirements-dev.txt: not a lockfile stranger knows. It reads: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock, go.mod
 $ echo $?
