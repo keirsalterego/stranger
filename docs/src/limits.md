@@ -27,21 +27,40 @@ clause 3 is vacuous and the detection rule runs on two clauses. See
 [pip](formats/pip.md) and, for it costing a real false positive,
 [False positives](detection/false-positives.md).
 
-## Two formats, five rules, and not every pair is real
+## Six formats, five rules, and most pairs are not real
 
-`package-lock.json` at lockfileVersion 2 or 3, and `requirements.txt`. That is the
-whole list. The repository carries Cargo, poetry, uv and pnpm fixtures; none of
-them has a reader.
+`package-lock.json` (lockfileVersion 2 and 3), `pnpm-lock.yaml` (v9),
+`Cargo.lock` (v3 and v4), `poetry.lock`, `uv.lock`, `requirements.txt`. Four
+ecosystems, three parsers, one graph model.
 
-Of the five rules, only two can fire on both formats:
+The grid below is the useful limit, because most of it is empty. A rule that
+cannot fire on your ecosystem is not protecting you from anything:
 
-| rule | npm | pip |
-|---|---|---|
-| slopsquat | yes | yes, weakened |
-| install-script | yes | never — the format records nothing equivalent |
-| trivial | yes | effectively never — the name list is npm micro-packages |
-| drift | yes | not on a well-formed file |
-| pinning | never — every entry is exactly pinned | yes |
+| rule | npm | pnpm | cargo | poetry / uv | requirements.txt |
+|---|---|---|---|---|---|
+| slopsquat | yes | yes | registry crates only | yes | yes, weakened |
+| install-script | yes | never | never | never | never |
+| trivial | yes | yes | effectively never | effectively never | effectively never |
+| drift | yes | yes | yes | yes | not on a well-formed file |
+| pinning | never | never | never | never | yes |
+
+Four of the five never-cells are the same fact twice over. `install_script` is a
+field npm has and nobody else records — pnpm does not carry it, `Cargo.lock` says
+nothing about `build.rs`, and neither poetry nor uv notes that a package runs
+`setup.py`. The reader sets the flag to `false` and each one says so in its module
+docs, so a quiet report on those four formats means *not measured*, never *safe*.
+
+`trivial` is a hand-written list of npm micro-packages plus a predicate-shaped
+name heuristic. Nothing stops it running elsewhere and nothing makes it useful
+there; on `pnpm-l` it fires 23 times because pnpm packages *are* npm packages.
+
+`pinning` is the mirror image: every other format on this list records an exact
+version for every entry, so the rule has nothing to say and never says it.
+
+`slopsquat` on cargo is narrowed on purpose. A crates.io corpus can only speak
+about crates.io, so a package the lockfile marks as coming from git or a path
+is skipped rather than reported —
+[why that matters](detection/false-positives.md).
 
 A clean npm scan means: no name is absent-from-corpus-and-near-a-real-one-and-
 unvouched-for, nothing declares an install script, nothing appears at two
@@ -66,37 +85,40 @@ access to file sizes, line counts or export lists — none of that is in a lockf
 heuristic. `is-callable` and `is-docker` are both reported and neither is a
 one-liner. [Trivial packages](rules/trivial.md) has the argument.
 
-## Discovery is one directory deep
+## Discovery matches names, not contents
 
-`stranger scan <dir>` looks for exactly `package-lock.json` and `requirements.txt`
-directly inside `<dir>`. It does not recurse, on purpose — a walk that descends
-into `node_modules` and audits four hundred vendored lockfiles is worse than no
-walk.
-
-`src/walk.rs` implements the recursive version properly: a skip list for
-`node_modules`, `target`, `.venv` and nine more, a depth cap of 6, deterministic
-sorted order, and no symlink following. It has eight tests. It is not wired into
-the binary. Until it is, the fixtures directory in this repository scans as empty,
-because its lockfiles are all renamed:
+`stranger scan <dir>` recurses, but it finds a lockfile by its filename. The six
+names in `lock::KNOWN` are the whole list:
 
 ```console
-$ ./target/release/stranger scan fixtures
+$ ./target/release/stranger scan /tmp
 
-  no lockfile in fixtures
-  looked for: package-lock.json, requirements.txt
+  no lockfile in /tmp
+  looked for: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock
 ```
 
-Point at the file to scan a renamed one.
+The match is on the *end* of the filename, so a prefixed copy is still found —
+`poisoned.package-lock.json` and `npm-xl.package-lock.json` both scan, which is
+why the fixtures directory in this repository works. A file renamed at the other
+end does not: `requirements-dev.txt` and `deps.lock` are invisible to a directory
+scan, and nothing inspects contents to second-guess that. Point at such a file
+directly and the reader is chosen by the same suffix rule, so it stays invisible
+there too.
+
+The walk skips `node_modules`, `target`, `.venv` and nine more directories, caps at
+depth 6, sorts for determinism, and does not follow symlinks. Auditing four hundred
+vendored lockfiles belonging to other people is worse than auditing none, and
+`tests/cli.rs` asserts a lockfile inside `node_modules` is not picked up.
 
 ## Code that exists and is not used
 
-`src/toml.rs` is a TOML subset reader with 26 tests. `src/semver.rs` is a semver
-comparator with 13, including the prerelease precedence rules from section 11 that
-most implementations get wrong. `src/walk.rs` is above. None of the three is
-reachable from `main`.
+`src/semver.rs` is a semver comparator with 13 tests, including the prerelease
+precedence rules from section 11 that most implementations get wrong. Nothing
+calls it. [Version drift](rules/drift.md) compares version strings for equality,
+which is all that rule needs, and no other rule asks an ordering question yet.
 
-They are honest as libraries and they are not features. Nothing in this book
-describes behaviour they provide, because they do not provide any yet.
+It is honest as a library and it is not a feature. Nothing in this book describes
+behaviour it provides, because it does not provide any.
 
 ## Numbers that do not quite line up
 

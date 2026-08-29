@@ -2,18 +2,26 @@
 
 ## "no lockfile in ." on a project that has one
 
-Discovery looks for exactly `package-lock.json` or `requirements.txt`, directly in
-the directory you named, and does not recurse.
+Discovery recurses from the directory you named and matches filenames ending in
+one of six known names. A file renamed at the *front* still reads; one renamed at
+the back does not.
 
 ```console
-$ ./target/release/stranger scan fixtures
+$ ./target/release/stranger scan /tmp/project
 
-  no lockfile in fixtures
-  looked for: package-lock.json, requirements.txt
+  no lockfile in /tmp/project
+  looked for: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock
 ```
 
-The fixtures in this repository are all renamed, so the directory scans as empty.
-Point at the file:
+The usual cause is a name like `requirements-dev.txt`, which ends in `.txt` and
+not in `requirements.txt`. Nothing reads file contents to second-guess the name,
+so pointing straight at it does not help either — that is exit 2, "not a lockfile
+stranger knows". Copy or symlink it to a name in the list.
+
+The other cause is a lockfile inside `node_modules`, `target`, `.venv` or one of
+the nine other skipped directories, or deeper than six levels down.
+
+Point at a file to skip the walk:
 
 ```console
 $ ./target/release/stranger scan fixtures/npm-s.package-lock.json
@@ -49,14 +57,17 @@ and cannot be read the same way.
 ## "not a lockfile stranger knows"
 
 ```console
-$ ./target/release/stranger scan fixtures/cargo-s.Cargo.lock
-stranger: cargo-s.Cargo.lock: not a lockfile stranger knows. It reads: package-lock.json, requirements.txt
+$ ./target/release/stranger scan /tmp/renametest/requirements-dev.txt
+stranger: requirements-dev.txt: not a lockfile stranger knows. It reads: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock
 ```
 
-Two formats in this build. The error lists what it reads, and that list comes from
-the same constant discovery uses, so it cannot drift out of date. `Cargo.lock`,
-`poetry.lock`, `uv.lock` and `pnpm-lock.yaml` fixtures exist in the repository and
-none of them has a reader.
+Six formats in this build, and the error lists them from the same constant
+discovery uses, so the message cannot drift out of date the way this page did.
+
+You asserted the file was a lockfile and it does not match any name, so this is
+exit 2 rather than the exit 0 a directory scan gives. Renaming it to
+`requirements.txt` reads it — the name is the whole test, and nothing looks
+inside to confirm.
 
 ## "no `packages` map"
 

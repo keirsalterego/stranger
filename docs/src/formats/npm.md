@@ -114,11 +114,11 @@ treated as manifest declarations rather than as evidence.
 
 ## Discovery
 
-`stranger scan <dir>` looks for exactly `package-lock.json` and
-`requirements.txt`, directly in that directory. It does not recurse.
+`stranger scan <dir>` recurses, skipping `node_modules` and eleven other
+directories, and matches any filename ending in one of the six names it knows.
 
-Pointing at a file skips discovery, and the match there is on suffix, so a
-lockfile you have renamed still reads:
+Pointing at a file skips the walk, and the match there is the same suffix rule, so
+a lockfile you have renamed still reads:
 
 ```console
 $ ./target/release/stranger scan fixtures/npm-s.package-lock.json
