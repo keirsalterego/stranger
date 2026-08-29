@@ -22,7 +22,7 @@ $ ./target/release/stranger scan -v fixtures/poisoned.requirements.txt
      numpy                    no version specifier · resolves to whatever is newest at install time
      urllib3                  >=1.26 · a range, so the file does not say what installs
 
-  risk 64/100    28ms    third-party deps used to compute this: 0
+  risk 79/100    28ms    third-party deps used to compute this: 0
 ```
 
 The file behind that:

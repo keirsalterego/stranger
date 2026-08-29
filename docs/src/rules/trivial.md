@@ -14,7 +14,7 @@ $ ./target/release/stranger scan -v fixtures/npm-xs.package-lock.json
      has-symbols@1.1.0        predicate-shaped, resolves nothing · size not measured, see rule docs
      hasown@2.0.4             one expression, one publisher · inlining it removes an account from your build
 
-  risk 4/100    13ms    third-party deps used to compute this: 0
+  risk 9/100    13ms    third-party deps used to compute this: 0
 ```
 
 ## It does not measure triviality

@@ -19,7 +19,7 @@ $ ./target/release/stranger scan fixtures/poisoned.package-lock.json
 
   ⚠  VERSION DRIFT          55    same package at 2+ versions in one tree
 
-  risk 100/100    141ms    third-party deps used to compute this: 0
+  risk 81/100    141ms    third-party deps used to compute this: 0
 ```
 
 ## The header
@@ -45,7 +45,7 @@ $ ./target/release/stranger scan fixtures/npm-xl.package-lock.json
 
   ⚠  VERSION DRIFT          76    same package at 2+ versions in one tree
 
-  risk 100/100    392ms    third-party deps used to compute this: 0
+  risk 62/100    392ms    third-party deps used to compute this: 0
 ```
 
 The file holds 1,390 entries. 14 of them are your own code, so the tree you got
@@ -72,7 +72,7 @@ $ ./target/release/stranger scan -v fixtures/npm-xs.package-lock.json
      has-symbols@1.1.0        predicate-shaped, resolves nothing · size not measured, see rule docs
      hasown@2.0.4             one expression, one publisher · inlining it removes an account from your build
 
-  risk 4/100    13ms    third-party deps used to compute this: 0
+  risk 9/100    13ms    third-party deps used to compute this: 0
 ```
 
 `-q` drops the header and the risk line and prints findings only, which is the
@@ -151,14 +151,33 @@ string field will not.
 ## The footer
 
 ```text
-  risk 100/100    141ms    third-party deps used to compute this: 0
+  risk 81/100    141ms    third-party deps used to compute this: 0
 ```
 
-The risk number is severity weights summed and capped at 100: critical 25, high
-10, medium 3, low 1. It saturates easily — three criticals and three highs is
-already 105 — and it is not calibrated against anything, because there is nothing
-honest to calibrate it against. It exists so two scans of the same project can be
-compared. The findings are the output; the score is a handle.
+The risk number is a band for the worst severity present, plus position inside the
+band for how many findings share it:
+
+| worst finding | band |
+|---|---|
+| critical | 75–98 |
+| high | 50–73 |
+| medium | 25–48 |
+| low | 1–24 |
+| nothing | 0 |
+
+The band is the same question `--fail-on` asks, on purpose — the headline number
+and the gate should not disagree about what is serious. Volume saturates inside
+the band and never fills it, so a worse severity always outranks more of a lesser
+one, and there is always a worse tree than the one in front of you.
+
+It is not calibrated against anything, because there is nothing honest to
+calibrate it against. Two projects are comparable at the band; two scans of the
+same project are comparable outright. The findings are the output; the score is a
+handle.
+
+This was a sum of severity weights capped at 100 until the cap turned out to be
+doing all the work — nine of the sixteen fixtures scored exactly 100, including
+both `poisoned.package-lock.json` and the clean `npm-l` it was built from.
 
 The milliseconds are wall time for that run, measured by the tool. It moves
 around. `make bench` runs the largest fixture fifty times:

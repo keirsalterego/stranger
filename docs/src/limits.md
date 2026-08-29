@@ -127,10 +127,18 @@ is not recoverable from the other fields.
 
 ## The risk score is not a measurement
 
-Severity weights summed and capped at 100: critical 25, high 10, medium 3, low 1.
-It saturates on any real tree — every fixture here with more than one rule firing
-scores 100 — and it is not calibrated against anything. Comparing two scans of the
-same project is meaningful. Comparing two projects is not.
+A band for the worst severity present — critical 75, high 50, medium 25, low 1 —
+plus a saturating term for how many findings share it. It is not calibrated
+against anything, and there is nothing honest to calibrate it against. Two
+projects are comparable at the band and not below it. Two scans of the same
+project are comparable outright.
+
+Gate on `--fail-on`, which compares severities, and not on this number.
+
+It used to be the weights summed and capped at 100, which saturated on any real
+tree: nine of the sixteen fixtures here scored exactly 100, including both
+`poisoned.package-lock.json` and the clean `npm-l` it was built from. That is
+fixed, and the number is still a handle rather than a measurement.
 
 ## Parser details worth knowing
 

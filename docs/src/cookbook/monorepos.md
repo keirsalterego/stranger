@@ -40,7 +40,7 @@ $ ./target/release/stranger scan fixtures/npm-m.package-lock.json
 
   ⚠  VERSION DRIFT          20    same package at 2+ versions in one tree
 
-  risk 100/100    11ms    third-party deps used to compute this: 0
+  risk 58/100    11ms    third-party deps used to compute this: 0
 ```
 
 20 direct, because the dependencies a workspace member declares are dependencies
@@ -81,7 +81,10 @@ $ mkdir -p /tmp/c && cat > /tmp/c/package-lock.json <<'EOF'
     "": { "workspaces": ["apps/*"] },
     "apps/desktop": { "dependencies": { "expres": "^4.18.2" } },
     "node_modules/desktop": { "resolved": "apps/desktop", "link": true },
-    "node_modules/expres": { "version": "4.18.2" }
+    "node_modules/expres": {
+      "version": "4.18.2",
+      "resolved": "https://registry.npmjs.org/expres/-/expres-4.18.2.tgz"
+    }
   }
 }
 EOF
@@ -92,7 +95,7 @@ $ ./target/release/stranger scan /tmp/c
   ⚠  HALLUCINATION RISK     1
      expres@4.18.2            not in corpus · d=1 from "express" · root-only, no parent
 
-  risk 25/100    45ms    third-party deps used to compute this: 0
+  risk 77/100    45ms    third-party deps used to compute this: 0
 ```
 
 The workspace member declared the name and it is still reported. Put the same name
@@ -128,7 +131,7 @@ $ ./target/release/stranger scan /tmp/mixed
   ⚠  HALLUCINATION RISK     1
      expres@4.18.2            not in corpus · d=1 from "express" · root-only, no parent
 
-  risk 25/100    20ms    third-party deps used to compute this: 0
+  risk 77/100    20ms    third-party deps used to compute this: 0
 
 
   requirements.txt         6 packages   (6 direct · 0 transitive)
@@ -139,7 +142,7 @@ $ ./target/release/stranger scan /tmp/mixed
 
   ⚠  UNPINNED               3     no exact version recorded
 
-  risk 64/100    30ms    third-party deps used to compute this: 0
+  risk 79/100    30ms    third-party deps used to compute this: 0
 ```
 
 `--fail-on` compares against the worst severity across all of them. `--format

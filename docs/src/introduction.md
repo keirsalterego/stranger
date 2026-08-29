@@ -25,7 +25,7 @@ $ ./target/release/stranger scan fixtures/poisoned.package-lock.json
 
   ⚠  VERSION DRIFT          55    same package at 2+ versions in one tree
 
-  risk 100/100    141ms    third-party deps used to compute this: 0
+  risk 81/100    141ms    third-party deps used to compute this: 0
 ```
 
 Three planted names, three findings, no false positives. The critical rule lists

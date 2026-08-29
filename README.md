@@ -21,7 +21,7 @@ $ stranger scan fixtures/poisoned.package-lock.json
 
   ⚠  VERSION DRIFT          55    same package at 2+ versions in one tree
 
-  risk 100/100    143ms    third-party deps used to compute this: 0
+  risk 81/100    143ms    third-party deps used to compute this: 0
 ```
 
 Critical findings get their lines. The rest are a count and what the count means,
@@ -311,9 +311,11 @@ and it is still reported. That one is corpus coverage, which is the next limit.
 date looks exactly like a package that does not exist. The table above is, among
 other things, a measurement of how badly that ages.
 
-**The risk score is crude.** Severity weights, capped at 100, calibrated against
-nothing. It exists so `--fail-on` has something to compare and so a repeated scan
-shows movement. The findings are the output; the score is a handle.
+**The risk score is crude.** A band for the worst severity present — critical 75,
+high 50, medium 25, low 1 — plus a saturating term for how many findings share it,
+calibrated against nothing. Two projects are comparable at the band and not below
+it. `--fail-on` compares severities and never reads this number; gate on that.
+The findings are the output; the score is a handle.
 
 ## Layout
 

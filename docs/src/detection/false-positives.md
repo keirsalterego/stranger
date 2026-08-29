@@ -21,7 +21,7 @@ $ ./target/release/stranger scan fixtures/reqs-xs.requirements.txt
 
   ⚠  UNPINNED               12    no exact version recorded
 
-  risk 100/100    14ms    third-party deps used to compute this: 0
+  risk 77/100    14ms    third-party deps used to compute this: 0
 ```
 
 `tensorflow-gpu` is a real PyPI package. It is deprecated, which is why it is

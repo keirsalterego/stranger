@@ -83,7 +83,7 @@ $ ./target/release/stranger scan --fail-on high fixtures/poisoned.package-lock.j
 
   ⚠  VERSION DRIFT          55    same package at 2+ versions in one tree
 
-  risk 100/100    141ms    third-party deps used to compute this: 0
+  risk 81/100    141ms    third-party deps used to compute this: 0
 $ echo $?
 1
 ```
@@ -112,12 +112,14 @@ choose which mode you want.
 
 ## Do not gate on the risk score
 
-`risk` is severity weights summed and capped at 100, and it saturates on any real
-tree — every fixture here with more than one rule firing scores 100. It is not
-calibrated against anything. Comparing today's score with yesterday's on the same
-project is meaningful; comparing two projects is not, and a threshold on it would
-be a number pretending to be a measurement. `--fail-on` compares severities, which
-are at least defined.
+`risk` is a band for the worst severity plus a saturating term for volume, and it
+is not calibrated against anything. Comparing today's score with yesterday's on the
+same project is meaningful; comparing two projects is meaningful only at the band,
+and a threshold on the number would be a number pretending to be a measurement.
+
+`--fail-on` compares severities, which are at least defined, and it does not read
+`risk` at all. Gating on the band would be gating on `--fail-on` the long way
+round.
 
 ```console
 $ ./target/release/stranger scan --fail-on high fixtures/poisoned.package-lock.json; echo $?
