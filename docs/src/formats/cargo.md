@@ -12,7 +12,7 @@ $ ./target/release/stranger scan fixtures/cargo-m.Cargo.lock
 
   ⚠  VERSION DRIFT          70    same package at 2+ versions in one tree
 
-  risk 100/100    10ms    third-party deps used to compute this: 0
+  risk 77/100    10ms    third-party deps used to compute this: 0
 ```
 
 `ksni` is a real crate below the top 5,000 and is a false positive —
