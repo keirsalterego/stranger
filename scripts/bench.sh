@@ -10,7 +10,12 @@ BIN=target/release/stranger
 
 cargo build --release --locked 2>/dev/null
 
-echo "fixture: $FIXTURE ($(grep -c '"resolved"' "$FIXTURE" || true) resolved entries)"
+# The tool's own count, not a grep. `grep -c '"resolved"'` printed 1,383 here,
+# which is neither the 1,390 entries in the file nor the 1,376 third-party
+# packages the report counts — it was the number of lines carrying the field,
+# and it agreed with nothing else published about this fixture.
+COUNT=$("$BIN" scan --no-color "$FIXTURE" | awk '/ packages   \(/ {for (i = 1; i <= NF; i++) if ($i == "packages") { print $(i-1); exit }}')
+echo "fixture: $FIXTURE ($COUNT third-party packages)"
 echo "cpu: $(grep -m1 'model name' /proc/cpuinfo 2>/dev/null | cut -d: -f2- | sed 's/^ *//' || echo unknown)"
 if [ -r /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor ]; then
   echo "governor: $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor)"
