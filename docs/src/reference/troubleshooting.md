@@ -22,7 +22,7 @@ $ ./target/release/stranger scan fixtures/npm-s.package-lock.json
 
   ⚠  INSTALL SCRIPTS        3     arbitrary code at install time
 
-  ⚠  TRIVIAL                10    (2.5% of tree)
+  ⚠  TRIVIAL                10    (2.5% of third-party)
 
   ⚠  VERSION DRIFT          30    same package at 2+ versions in one tree
 
@@ -115,7 +115,7 @@ $ ./target/release/stranger scan -v fixtures/npm-xs.package-lock.json
 
   npm-xs.package-lock.json 37 packages   (1 direct · 36 transitive)
 
-  ⚠  TRIVIAL                4     (10.8% of tree)
+  ⚠  TRIVIAL                4     (10.8% of third-party)
      es-errors@1.3.0          one expression, one publisher · inlining it removes an account from your build
      gopd@1.2.0               one expression, one publisher · inlining it removes an account from your build
      has-symbols@1.1.0        predicate-shaped, resolves nothing · size not measured, see rule docs

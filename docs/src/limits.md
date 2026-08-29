@@ -100,12 +100,6 @@ describes behaviour they provide, because they do not provide any yet.
 
 ## Numbers that do not quite line up
 
-The trivial rule's percentage divides by every entry in the lockfile, including
-workspace members, while the header's package count excludes them. On `npm-m` that
-is 17/582 rather than 17/576, printed as 2.9% where the other denominator gives
-3.0%. Under a tenth of a point on every fixture here, and still two different
-denominators in one line of output.
-
 The JSON object has no workspace count, though the human report prints one, and it
 is not recoverable from the other fields.
 

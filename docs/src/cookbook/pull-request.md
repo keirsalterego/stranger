@@ -79,7 +79,7 @@ $ ./target/release/stranger scan --fail-on high fixtures/poisoned.package-lock.j
 
   ⚠  INSTALL SCRIPTS        3     arbitrary code at install time
 
-  ⚠  TRIVIAL                35    (4.6% of tree)
+  ⚠  TRIVIAL                35    (4.6% of third-party)
 
   ⚠  VERSION DRIFT          55    same package at 2+ versions in one tree
 

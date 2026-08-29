@@ -36,7 +36,7 @@ $ ./target/release/stranger scan fixtures/npm-m.package-lock.json
 
   ⚠  INSTALL SCRIPTS        4     arbitrary code at install time
 
-  ⚠  TRIVIAL                17    (2.9% of tree)
+  ⚠  TRIVIAL                17    (3.0% of third-party)
 
   ⚠  VERSION DRIFT          20    same package at 2+ versions in one tree
 

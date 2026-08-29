@@ -9,7 +9,7 @@ $ ./target/release/stranger scan fixtures/npm-xl.package-lock.json
 
   ⚠  INSTALL SCRIPTS        8     arbitrary code at install time
 
-  ⚠  TRIVIAL                29    (2.1% of tree)
+  ⚠  TRIVIAL                29    (2.1% of third-party)
 
   ⚠  VERSION DRIFT          76    same package at 2+ versions in one tree
 
@@ -127,7 +127,7 @@ $ ./target/release/stranger scan fixtures/npm-s.package-lock.json
 
   ⚠  INSTALL SCRIPTS        3     arbitrary code at install time
 
-  ⚠  TRIVIAL                10    (2.5% of tree)
+  ⚠  TRIVIAL                10    (2.5% of third-party)
 
   ⚠  VERSION DRIFT          30    same package at 2+ versions in one tree
 
