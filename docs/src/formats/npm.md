@@ -37,12 +37,16 @@ the worst possible output for an auditing tool.
 package-lock.json. **A file with a `lockfileVersion` but no `packages` map** is
 refused too.
 
-**Any other lockfile**, by filename:
+**A filename that is not one of the six it knows:**
 
 ```console
-$ ./target/release/stranger scan fixtures/cargo-s.Cargo.lock
-stranger: cargo-s.Cargo.lock: not a lockfile stranger knows. It reads: package-lock.json, requirements.txt
+$ ./target/release/stranger scan /tmp/renametest/requirements-dev.txt
+stranger: requirements-dev.txt: not a lockfile stranger knows. It reads: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock
 ```
+
+`Cargo.lock` was the example here until the Cargo reader landed and it started
+reading fine. The list in the message comes from the same constant discovery
+uses, so the message could not go stale — only this page could, and did.
 
 ## Keys are install paths, not names
 
