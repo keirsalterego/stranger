@@ -270,3 +270,47 @@ fn json_carries_the_workspace_count() {
         );
     }
 }
+
+/// `--fail-on` is the reason this is a CI gate rather than a report, so the
+/// property that matters is monotonicity: if a scan passes at some threshold it
+/// must pass at every stricter one. A gate that fails at `high` and passes at
+/// `medium` is worse than no gate, because the person who tightened it would
+/// have been told their tree got safer.
+///
+/// Checked across every fixture rather than the poisoned one, because the
+/// interesting cases are the trees whose worst finding is in the middle:
+/// `uv-m` and `cargo-l` top out at medium, `npm-xs` at low.
+#[test]
+fn fail_on_is_monotone_across_every_fixture() {
+    const LEVELS: [&str; 4] = ["low", "medium", "high", "critical"];
+
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures");
+    let mut checked = 0;
+
+    for entry in std::fs::read_dir(&dir).expect("fixtures/") {
+        let path = entry.expect("entry").path();
+        let name = path.file_name().unwrap().to_string_lossy().into_owned();
+        if name == "README.md" {
+            continue;
+        }
+
+        let failed: Vec<bool> = LEVELS
+            .iter()
+            .map(|level| {
+                let out = run(&["scan", "-q", "--fail-on", level, path.to_str().unwrap()]);
+                assert_ne!(out.status.code(), Some(2), "{name} at {level}: usage error");
+                out.status.code() == Some(1)
+            })
+            .collect();
+
+        // Once it stops failing it must not start again: `true`s form a prefix.
+        let first_pass = failed.iter().position(|f| !f).unwrap_or(LEVELS.len());
+        assert!(
+            failed[first_pass..].iter().all(|f| !f),
+            "{name}: fail-on is not monotone across {LEVELS:?} — got {failed:?}"
+        );
+        checked += 1;
+    }
+
+    assert!(checked >= 16, "expected every fixture, checked {checked}");
+}
