@@ -112,7 +112,7 @@ says nothing. The alternative is an error message on every piped invocation.
 $ ./target/release/stranger scan /tmp/empty
 
   no lockfile in /tmp/empty
-  looked for: package-lock.json, requirements.txt
+  looked for: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock
 
 $ echo $?
 0

@@ -36,7 +36,7 @@ for and exits 0:
 $ ./target/release/stranger scan /tmp/empty
 
   no lockfile in /tmp/empty
-  looked for: package-lock.json, requirements.txt
+  looked for: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock
 
 $ echo $?
 0
@@ -70,11 +70,10 @@ Pointing at a specific file you believe is a lockfile and being wrong is a usage
 error — exit 2. Scanning a directory that happens to hold nothing readable is not
 — exit 0. The difference is whether you asserted something.
 
-`Cargo.lock`, `poetry.lock`, `uv.lock` and `pnpm-lock.yaml` fixtures are all in
-the repository and none of them has a reader. A TOML subset parser
-(`src/toml.rs`), a semver comparator (`src/semver.rs`) and a directory walker
-(`src/walk.rs`) exist and are tested, and none of the three is wired into the
-binary yet.
+All six formats read, which is the point of this page: `Cargo.lock` needs no
+`cargo`, `uv.lock` needs no `uv`, and `pnpm-lock.yaml` needs no `pnpm` or Node.
+A semver comparator (`src/semver.rs`) exists and is tested and is not wired into
+the binary, because no rule has yet asked an ordering question.
 
 ## No network, checkable
 
