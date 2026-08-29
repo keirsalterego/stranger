@@ -59,7 +59,10 @@ OUT=deps-proof.txt
   echo
 
   echo "release binary: $(ls -l target/release/stranger | awk '{print $5}') bytes"
-  echo "  most of that is the 140,066-name corpus, compiled in with include_str!"
+  # Counted, not typed. This line said 140,066 for a day and a half, which is
+  # the npm list on its own — there are three, and the number a reader would
+  # check is the total.
+  echo "  most of that is the $(cat corpus/*.txt | wc -l | tr -d ' ')-name corpus, compiled in with include_str!"
   echo "  so the tool needs no network and no cache directory at runtime."
 } > "$OUT"
 
