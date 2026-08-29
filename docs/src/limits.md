@@ -105,10 +105,19 @@ scan, and nothing inspects contents to second-guess that. Point at such a file
 directly and the reader is chosen by the same suffix rule, so it stays invisible
 there too.
 
-The walk skips `node_modules`, `target`, `.venv` and nine more directories, caps at
-depth 6, sorts for determinism, and does not follow symlinks. Auditing four hundred
-vendored lockfiles belonging to other people is worse than auditing none, and
-`tests/cli.rs` asserts a lockfile inside `node_modules` is not picked up.
+`walk::SKIP` names thirteen directories the walk will not enter — `node_modules`,
+`.git`, `target`, `vendor`, `.venv`, `venv`, `__pycache__`, `.tox`,
+`.mypy_cache`, `.pytest_cache`, `dist`, `.next`, `.svelte-kit` — and every other
+dot-directory is skipped by a separate check, which is why the seven dotted names
+on that list are belt and braces. The walk caps at `MAX_DEPTH = 6`, sorts for
+determinism, and does not follow symlinks. Auditing four hundred vendored
+lockfiles belonging to other people is worse than auditing none, and
+`tests/cli.rs::a_directory_scan_skips_vendored_lockfiles` asserts a lockfile
+inside `node_modules` is not picked up.
+
+Depth 6 counts directories below the one you named: a lockfile six levels down is
+found, and one seven levels down is not. A `dist/` or `.cache/` you actually
+wanted audited has to be named as the scan path directly.
 
 ## Code that exists and is not used
 
@@ -122,8 +131,17 @@ behaviour it provides, because it does not provide any.
 
 ## Numbers that do not quite line up
 
-The JSON object has no workspace count, though the human report prints one, and it
-is not recoverable from the other fields.
+The human report prints `risk N/100` and 100 is not a score this tool can
+produce. The number is a band for the worst severity — critical is 75 — plus
+`24 * n / (n + 8)` for the count at that severity, and that term is below 24 for
+every `n`. So the real ceiling is 98, it takes 184 critical findings in one tree
+to reach it, and the worst fixture in this repository sits at 81. The `/100` is a
+denominator readers expect rather than one the arithmetic produces;
+[JSON output](using/json.md) documents the honest range, 0–98.
+
+The workspace count used to be the entry here — the human report printed it and
+the JSON object did not. It does now, as `workspace`, so a consumer no longer has
+to parse the header line to tell a monorepo from a flat project of the same size.
 
 ## The risk score is not a measurement
 
@@ -149,8 +167,19 @@ the lossy case is unreachable in practice rather than handled.
 Duplicate JSON object keys resolve last-one-wins, which RFC 8259 declines to
 specify.
 
-Nesting deeper than 128 levels is an error rather than a stack overflow. Real
-lockfiles nest about ten deep; the deepest thing in the largest fixture here is 7.
+Nesting deeper than 128 levels is an error rather than a stack overflow, and it
+carries a position:
+
+```text
+stranger: nesting deeper than 128 at 1:129
+```
+
+The margin is wider than that number suggests. Every `package-lock.json` fixture
+here nests to exactly 5 containers, `npm-xl` included — the root object, then
+`packages`, then one entry, then `peerDependenciesMeta`, then one peer name. npm
+writes a flat map keyed by install path rather than a tree, so the depth does not
+grow with the size of the project; `npm-xs` at 37 packages and `npm-xl` at 1,376
+nest identically.
 
 The pip reader does not follow `-r` includes and drops `--index-url` lines, which
 is the more interesting of the two omissions — an extra index is the

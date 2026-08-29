@@ -56,9 +56,17 @@ On an npm tree the same package would have had a chance: something real depends 
 `tensorflow-gpu`, and that edge would have suppressed the finding. On a flat file
 there is no edge to find.
 
-The fix is a different file rather than a better reader. `poetry.lock` and
-`uv.lock` both record the resolved graph and both are already in `fixtures/`;
-neither has a reader yet.
+The fix is a different file rather than a better reader, and both of those files
+read today. [`poetry.lock` and `uv.lock`](../formats/poetry-uv.md) record the
+resolved graph, so a Python project that keeps one of them gets three clauses
+where a `requirements.txt` project gets two. `poetry-m` scans as 233 packages,
+75 direct and 158 transitive; `uv-m` as 249, 91 direct and 158 transitive. Those
+transitive counts are clause 3's raw material, and on `reqs-xs` above the same
+column reads 0.
+
+This is not retroactive relief for `tensorflow-gpu`. That fixture is a
+`requirements.txt` and stays a two-clause scan; the point is that the format is
+the thing to change, not the reader.
 
 ## The nearest name can be wrong even when the verdict is right
 

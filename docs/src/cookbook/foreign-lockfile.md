@@ -41,9 +41,15 @@ parser.
 
 ## On a file, not a directory
 
-Directory discovery looks for exactly `package-lock.json` and `requirements.txt`,
-in exactly that directory. Pointing at a file skips discovery, and the format
-match there is on suffix, so an archived or renamed lockfile still reads:
+Point at the whole repository and discovery does the work: it walks six levels
+down, skipping `node_modules` and twelve other named directories, and picks up
+any of the six filenames in `lock::KNOWN` — `package-lock.json`,
+`pnpm-lock.yaml`, `Cargo.lock`, `requirements.txt`, `poetry.lock`, `uv.lock`.
+On a handover that is what you want, because you do not yet know which
+ecosystems are in there.
+
+Point at a single file and discovery is skipped entirely. The format is then
+chosen by the same suffix match, so an archived or renamed lockfile still reads:
 
 ```console
 $ ./target/release/stranger scan fixtures/poisoned.package-lock.json
