@@ -1,3 +1,5 @@
+![stranger — every dependency is a stranger](assets/banner.png)
+
 # stranger
 
 Every dependency is a stranger. This one reads your lockfile and tells you which
