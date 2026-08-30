@@ -100,6 +100,22 @@ def missing_tool(cmd):
     return None
 
 
+def missing_subject(cmd):
+    """A `~/…` path this command scans that is not on this machine.
+
+    The cookbook points stranger at `~/keir.is-a.dev`, the repository that
+    serves this book, because "I ran it on the site the docs hang off" is worth
+    more than another fixture. It is one checkout on one laptop. A CI runner
+    has no such directory and the block failed there with `no such file or
+    directory`, which says nothing about whether the book is stale — the same
+    class of fact as a missing `jq`, and skipped the same way.
+    """
+    for path in re.findall(r"~/\S+", cmd):
+        if not os.path.exists(os.path.expanduser(path)):
+            return path
+    return None
+
+
 def commands(src):
     """Walk one page, yielding (line number, command, expected output lines).
 
@@ -168,6 +184,10 @@ def check(page):
         tool = missing_tool(cmd)
         if tool:
             skipped.append((line_no, f"{cmd}   [no {tool} on this machine]"))
+            continue
+        subject = missing_subject(cmd)
+        if subject:
+            skipped.append((line_no, f"{cmd}   [no {subject} on this machine]"))
             continue
 
         run = subprocess.run(
