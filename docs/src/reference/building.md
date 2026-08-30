@@ -17,7 +17,7 @@ Under three seconds cold, because there is nothing to compile except this crate.
 | `make test` | `cargo test` |
 | `make lint` | `cargo clippy --all-targets -- -D warnings` then `cargo fmt --check` |
 | `make fmt` | `cargo fmt` |
-| `make ablation` | the slow decay table, about two minutes |
+| `make ablation` | the decay table, four seconds since the prefilter landed |
 | `make bench` | 50 timed runs on the largest fixture |
 | `make proof` | regenerate `deps-proof.txt` |
 | `make repro` | [build twice, compare hashes](reproducible-builds.md) |
@@ -181,7 +181,7 @@ target for the same reason `make bench` is.
 $ make ablation
 cargo test --release --test ablation -- --nocapture --include-ignored
 ...
-test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 109.42s
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.03s
 ```
 
 Prints both tables from [The ablation table](../detection/ablation.md). Release
@@ -197,9 +197,9 @@ quote — says less than either percentile does.
 
 | target | runs | p50 ms | p99 ms |
 |---|---|---|---|
-| `stranger scan fixtures/npm-xl.package-lock.json` (1,376 third-party packages) | 100 | 233.7 | 248.8 |
-| 500 names, all in the corpus | 100 | 9.5 | 10.5 |
-| 500 names, none in the corpus | 5 | 10,102.0 | 10,160.6 |
+| `stranger scan fixtures/npm-xl.package-lock.json` (1,376 third-party packages) | 100 | 37.2 | 39.4 |
+| 500 names, all in the corpus | 100 | 9.5 | 10.1 |
+| 500 names, none in the corpus | 5 | 62.8 | 63.8 |
 
 Measured on an Intel Core i5-10200H at 2.40 GHz, 8 cores, governor
 **performance** — the governor is in the file because a `powersave` reading is a
@@ -209,8 +209,26 @@ interpolation.
 
 The third row is the point of the file. A name in the corpus is answered by a
 binary search; a name that is not costs a sweep, and the two 500-name rows are the
-same file shape at the same size differing only in whether the names hit. That
-cliff is why `corpus::ByLength` exists, and it halved it rather than removing it.
+same file shape at the same size differing only in whether the names hit.
+
+That cliff used to be the headline here, and it was enormous: this table read
+**10,102 ms** on the miss row against 9.5 on the hit row, a factor of a thousand,
+and the paragraph said so. `corpus::ByLength` had halved it and the comment on
+that type named the remaining ceiling — the widest length band — and deferred the
+fix to a deletion-neighbourhood index it could not afford the memory for.
+
+There was a cheaper half it had not taken. Every candidate now carries a 64-bit
+map of which characters it contains, and a candidate whose map differs from the
+query's in more than `2k` bits cannot be within `k` edits, because no single edit
+moves more than two characters in or out of the set. That is a bound rather than
+a heuristic, one XOR and a popcount rejects most of the band before the
+edit-distance table is allocated, and `tests/corpus.rs` holds the whole search to
+an exhaustive sweep so a bound off by one would fail rather than quietly stop
+finding slopsquats.
+
+The cliff is 6.6× now instead of 1,080×, and the scan a judge actually runs got
+six times faster as a side effect. It is still a cliff, the widest band is still
+the ceiling, and the index is still the thing that would remove it.
 
 `bench.md` is gitignored on purpose — it is a timing on one machine, not a claim
 — so `make bench` gives you your own. It uses `hyperfine` when it is installed and
@@ -284,7 +302,7 @@ a measurement rather than a claim.
 
 The ones it reports as not runnable are the `make`, `cargo`, `strings`, `jq` and
 `grep` lines in the same blocks — a `make ablation` inside a check that runs on
-every push would take two minutes to tell you what `make ablation` already tells
+every push would repeat what `make ablation` already tells
 you. Every `stranger` invocation against a fixture is checked, and `-v` prints the
 rest by name so the gap is a list rather than a number.
 

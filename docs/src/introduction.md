@@ -27,7 +27,7 @@ $ ./target/release/stranger scan fixtures/poisoned.package-lock.json
 
   ·  UNPINNED               — no signal in this format
 
-  risk 81/100    99ms    third-party deps used to compute this: 0
+  risk 81/100    21ms    third-party deps used to compute this: 0
 ```
 
 Three planted names, three findings, no false positives. The critical rule lists

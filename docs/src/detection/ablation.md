@@ -135,13 +135,15 @@ than which clause is enabled.
 ## Running it
 
 The decay table scans the fixtures ten times against a 140,000-name corpus and
-takes about two minutes, so it is `#[ignore]`d and gets its own target:
+took about two minutes before the prefilter and takes four seconds now, and it
+keeps its own target because it is still not something to pay on every `cargo
+test`:
 
 ```console
 $ make ablation
 cargo test --release --test ablation -- --nocapture --include-ignored
 ...
-test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 109.42s
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.03s
 ```
 
 CI runs it on every push, because the README quotes its numbers. The fast table
