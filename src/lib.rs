@@ -8,6 +8,7 @@
 
 pub mod cli;
 pub mod corpus;
+pub mod diff;
 pub mod distance;
 pub mod error;
 pub mod json;

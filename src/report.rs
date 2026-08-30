@@ -257,8 +257,8 @@ fn style_of(sev: Severity) -> Style {
 /// the same tree have to produce the same bytes or a diff between them is
 /// noise, and `elapsed_ms` was the only field that changed run to run — which
 /// made `diff <(stranger scan a --format json) <(stranger scan b --format
-/// json)` , the recipe DECISIONS.md offers as the reason `stranger diff` was
-/// cut, print a difference every single time. The human report still prints
+/// json)` — the recipe DECISIONS.md used to offer as the reason `stranger diff`
+/// was cut — print a difference every single time. The human report still prints
 /// the timing, because "41ms" is half the pitch and a person reading a
 /// terminal is not diffing it.
 pub fn json(w: &mut impl Write, tree: &Tree, findings: &[Finding]) -> io::Result<()> {
@@ -342,6 +342,172 @@ pub fn string(w: &mut impl Write, s: &str) -> io::Result<()> {
         }
     }
     write!(w, "\"")
+}
+
+/// Rendering a diff.
+///
+/// Three blocks and then the findings, in that order, because a reviewer reads
+/// "what moved" before "what that means". The findings block is the one the
+/// exit code comes from, so it goes last and unabbreviated: a collapsed count
+/// is fine for a scan of somebody else's 1,247 packages and wrong for the four
+/// things this pull request did.
+pub fn diff_human(
+    w: &mut impl Write,
+    t: Term,
+    d: &crate::diff::Diff,
+    quiet: bool,
+) -> io::Result<()> {
+    if !quiet {
+        writeln!(w)?;
+        writeln!(
+            w,
+            "  {} -> {}",
+            term::sanitize(&d.old.source.display().to_string()),
+            term::sanitize(&d.new.source.display().to_string()),
+        )?;
+        writeln!(w)?;
+    }
+
+    if d.is_empty() {
+        if !quiet {
+            writeln!(w, "  no change to the dependency tree")?;
+        }
+        return Ok(());
+    }
+
+    for (heading, items) in [("added", &d.added), ("removed", &d.removed)] {
+        if items.is_empty() {
+            continue;
+        }
+        writeln!(
+            w,
+            "  {}  {}",
+            t.paint(Style::Dim, &term::pad(heading, 10)),
+            thousands(items.len() as u64)
+        )?;
+        for item in items {
+            writeln!(w, "     {}", term::sanitize(item))?;
+        }
+        writeln!(w)?;
+    }
+
+    if !d.changed.is_empty() {
+        writeln!(
+            w,
+            "  {}  {}",
+            t.paint(Style::Yellow, &term::pad("changed", 10)),
+            thousands(d.changed.len() as u64)
+        )?;
+        for (name, from, to) in &d.changed {
+            writeln!(
+                w,
+                "     {} {} -> {}",
+                term::pad(&term::sanitize(name), NAME_MIN),
+                term::sanitize(from),
+                term::sanitize(to)
+            )?;
+        }
+        writeln!(w)?;
+    }
+
+    // The half a reviewer is actually gating on. "resolved" is printed too,
+    // because a change that fixes three things and introduces one is a
+    // different conversation from one that only introduces one.
+    for (heading, items) in [("introduced", &d.introduced), ("resolved", &d.resolved)] {
+        if items.is_empty() {
+            continue;
+        }
+        // Red for what this change added and dim for what it fixed. The scan
+        // report colours by severity and nothing else, and a diff inventing a
+        // green would be a second colour vocabulary for one command.
+        let style = if heading == "introduced" {
+            Style::Red
+        } else {
+            Style::Dim
+        };
+        writeln!(
+            w,
+            "  {}  {} finding{}",
+            t.paint(style, &term::pad(heading, 10)),
+            thousands(items.len() as u64),
+            if items.len() == 1 { "" } else { "s" }
+        )?;
+        for f in items {
+            writeln!(
+                w,
+                "     {} {}",
+                term::pad(&label(f), NAME_MIN),
+                t.paint(style_of(f.severity), &term::sanitize(&f.detail))
+            )?;
+        }
+        writeln!(w)?;
+    }
+
+    if d.introduced.is_empty() && !quiet {
+        writeln!(w, "  this change introduced no findings")?;
+    }
+    Ok(())
+}
+
+/// One object, not a stream: a diff is one comparison however many packages it
+/// touched, so there is nothing to read a line at a time.
+///
+/// No timing field, for the reason `json` gives above — two runs over the same
+/// pair have to produce the same bytes.
+pub fn diff_json(w: &mut impl Write, d: &crate::diff::Diff) -> io::Result<()> {
+    write!(w, "{{\"old\":")?;
+    string(w, &d.old.source.display().to_string())?;
+    write!(w, ",\"new\":")?;
+    string(w, &d.new.source.display().to_string())?;
+
+    for (key, items) in [("added", &d.added), ("removed", &d.removed)] {
+        write!(w, ",\"{key}\":[")?;
+        for (i, item) in items.iter().enumerate() {
+            if i > 0 {
+                write!(w, ",")?;
+            }
+            string(w, item)?;
+        }
+        write!(w, "]")?;
+    }
+
+    write!(w, ",\"changed\":[")?;
+    for (i, (name, from, to)) in d.changed.iter().enumerate() {
+        if i > 0 {
+            write!(w, ",")?;
+        }
+        write!(w, "{{\"name\":")?;
+        string(w, name)?;
+        write!(w, ",\"from\":")?;
+        string(w, from)?;
+        write!(w, ",\"to\":")?;
+        string(w, to)?;
+        write!(w, "}}")?;
+    }
+    write!(w, "]")?;
+
+    for (key, items) in [("introduced", &d.introduced), ("resolved", &d.resolved)] {
+        write!(w, ",\"{key}\":[")?;
+        for (i, f) in items.iter().enumerate() {
+            if i > 0 {
+                write!(w, ",")?;
+            }
+            write!(w, "{{\"rule\":")?;
+            string(w, f.rule.id())?;
+            write!(w, ",\"severity\":")?;
+            string(w, &f.severity.to_string())?;
+            write!(w, ",\"package\":")?;
+            string(w, &f.package)?;
+            write!(w, ",\"version\":")?;
+            string(w, &f.version)?;
+            write!(w, ",\"detail\":")?;
+            string(w, &f.detail)?;
+            write!(w, "}}")?;
+        }
+        write!(w, "]")?;
+    }
+
+    writeln!(w, "}}")
 }
 
 #[cfg(test)]

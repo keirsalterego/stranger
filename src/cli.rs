@@ -14,6 +14,8 @@ stranger — audit a dependency tree without installing, resolving, or phoning a
 usage:
   stranger scan [path]           audit the lockfiles under `path` (default: .)
   stranger tree <pkg> [path]     what depends on `pkg`, and what `pkg` depends on
+  stranger diff <old> <new>      what changed between two lockfiles, and what
+                                 that change introduced
 
 options:
   --format <human|json>          output format (default: human); a directory
@@ -23,7 +25,10 @@ options:
                                  that could not see everything leads with one
                                  more object, the one with no `source` key
   --fail-on <level>              scan: exit 1 when a finding is at or above
-                                 low | medium | high | critical
+                                 low | medium | high | critical. On `diff` it
+                                 gates on what the change *introduced*, not on
+                                 the whole tree, so a pull request that adds
+                                 nothing passes on a tree `scan` would fail
   --depth <n>                    tree: how deep to print out-edges
                                  (default: 3; 0 for no limit)
   --no-color                     never colour output (NO_COLOR, CLICOLOR_FORCE)
@@ -59,6 +64,7 @@ pub enum Color {
 pub enum Command {
     Scan(Options),
     Tree(TreeOptions),
+    Diff(DiffOptions),
     Help,
     Version,
 }
@@ -84,6 +90,16 @@ pub struct TreeOptions {
     pub depth: usize,
 }
 
+#[derive(Debug)]
+pub struct DiffOptions {
+    pub old: PathBuf,
+    pub new: PathBuf,
+    pub format: Format,
+    pub fail_on: Option<Severity>,
+    pub color: Color,
+    pub quiet: bool,
+}
+
 pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Command> {
     let mut args = args.into_iter().skip(1);
 
@@ -96,8 +112,9 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Command> {
         "-V" | "--version" => Ok(Command::Version),
         "scan" => scan(args),
         "tree" => tree(args),
+        "diff" => diff(args),
         other => Err(Error::usage(format!(
-            "unknown command `{other}`; stranger takes `scan` or `tree`"
+            "unknown command `{other}`; stranger takes `scan`, `tree` or `diff`"
         ))),
     }
 }
@@ -295,4 +312,95 @@ fn tree<I: Iterator<Item = String>>(mut args: I) -> Result<Command> {
         ));
     }
     Ok(Command::Tree(opts))
+}
+
+fn diff<I: Iterator<Item = String>>(mut args: I) -> Result<Command> {
+    let mut opts = DiffOptions {
+        old: PathBuf::new(),
+        new: PathBuf::new(),
+        format: Format::Human,
+        fail_on: None,
+        color: Color::Auto,
+        quiet: false,
+    };
+    let mut positional = 0;
+    let mut only_paths = false;
+
+    while let Some(arg) = args.next() {
+        let (flag, inline) = if only_paths {
+            (arg.as_str(), None)
+        } else {
+            split_flag(&arg)
+        };
+        match flag {
+            "--" if !only_paths => only_paths = true,
+            "--format" => {
+                let v = value(inline, &mut args, "--format")?;
+                opts.format = match v.as_str() {
+                    "human" => Format::Human,
+                    "json" => Format::Json,
+                    other => {
+                        return Err(Error::usage(format!(
+                            "--format takes `human` or `json`, not `{other}`"
+                        )));
+                    }
+                };
+            }
+            "--fail-on" => {
+                let v = value(inline, &mut args, "--fail-on")?;
+                opts.fail_on = Some(Severity::parse(&v).ok_or_else(|| {
+                    Error::usage(format!(
+                        "--fail-on takes low, medium, high or critical, not `{v}`"
+                    ))
+                })?);
+            }
+            "--no-color" => {
+                no_value(inline, "--no-color")?;
+                opts.color = Color::Never;
+            }
+            "-q" | "--quiet" => {
+                no_value(inline, flag)?;
+                opts.quiet = true;
+            }
+            "-h" | "--help" => return Ok(Command::Help),
+            // Named, like tree does for the scan-only flags: both are real
+            // flags elsewhere and "unknown option" would send somebody hunting
+            // for a typo they did not make.
+            "--depth" => {
+                return Err(Error::usage(
+                    "`--depth` is a tree flag; diff walks no edges".to_string(),
+                ));
+            }
+            "-v" | "--verbose" => {
+                return Err(Error::usage(
+                    "`--verbose` is a scan flag; diff already lists every change".to_string(),
+                ));
+            }
+            other if other.starts_with('-') && !only_paths => {
+                return Err(Error::usage(format!("unknown option `{other}`")));
+            }
+            value => {
+                positional += 1;
+                match positional {
+                    1 => opts.old = PathBuf::from(value),
+                    2 => opts.new = PathBuf::from(value),
+                    _ => {
+                        return Err(Error::usage(format!(
+                            "diff takes exactly two lockfiles; got a third argument, `{value}`"
+                        )));
+                    }
+                }
+            }
+        }
+    }
+
+    // Both, or neither means anything. One lockfile has nothing to be
+    // different from, and defaulting the second to `.` would silently compare
+    // a file against a directory scan.
+    if opts.old.as_os_str().is_empty() || opts.new.as_os_str().is_empty() {
+        return Err(Error::usage(
+            "diff needs two lockfiles: stranger diff <old> <new>",
+        ));
+    }
+    Ok(Command::Diff(opts))
 }

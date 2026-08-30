@@ -9,7 +9,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Instant;
 
-use stranger::cli::{self, Color, Command, Format, Options, TreeOptions};
+use stranger::cli::{self, Color, Command, DiffOptions, Format, Options, TreeOptions};
 use stranger::error::{Error, Result};
 use stranger::lock;
 use stranger::report;
@@ -80,6 +80,7 @@ fn run() -> Result<ExitCode> {
         }
         Command::Scan(o) => o,
         Command::Tree(o) => return tree(o),
+        Command::Diff(o) => return diff(o),
     };
 
     let walk = discover(&opts.path)?;
@@ -342,6 +343,37 @@ fn skipped(
 /// corpus, which is exactly the part this does not do. Reading sixteen fixtures
 /// takes long enough to notice and not long enough to thread, and reading them
 /// in path order means the output is in path order for free.
+/// `diff` takes two files and never a directory, so there is no walk and no
+/// blind-spot preamble: both paths were named by the caller, and a path that
+/// does not open is an error rather than a gap in a search.
+///
+/// The exit code gates on what the change *introduced*. A tree that was
+/// already failing `scan --fail-on high` and did not get worse exits 0 here,
+/// which is the whole reason this command exists as something other than two
+/// scans.
+fn diff(opts: DiffOptions) -> Result<ExitCode> {
+    let d = stranger::diff::compare(&opts.old, &opts.new)?;
+    let term = Term::detect(matches!(opts.color, Color::Never));
+    let stdout = io::stdout();
+    let mut out = stdout.lock();
+
+    match opts.format {
+        Format::Human => report::diff_human(&mut out, term, &d, opts.quiet),
+        Format::Json => report::diff_json(&mut out, &d),
+    }
+    .map_err(|e| Error::io("stdout", e))?;
+
+    let failed = match (opts.fail_on, d.worst()) {
+        (Some(threshold), Some(worst)) => worst >= threshold,
+        _ => false,
+    };
+    Ok(if failed {
+        ExitCode::from(1)
+    } else {
+        ExitCode::SUCCESS
+    })
+}
+
 fn tree(opts: TreeOptions) -> Result<ExitCode> {
     let walk = discover(&opts.path)?;
     let term = Term::detect(matches!(opts.color, Color::Never));
