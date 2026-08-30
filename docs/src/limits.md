@@ -34,7 +34,7 @@ has no graph rather than reporting the in-degree 0 it would find there.
 
 ## Seven formats, five rules, and most pairs are not real
 
-`package-lock.json` (lockfileVersion 2 and 3), `pnpm-lock.yaml` (v9),
+`package-lock.json` (lockfileVersion 2 and 3), `pnpm-lock.yaml` (v9 and v6),
 `Cargo.lock` (v3 and v4), `poetry.lock`, `uv.lock`, `requirements.txt`,
 `go.mod`. Four ecosystems, three shared parsers — JSON, YAML, TOML — with
 `requirements.txt` and `go.mod` reading their own lines, and one graph model.

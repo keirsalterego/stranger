@@ -200,7 +200,7 @@ question `tree` answers is "where is it", and `lodahs` really is in both:
 ```console
 $ ./target/release/stranger tree lodashh fixtures/
 
-  no package named `lodashh` in the 19 lockfiles under fixtures/
+  no package named `lodashh` in the 20 lockfiles under fixtures/
 
   close names that are there:
      lodash                   d=1 · fixtures/npm-s.package-lock.json

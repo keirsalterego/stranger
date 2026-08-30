@@ -1,6 +1,6 @@
 # pnpm
 
-`pnpm-lock.yaml`, lockfileVersion 9.
+`pnpm-lock.yaml`, lockfileVersion 9 and 6.
 
 ```console
 $ ./target/release/stranger scan fixtures/pnpm-l.pnpm-lock.yaml
@@ -63,38 +63,100 @@ resolve and that scoped names survive.
 
 ## What the format does not record
 
-**Install scripts.** lockfileVersion 6 had `requiresBuild`. Version 9 dropped it,
-and this fixture has nothing equivalent. `hasBin: true` appears 42 times and is
-**not** a substitute — it means the package ships a `bin` to symlink, not that code
-runs at install time. Mapping one to the other would put 42 High findings in the
-report, every one invented. `install_script` is false for every package here, so
-[install scripts](../rules/install-scripts.md) says nothing about a pnpm tree, and
-that silence means *not measured*.
+Everything in this section is about **version 9**. Version 6 records all three
+and is read for all three, which is the odd part: the newer file is the one that
+tells you less.
+
+**Install scripts.** Version 9 dropped `requiresBuild` and did not replace it.
+`hasBin: true` appears 42 times in this fixture and is **not** a substitute — it
+means the package ships a `bin` to symlink, not that code runs at install time.
+Mapping one to the other would put 42 High findings in the report, every one
+invented. So `install_script` is false for every package in a v9 file and
+[install scripts](../rules/install-scripts.md) says nothing about that tree, and
+that silence means *not measured* rather than *nothing found*.
 
 **Dev-only packages.** pnpm 9 records dev-ness on the importer's manifest, not on
 the package, and does not mark the transitive closure. `dev` is false throughout
 rather than guessed at with a graph walk.
 
-## There are no first-party packages, by construction
+**First-party packages.** A v9 workspace member lives in `importers` and never in
+`packages`, and pnpm writes its dependents' references to it as `link:../name`,
+which resolves to no package entry. So `first_party` is false everywhere in a v9
+file for want of anything to be true about, and the header prints no `workspace`
+count — where the [npm reader](npm.md) has to work for the same distinction.
 
-A workspace member lives in `importers` and never in `packages`, and pnpm writes
-its dependents' references to it as `link:../name`, which resolves to no package
-entry. So `first_party` is false everywhere and the header prints no `workspace`
-count — where the [npm reader](npm.md) has to work for exactly the same
-distinction. Different file, same idea, much less code.
+## Version 6 is the same file with two sections fused
+
+pnpm 8 wrote it, and it is still on disk in a great many repositories — one of
+the four `pnpm-lock.yaml` files on the machine this was written on. The fixture
+is mongodb/mongo's own lockfile, taken as found:
+
+```console
+$ ./target/release/stranger scan fixtures/pnpm-v6.pnpm-lock.yaml
+
+  pnpm-v6.pnpm-lock.yaml   89 packages   (7 direct · 82 transitive · 1 workspace)
+
+  ⚠  TRIVIAL                2     (2.2% of third-party)
+
+  ⚠  VERSION DRIFT          2     same package at 2+ versions in one tree
+
+  ·  UNPINNED               — no signal in this format
+
+  risk 29/100    <ms>    third-party deps used to compute this: 0
+```
+
+Four differences, and the reader is otherwise the v9 reader:
+
+- **No `snapshots` section.** A `packages` entry carries its own resolved
+  `dependencies`, so the tarball list and the instance list are one section.
+- **Keys start with `/`**, and the peer suffix rides on the `packages` key
+  rather than on a separate snapshot key. Two entries for one tarball at
+  different peers collapse to the single `Package` v9 would have written, which
+  is what keeps a package count comparable across the two versions.
+- **A single project writes its manifest at the top level** and no `importers`
+  at all, so the document itself is the one importer.
+- **It records `requiresBuild`, `dev`, and local packages**, all three of which
+  v9 gave up.
+
+That last one has teeth. A `file:` dependency gets a real `packages` entry keyed
+by its path, with its actual name in a `name` field because the key has no
+version to carry one:
+
+```yaml
+  file:buildscripts/eslint-plugin-mongodb:
+    resolution: {directory: buildscripts/eslint-plugin-mongodb, type: directory}
+    name: eslint-plugin-mongodb
+    dev: false
+```
+
+Read literally, that audits the project's own code as a stranger under the name
+`file:buildscripts/eslint-plugin-mongodb`, and `stranger tree` could not find it
+under the name its own repository uses. Taking the `name` field and setting
+`first_party` fixes both, and is the same call the [npm reader](npm.md) makes
+about a workspace key — which is why the header above says `1 workspace`:
+
+```console
+$ ./target/release/stranger tree eslint-plugin-mongodb fixtures/pnpm-v6.pnpm-lock.yaml
+
+  fixtures/pnpm-v6.pnpm-lock.yaml   npm · 89 packages
+
+  eslint-plugin-mongodb   file:buildscripts/eslint-plugin-mongodb
+     workspace member — your own code, not a stranger
+```
 
 ## What it refuses
 
 ```console
-$ mkdir -p /tmp/v6
-$ printf "lockfileVersion: '6.0'\n\nimporters:\n  .: {}\n" > /tmp/v6/pnpm-lock.yaml
-$ ./target/release/stranger scan /tmp/v6/pnpm-lock.yaml
-stranger: /tmp/v6/pnpm-lock.yaml: lockfileVersion 6.0 is not supported; stranger reads 9. Run `pnpm install` with pnpm 9 or newer to upgrade the file.
+$ mkdir -p /tmp/v5
+$ printf "lockfileVersion: '5.4'\n" > /tmp/v5/pnpm-lock.yaml
+$ ./target/release/stranger scan /tmp/v5/pnpm-lock.yaml
+stranger: /tmp/v5/pnpm-lock.yaml: lockfileVersion 5.4 is not supported; stranger reads 9 and 6. Run `pnpm install` with pnpm 8 or newer to upgrade the file.
 ```
 
-Version 6 and below have no `snapshots` section at all, so this reader would find
-no edges and report a tree in which nothing depends on anything. Refusing by name
-beats that.
+Version 5 and below key their packages `/name/version` rather than
+`/name@version`. The last `@` in a scoped key is then part of the name and there
+is no version to find, so a reader that guessed would split every scoped name in
+the wrong place. Refusing by name beats that.
 
 The version arrives as the string `"9.0"`, because pnpm quotes it and
 [the YAML subset](../decisions.md) types exactly two tokens — `true` and `false` —

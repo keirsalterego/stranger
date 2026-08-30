@@ -384,6 +384,15 @@ dev-dependencies or optional ones. So `install_script`, `dev` and `optional` are
 `false` on every crate, and that is a blank rather than a measurement. Guessing
 from the name (`-sys`, say) would turn a blank into a confident wrong answer.
 
+**pnpm 9 dropped the install-script field; pnpm 6 has it.** `requiresBuild`
+exists at lockfileVersion 6 and not at 9, so `stranger` reports install scripts
+on a v6 file and says *no signal in this format* on a v9 one. Both are
+`pnpm-lock.yaml`, which is why the reader answers that question and the filename
+does not. `hasBin: true` appears 42 times in the v9 fixture and is not a
+substitute — it means the package ships a `bin` to symlink, not that code runs
+at install time, and mapping one to the other would put 42 invented High
+findings in the report. The newer file is the one that can hide a build step.
+
 **No install-script signal on Python at all.** Neither `poetry.lock` nor
 `uv.lock` records whether a package runs code at install time, and an sdist with
 no wheel is suggestive rather than the same claim. So `install_script` is `false`
