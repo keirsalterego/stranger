@@ -4,14 +4,14 @@ Same commit, same toolchain, two different directories, one binary.
 
 ```console
 $ make repro
-commit:  bcce95b626dbe40ff4ea7f8552a8e87e9aef9eb7
+commit:  9d2e472a46bbac0c6b92b217539c03a84c56379f
 rustc:   rustc 1.98.0 (88d9e12ae 2026-08-18)
 epoch:   1787940000
 
-build A  /tmp/stranger-repro.231289/a
-         9a88f48d3273c71fdc2713635d0a3041b8ef349ef61b6e2bf1a48aecf104f95b
-build B  /tmp/stranger-repro.231289/b-with-a-deliberately-longer-name
-         9a88f48d3273c71fdc2713635d0a3041b8ef349ef61b6e2bf1a48aecf104f95b
+build A  /tmp/stranger-repro.311450/a
+         4400252c85f11eef5202d940140d9ef493e51d94fc97428fada7cad03c8c0d08
+build B  /tmp/stranger-repro.311450/b-with-a-deliberately-longer-name
+         4400252c85f11eef5202d940140d9ef493e51d94fc97428fada7cad03c8c0d08
 
 MATCH — byte-identical across two directories
 ```
