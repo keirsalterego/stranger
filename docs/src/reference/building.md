@@ -30,7 +30,7 @@ Under three seconds cold, because there is nothing to compile except this crate.
 $ make test
 ```
 
-401 tests across 22 files, plus 15 unit tests inside `src/`. Five are
+405 tests across 22 files, plus 15 unit tests inside `src/`. Five are
 `#[ignore]`d because they are slow — the corpus-decay ablation, the
 false-positive-by-length sweep, two deep fuzz campaigns and the JSON differential
 run — and each has a `make` target or a script beside it.
@@ -40,7 +40,7 @@ rather than remembered. They went stale twice before that was written down.
 
 | file | tests | what it covers |
 |---|---|---|
-| `tests/cli.rs` | 46 | exit codes, `-q`, `-v`, blind spots, the hostile fixture, and no escapes down a pipe |
+| `tests/cli.rs` | 47 | exit codes, `-q`, `-v`, blind spots, a flag borrowed from a sibling command, and no escapes down a pipe |
 | `tests/yaml.rs` | 36 | the subset, literal block scalars, the flow indicators that used to invent a key, and a linearity bound on flow collections |
 | `tests/toml.rs` | 34 | the accepted subset, every construct refused with a position, and the header depth that used to abort in `Drop` |
 | `tests/json_conformance.rs` | 30 | RFC 8259 clause by clause, each test citing its section |
@@ -51,7 +51,7 @@ rather than remembered. They went stale twice before that was written down.
 | `tests/term.rs` | 18 | the four-input colour decision table, column widths, control-character replacement |
 | `tests/tree.rs` | 17 | in-degree, out-edges, depth, near names, and the flags a reader set |
 | `tests/json.rs` | 17 | malformed input, surrogate pairs, deep nesting, error positions |
-| `tests/yarn.rs` | 16 | specifier-keyed edges, the nested blocks an entry carries, Berry refused by name |
+| `tests/yarn.rs` | 19 | specifier-keyed edges, the nested blocks an entry carries, Berry and the headerless empty file refused by name |
 | `tests/pypi.rs` | 16 | poetry and uv, and clause 3's share under corpus decay |
 | `tests/cargo.rs` | 14 | the three shapes of a dependency string, workspace members, git origins |
 | `tests/rules.rs` | 12 | all five rules against the fixtures |
@@ -109,6 +109,13 @@ Two of them had a comment beside the bug asserting the case did not arise. The
 go.mod one said *nothing in the wild does this*, and the counterexample was
 already on the disk.
 
+The sweep looks for one failure and the [yarn reader](../formats/yarn.md) had
+the opposite one, which no amount of sweeping would have found: an empty file
+read as a clean tree of nothing rather than being refused. A pass that only asks
+*did the reader get through it* scores that as success. It was caught by feeding
+every reader a zero-byte file of its own name and noticing that seven said
+*this is not the lockfile its name claims* and one said `risk 0/100`.
+
 ### Getting through is not the same as being right
 
 That first pass catches a refusal and misses the worse failure: a reader that
@@ -124,13 +131,28 @@ each format's spec rather than from `src/`:
 | `Cargo.lock` | `[[package]]` blocks; one with no `source` is a workspace member |
 | `package-lock.json` | entries under `packages`, minus the root, workspace directories and links |
 | `yarn.lock` | entry headers, the only lines at column 0 |
+| `go.mod` | paths under `require`, in both spellings, and under no other directive |
+| `poetry.lock` | `[[package]]` blocks — poetry writes none for the root, so all of them |
+| `uv.lock` | `[[package]]` blocks, minus the one whose `source` is not a registry |
 | the [drift rule](../rules/drift.md) | names holding more than one version, recomputed from the raw file |
 
 Python's own `json` module doing the npm parse is the point of that second row:
 the hand-rolled [`src/json.rs`](stdlib.md) and a mature implementation have to
-agree on a hundred real files, or one of them is wrong.
+agree on a hundred real files, or one of them is wrong. The three TOML rows are
+the same argument aimed at [`src/toml.rs`](../formats/poetry-uv.md).
 
-1,206 lockfiles crosschecked, 0 mismatches.
+1,360 lockfiles crosschecked, 0 mismatches: 1,058 `Cargo.lock`, 146 `go.mod`,
+107 `package-lock.json`, 41 `yarn.lock`, and four each of `poetry.lock` and
+`uv.lock`. Six of the eight readers now have a second opinion; pnpm and
+requirements.txt do not, and that is the honest gap in this check.
+
+Writing the oracles found a bug in an oracle rather than in a reader, which is
+the outcome that makes the exercise worth doing at all. Poetry puts
+`source = ["Cython (>=3.0.11,<3.1.0)"]` inside one lxml block's
+`[package.extras]`, and the first draft — a regex over the whole block, the same
+shape the `Cargo.lock` row uses — read that as the package's own `source` and
+called lxml a local project. The reader was right and the second opinion was
+wrong. Blocks are cut at their first nested table header now.
 
 The sweep is not in `cargo test` and cannot be: its corpus is whatever happens
 to be on the machine, so it is neither fixed nor portable, and a test that
@@ -226,7 +248,7 @@ acquired a dependency fails instead of quietly succeeding.
 ```console
 $ make docs
 checked 37 pages, no broken relative links
-checked 37 pages: 126 commands reproduce, 48 not runnable here (`-v` lists them)
+checked 37 pages: 127 commands reproduce, 48 not runnable here (`-v` lists them)
 ```
 
 Two checks, both standard-library-only Python, neither of which ever enters

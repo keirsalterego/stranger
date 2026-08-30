@@ -15,6 +15,12 @@ rules written against each format's spec rather than against `src/`:
     package-lock.json   entries under `packages`, minus the root and minus
                         anything that is a workspace directory or a `link`
     yarn.lock           entry headers, which are the only lines at column 0
+    go.mod              module paths inside `require`, in both the block and
+                        the one-line spelling, and no other directive
+    poetry.lock         [[package]] blocks; poetry writes no block for the
+                        root project, so every one of them is a dependency
+    uv.lock             [[package]] blocks; one whose `source` is not a
+                        registry is the local project rather than a dependency
     drift rule          names holding more than one version, recomputed from
                         the raw file rather than from the reader's tree
 
@@ -35,7 +41,7 @@ import sys
 from collections import defaultdict
 
 BIN = "./target/release/stranger"
-NAMES = ("Cargo.lock", "package-lock.json", "yarn.lock")
+NAMES = ("Cargo.lock", "package-lock.json", "yarn.lock", "go.mod", "poetry.lock", "uv.lock")
 
 
 def scan(path):
@@ -121,7 +127,107 @@ def yarn(text):
     return {"packages": n} if n else None
 
 
-ORACLES = {"Cargo.lock": cargo, "package-lock.json": npm, "yarn.lock": yarn}
+def gomod(text):
+    """Module paths under `require`, and nothing under any other directive.
+
+    Both spellings are in the wild: a `require (` block holding one path per
+    line, and a bare `require path version` on its own. `exclude`, `replace`
+    and `retract` blocks look identical and are not dependencies, so the
+    directive that opened the block is what decides.
+    """
+    n = 0
+    block = None
+    for raw in text.splitlines():
+        line = raw.split("//")[0].strip()
+        if not line:
+            continue
+        if block is not None:
+            if line == ")":
+                block = None
+            elif block == "require":
+                n += 1
+            continue
+        head = line.split()[0]
+        if line.endswith("("):
+            block = head
+        elif head == "require":
+            n += 1
+    return {"packages": n} if n else None
+
+
+def _blocks(text):
+    """`[[package]]` bodies, each cut at its first nested table header.
+
+    Cutting matters: poetry writes `source = ["Cython (>=3.0.11,<3.1.0)"]`
+    inside one lxml block's `[package.extras]`, and a regex run over the whole
+    block reads that as the package's own source and calls lxml a local
+    project. The block's own keys are the ones before the first `[`.
+    """
+    for b in text.split("[[package]]")[1:]:
+        head = []
+        for line in b.splitlines():
+            if line.startswith("["):
+                break
+            head.append(line)
+        yield "\n".join(head)
+
+
+def _count(blocks, is_local):
+    versions = defaultdict(set)
+    third = local = 0
+    for b in blocks:
+        if is_local(b):
+            local += 1
+            continue
+        third += 1
+        n = re.search(r'^name\s*=\s*"([^"]*)"', b, re.M)
+        v = re.search(r'^version\s*=\s*"([^"]*)"', b, re.M)
+        if n and v:
+            versions[n.group(1)].add(v.group(1))
+    return {
+        "packages": third,
+        "workspace": local,
+        "drift": {k: len(s) for k, s in versions.items() if len(s) > 1},
+    }
+
+
+def poetry(text):
+    """Every `[[package]]` block, because poetry writes no block for the root.
+
+    Unlike uv and Cargo there is nothing to subtract: the project under audit
+    does not appear in its own lockfile, so `workspace` is always zero and a
+    reader reporting otherwise is inventing a package.
+    """
+    blocks = list(_blocks(text))
+    return _count(blocks, lambda b: False) if blocks else None
+
+
+def uv(text):
+    """`[[package]]` blocks, minus the local project.
+
+    uv *does* write the project into its own lockfile, with an `editable` or
+    `virtual` source where a dependency has a registry. That block is the
+    thing being audited rather than a dependency of it.
+    """
+    blocks = list(_blocks(text))
+    if not blocks:
+        return None
+
+    def local(b):
+        m = re.search(r"^source\s*=\s*(.*)$", b, re.M)
+        return m is not None and "registry" not in m.group(1)
+
+    return _count(blocks, local)
+
+
+ORACLES = {
+    "Cargo.lock": cargo,
+    "package-lock.json": npm,
+    "yarn.lock": yarn,
+    "go.mod": gomod,
+    "poetry.lock": poetry,
+    "uv.lock": uv,
+}
 
 
 def main(roots):
