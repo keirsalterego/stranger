@@ -1,5 +1,5 @@
 stranger — dependency proof
-generated 2026-08-30T14:47:17Z by scripts/proof.sh
+generated 2026-08-30T15:15:14Z by scripts/proof.sh
 
 rustc: rustc 1.98.0 (88d9e12ae 2026-08-18)
 cargo: cargo 1.98.0 (797e8a9bc 2026-08-05)
@@ -30,6 +30,6 @@ src/main.rs: forbidden
 $ grep -rnE "\bunsafe\s*(\{|fn|impl|trait|extern)" src/
 (no output — zero unsafe blocks, functions, impls or externs)
 
-release binary: 4185728 bytes on Linux x86_64
+release binary: 4187160 bytes on Linux x86_64
   most of that is the 160066-name corpus, compiled in with include_str!
   so the tool needs no network and no cache directory at runtime.

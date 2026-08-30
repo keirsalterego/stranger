@@ -481,6 +481,30 @@ Refused rather than handled: making it work end to end means `OsStr` through the
 walker, the readers and the report, which is a real change for a case no lockfile
 in the wild has produced. Named here rather than left as a surprise.
 
+**A `requirements.txt` line without a name is skipped, not counted.** Four kinds:
+`-r other.txt` and `-c constraints.txt` includes, which are not followed because
+one file's audit should not quietly become a directory crawl; `-e` editables;
+`--index-url` and `--extra-index-url`; and any requirement that is a URL, a VCS
+reference or a path — `git+https://…`, `./vendor/pkg-1.0.tar.gz` — because there
+is no project name in one for the corpus to be asked about. They are dropped
+rather than refused because refusing the file over one of them used to take every
+other requirement in it down as well.
+
+The `--extra-index-url` case is the one that costs something real: an extra index
+is the dependency-confusion vector, and a line adding one is more interesting than
+most of the packages under it. It is dropped because there is nowhere honest to
+put it — `Tree` holds packages, and this is a fact about the file, so minting a
+package to carry it would put a lie in the count and a fake name in the report.
+The upgrade is a field on `Tree` and a rule that reads it.
+
+Measured rather than guessed, because the number decides whether that upgrade is
+worth building: across the 35 `requirements.txt` files on the machine this was
+written on, 361 requirement lines, **2** are skipped — both `-e` editables. No
+includes, no VCS references. A first count said 164 and was wrong: 162 of those
+are `--hash` continuation lines, which the reader joins onto the requirement they
+belong to and does count. Being wrong in that direction is the good direction, and
+it is why the number is in here instead of an estimate.
+
 **Flat formats have no graph.** `requirements.txt` and `go.mod` record no
 dependency edges at all, so every package trivially has in-degree 0 and clause 3
 is vacuous there. The rule falls back to two clauses on those files and is

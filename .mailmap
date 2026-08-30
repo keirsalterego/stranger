@@ -1,0 +1,7 @@
+# Two identities, one person. The 44 commits under the GitHub noreply address
+# were made from a machine where the account default had not been overridden,
+# and `git log --format='%an %ae' | sort -u` returning two lines on a solo
+# entry reads like a collaborator who is not credited anywhere. This is git's
+# own mechanism for saying they are the same author; no history was rewritten
+# to say it.
+keirsalterego <darksalterego99@gmail.com> Manish. <121482214+keirsalterego@users.noreply.github.com>
