@@ -21,6 +21,7 @@ Under three seconds cold, because there is nothing to compile except this crate.
 | `make bench` | 50 timed runs on the largest fixture |
 | `make proof` | regenerate `deps-proof.txt` |
 | `make repro` | [build twice, compare hashes](reproducible-builds.md) |
+| `make sweep` | every lockfile on this machine, through the reader for it |
 | `make clean` | `cargo clean` |
 
 ## Tests
@@ -29,7 +30,7 @@ Under three seconds cold, because there is nothing to compile except this crate.
 $ make test
 ```
 
-372 tests across 21 files, plus 7 unit tests inside `src/`. Five are
+401 tests across 22 files, plus 15 unit tests inside `src/`. Five are
 `#[ignore]`d because they are slow — the corpus-decay ablation, the
 false-positive-by-length sweep, two deep fuzz campaigns and the JSON differential
 run — and each has a `make` target or a script beside it.
@@ -39,17 +40,18 @@ rather than remembered. They went stale twice before that was written down.
 
 | file | tests | what it covers |
 |---|---|---|
-| `tests/cli.rs` | 38 | exit codes, `-q`, `-v`, blind spots, the hostile fixture, and no escapes down a pipe |
-| `tests/yaml.rs` | 34 | the subset, the flow indicators that used to invent a key, and a linearity bound on flow collections |
+| `tests/cli.rs` | 46 | exit codes, `-q`, `-v`, blind spots, the hostile fixture, and no escapes down a pipe |
+| `tests/yaml.rs` | 36 | the subset, literal block scalars, the flow indicators that used to invent a key, and a linearity bound on flow collections |
 | `tests/toml.rs` | 34 | the accepted subset, every construct refused with a position, and the header depth that used to abort in `Drop` |
 | `tests/json_conformance.rs` | 30 | RFC 8259 clause by clause, each test citing its section |
 | `tests/pip.rs` | 29 | PEP 508 shapes, continuations, comments, markers, extras |
-| `tests/pnpm.rs` | 19 | the three sections, and that two legal spellings of one lockfile agree |
+| `tests/pnpm.rs` | 25 | the three sections, v6 alongside v9, and that two legal spellings of one lockfile agree |
+| `tests/gomod.rs` | 20 | `require` blocks, pseudo-versions, `retract`, `replace`, `exclude`, quoted paths |
+| `tests/walk.rs` | 18 | the skip list, depth cap, sorted order, symlinks, and what it could not open |
 | `tests/term.rs` | 18 | the four-input colour decision table, column widths, control-character replacement |
-| `tests/walk.rs` | 17 | the skip list, depth cap, sorted order, symlinks, and what it could not open |
 | `tests/tree.rs` | 17 | in-degree, out-edges, depth, near names, and the flags a reader set |
 | `tests/json.rs` | 17 | malformed input, surrogate pairs, deep nesting, error positions |
-| `tests/gomod.rs` | 17 | `require` blocks, pseudo-versions, `retract`, `replace`, `exclude` |
+| `tests/yarn.rs` | 16 | specifier-keyed edges, the nested blocks an entry carries, Berry refused by name |
 | `tests/pypi.rs` | 16 | poetry and uv, and clause 3's share under corpus decay |
 | `tests/cargo.rs` | 14 | the three shapes of a dependency string, workspace members, git origins |
 | `tests/rules.rs` | 12 | all five rules against the fixtures |
@@ -57,7 +59,7 @@ rather than remembered. They went stale twice before that was written down.
 | `tests/distance.rs` | 11 | the OSA counterexample, Damerau against plain Levenshtein, three property tests |
 | `tests/semver.rs` | 10 | precedence, including prerelease ordering |
 | `tests/npm.rs` | 9 | fixture counts, nested entries, workspace members, refused versions |
-| `tests/fuzz.rs` | 5 | mutation campaigns over every parser and all seven readers |
+| `tests/fuzz.rs` | 5 | mutation campaigns over every parser and all eight readers |
 | `tests/ablation.rs` | 4 | the three tables |
 | `tests/fixtures.rs` | 2 | every npm fixture parses and its count is what it should be |
 
@@ -71,6 +73,46 @@ replayed. The corpus test asserting byte-order sortedness is not decoration:
 `binary_search` on an unsorted slice returns a wrong answer quietly, and shell
 `sort` is locale-dependent, so the files are generated with `LC_ALL=C` and checked
 rather than trusted.
+
+## The sweep
+
+```console
+$ make sweep
+```
+
+The 23 fixtures were chosen partly because they are interesting: a v6 pnpm
+lockfile, a yarn entry answering to two specifiers, a `retract` block full of
+bare versions. That biases them. They are good at the hard case and say nothing
+about the ordinary one, because nobody picked an ordinary file to include.
+
+A developer's disk is a few thousand lockfiles picked by nobody. `make sweep`
+runs every one it can find through the reader for it and separates two
+outcomes: a *refusal* — a lockfileVersion this tool does not read, a Berry file
+wearing yarn's name — is an answer and counts as a pass. A file the reader
+could not get through is a bug, and the script exits 1 on one.
+
+On the machine this was written on, 1,484 lockfiles across all eight formats:
+8 refused, 0 unread.
+
+Getting there took four fixes, and this is the part worth stating plainly —
+every one of the four was in the ordinary case, and not one was reachable from
+the fixtures:
+
+| | what refused a valid file |
+|---|---|
+| [yarn](../formats/yarn.md) | a bare `peerDependencies:` header |
+| [yaml](../formats/pnpm.md) | a `deprecated: \|-` block scalar |
+| [go.mod](../formats/gomod.md) | a quoted module path — `gopkg.in/yaml.v3` ships one |
+| [diff](../using/diff.md) | printed `no change` and exited 1 in the same breath |
+
+Two of them had a comment beside the bug asserting the case did not arise. The
+go.mod one said *nothing in the wild does this*, and the counterexample was
+already on the disk.
+
+The sweep is not in `cargo test` and cannot be: its corpus is whatever happens
+to be on the machine, so it is neither fixed nor portable, and a test that
+passes because you have no Go modules installed is not a test. It is a separate
+target for the same reason `make bench` is.
 
 ## The ablation
 
