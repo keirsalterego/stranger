@@ -100,7 +100,7 @@ my own idea is the one most worth publishing.
 It measures nothing because the corpus contains every package in every fixture, so
 clause 1 alone suffices and nothing else can show a difference. No real corpus has
 that property. So the experiment thins the corpus and re-measures: at 90%
-coverage, the clause takes false positives from 95 to 3 at no cost to recall.
+coverage, the clause takes false positives from 36 to 1 at no cost to recall.
 
 Making the corpus a parameter of the rule rather than a global is what made that
 measurable. An assumption you cannot vary is one you cannot measure.
@@ -248,4 +248,4 @@ $ grep -c '^\[\[package\]\]' Cargo.lock
 $ make ablation
 ```
 
-The last one re-derives the corpus-decay table, which takes about two minutes.
+The last one re-derives the corpus-decay table, which takes about four seconds.

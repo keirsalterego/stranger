@@ -249,7 +249,7 @@ clauses the ablation was written precisely because nobody trusted on their own.
 ## Is clause 3 worth anything
 
 Against the full corpus, measurably nothing. Against a corpus missing 10% of its
-names, it cuts false positives from 95 to 3 at no cost in recall. That is a
+names, it cuts false positives from 36 to 1 at no cost in recall. That is a
 number, not an assertion, and it is on the next page.
 
 ```console

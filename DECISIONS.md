@@ -91,7 +91,7 @@ publishing.
 It measures nothing because the corpus contains every package in every fixture, so
 clause 1 alone suffices and nothing else can show a difference. That is not a
 property any real corpus has. So the experiment thins the corpus and re-measures:
-at 90% coverage the clause takes false positives from 95 to 3, at no cost to
+at 90% coverage the clause takes false positives from 36 to 1, at no cost to
 recall.
 
 Making the corpus a parameter of the rule (`slopsquat::Config::corpus`) rather than
@@ -415,7 +415,7 @@ in-degree clause changes nothing, because a corpus containing every package in
 every fixture already answers the question by itself.
 
 With a realistic corpus, clause 3, by a wide margin. At 90% coverage it is the
-difference between 95 false positives and 3. At 70%, between 332 and 16. It never
+difference between 36 false positives and 1. At 70%, between 127 and 6. It never
 costs a true positive at any coverage level, which is asserted in the test rather
 than observed once.
 

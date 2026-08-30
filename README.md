@@ -23,7 +23,7 @@ $ stranger scan fixtures/poisoned.package-lock.json
 
   ·  UNPINNED               — no signal in this format
 
-  risk 81/100    56ms    third-party deps used to compute this: 0
+  risk 81/100    21ms    third-party deps used to compute this: 0
 ```
 
 Critical findings get their lines. The rest are a count and what the count means,
@@ -272,27 +272,36 @@ matters deletes part of the corpus and watches which clause is holding the rule 
 |---|---|---|---|---|---|
 | 100% (140,066) | on | 3 | 0 | 1.000 | 1.000 |
 | 100% (140,066) | off | 3 | 0 | 1.000 | 1.000 |
-| 90% (126,004) | **on** | 3 | **3** | **0.500** | 1.000 |
-| 90% (126,004) | off | 3 | 95 | 0.031 | 1.000 |
-| 70% (98,197) | **on** | 3 | **16** | **0.158** | 1.000 |
-| 70% (98,197) | off | 3 | 332 | 0.009 | 1.000 |
-| 50% (69,897) | **on** | 2 | **20** | **0.091** | 0.667 |
-| 50% (69,897) | off | 2 | 483 | 0.004 | 0.667 |
-| 25% (35,134) | **on** | 2 | **16** | **0.111** | 0.667 |
-| 25% (35,134) | off | 2 | 549 | 0.004 | 0.667 |
+| 90% (126,004) | **on** | 3 | **1** | **0.750** | 1.000 |
+| 90% (126,004) | off | 3 | 36 | 0.077 | 1.000 |
+| 70% (98,197) | **on** | 2 | **6** | **0.250** | 0.667 |
+| 70% (98,197) | off | 2 | 127 | 0.016 | 0.667 |
+| 50% (69,897) | **on** | 1 | **8** | **0.111** | 0.333 |
+| 50% (69,897) | off | 1 | 175 | 0.006 | 0.333 |
+| 25% (35,134) | **on** | 1 | **5** | **0.167** | 0.333 |
+| 25% (35,134) | off | 1 | 177 | 0.006 | 0.333 |
 
-At 90% coverage the clause cuts false positives from 95 to 3 — a factor of 31.7 —
-and costs no recall at all.
+Read the 90% row first, because it is the realistic one: ten percent of the corpus
+missing is about what a few months of registry growth looks like. The clause takes
+false positives from 36 to 1, a 36-fold cut, and recall stays at 1.000. Nothing
+was traded for it. At 70% the ratio is 127 to 6 and at 25% it is 177 to 5.
 
-The recall drop at 50% is not the clause failing. The thinning deleted the real
-`express`/`lodash`/`chalk` that a planted typo needed as its neighbour, so clause
-2 had nothing to match against. That is a corpus-coverage failure and it would
-happen with or without clause 3.
+**Recall falls as the corpus thins, and that is a cost rather than a rounding
+artefact.** It is not clause 3 failing — the thinning deletes the real `express`
+that `expres` needed as its neighbour, so clause 2 has nothing left to match
+against, and the same thing would happen with the clause switched off. It is
+still a miss, and the honest reading is that by 70% the finding it lost was luck
+rather than detection: what `expres` was matching at that point was `espree`, a
+name it has nothing to do with. [The ablation
+table](https://keir.is-a.dev/stranger/detection/ablation.html) works through that
+case and the length budget that declines to spend an edit reaching a stranger.
 
 Ground truth is 3 planted names in `fixtures/poisoned.package-lock.json` and
 3,925 packages scanned across six npm fixtures, so every finding outside the
 planted set is a false positive by construction. `make ablation` reproduces the
-whole table.
+whole table in about four seconds, and `docs/check-output.py` runs it and diffs
+it against this file — the two copies of it drifted once and are checked now
+rather than trusted.
 
 ## Is reading npm's lockfile just shelling out to npm with extra steps
 
