@@ -97,8 +97,11 @@ have it.
 ## Parsing and CLI
 
 ### `clap` — 1,083,204,108 all-time · 222,262,381 in 90 days
-[`src/cli.rs`](src/cli.rs). A hand-written parser for two subcommands, the seven
-options `USAGE` lists, and three exit codes.
+[`src/cli.rs`](src/cli.rs). A hand-written parser for three subcommands, the
+options `USAGE` lists, and three exit codes. `--fail-on` means a different thing
+on `scan` than on `diff` — the worst finding in the tree against the worst
+finding the change introduced — which is a per-subcommand meaning a derive macro
+makes you fight and a hand-written parser just writes down.
 
 **What I gave up:** shell completions, `--help` generated from the same source as
 the parser, colored help, and `clap`'s genuinely good error messages for typo'd

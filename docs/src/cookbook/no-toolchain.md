@@ -81,9 +81,9 @@ Pointing at a specific file you believe is a lockfile and being wrong is a usage
 error — exit 2. Scanning a directory that happens to hold nothing readable is not
 — exit 0. The difference is whether you asserted something.
 
-All seven formats read, which is the point of this page: `Cargo.lock` needs no
-`cargo`, `uv.lock` needs no `uv`, `pnpm-lock.yaml` needs no `pnpm` or Node, and
-`go.mod` needs no `go`.
+All eight formats read, which is the point of this page: `Cargo.lock` needs no
+`cargo`, `uv.lock` needs no `uv`, `pnpm-lock.yaml` needs no `pnpm` or Node,
+`yarn.lock` needs no `yarn`, and `go.mod` needs no `go`.
 A semver comparator (`src/semver.rs`) exists and is tested and is not wired into
 the binary, because no rule has yet asked an ordering question.
 
