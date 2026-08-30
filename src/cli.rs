@@ -175,6 +175,20 @@ fn scan<I: Iterator<Item = String>>(mut args: I) -> Result<Command> {
                 opts.quiet = true;
             }
             "-h" | "--help" => return Ok(Command::Help),
+            // The third corner of the same courtesy `tree` and `diff` already
+            // do. It was the one missing, and it is the likeliest of the three
+            // to be typed: a scan of a large tree prints a lot, and `--depth`
+            // is the flag somebody reaches for to cut it down. It does not do
+            // that on any command — it bounds the out-edges `tree` prints —
+            // and "unknown option" sends them hunting for a typo they did not
+            // make.
+            "--depth" => {
+                return Err(Error::usage(
+                    "`--depth` is a tree flag; scan reports a whole tree, not a walk of one \
+                     package"
+                        .to_string(),
+                ));
+            }
             other if other.starts_with('-') && !only_paths => {
                 return Err(Error::usage(format!("unknown option `{other}`")));
             }

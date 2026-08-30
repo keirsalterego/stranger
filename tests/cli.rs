@@ -1092,3 +1092,28 @@ fn diff_names_the_flags_that_are_not_its_own() {
     assert_eq!(o.status.code(), Some(2));
     assert!(stderr(&o).contains("tree flag"), "{}", stderr(&o));
 }
+
+/// A flag that is real on a sibling command gets named as such rather than
+/// swept into "unknown option", which would send somebody hunting for a typo
+/// they did not make. Two of the three corners had this and `scan --depth` did
+/// not, which is the one most likely to be typed: it looks like a way to make
+/// a large scan print less, and it is not one.
+///
+/// Untested until now, so all three could have rotted quietly. The assertion
+/// is on the words that carry the help, not the whole sentence.
+#[test]
+fn a_flag_from_a_sibling_command_is_named_not_unknown() {
+    for (args, want) in [
+        (vec!["scan", "--depth", "3"], "tree flag"),
+        (vec!["diff", "a", "b", "--depth", "3"], "tree flag"),
+        (vec!["diff", "a", "b", "--verbose"], "scan flag"),
+        (vec!["tree", "x", "--fail-on", "high"], "scan flag"),
+        (vec!["tree", "x", "--verbose"], "scan flag"),
+    ] {
+        let out = run(&args);
+        let err = stderr(&out);
+        assert_eq!(out.status.code(), Some(2), "{args:?}: {err}");
+        assert!(err.contains(want), "{args:?}: {err}");
+        assert!(!err.contains("unknown option"), "{args:?}: {err}");
+    }
+}
