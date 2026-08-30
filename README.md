@@ -628,6 +628,45 @@ the fixtures.
 
 That is corpus coverage, and it is the next limit.
 
+### What it does on lockfiles nobody planted anything in
+
+Everything above is measured on fixtures, and fixtures are chosen. The honest
+version of the question is what the rule does on files picked by nobody, so
+`make sweep` walks every lockfile on this machine and this is what the slopsquat
+rule said about them:
+
+| ecosystem | files | packages | slopsquat findings | corpus |
+|---|---|---|---|---|
+| crates.io | 1,058 | 68,095 | 16 | 5,000 |
+| npm | 161 | 35,564 | 11 | 140,066 |
+| pypi | 43 | 1,110 | 1 | 15,000 |
+| go | 215 | 1,904 | 0 | none, by design |
+| **total** | **1,477** | **106,673** | **28** | |
+
+**All 28 are false positives.** Not by my judgement — by construction: every one
+of them sits in a lockfile beside a registry URL that resolved, so the package
+demonstrably exists. `ansiterm`, `elain`, `futures-time`, `mac-addr`,
+`sentry-slog`, `serde_test2`, `wasip1`, `zenoh`, `d3-graphviz`, `pkgfiles`,
+`tree-sitter-cli`, `tensorflow-gpu`. Real packages, absent from a
+popularity-ranked corpus, and close to a name that is in it.
+
+So the rate on real trees is **28 in 106,673**, about one package in 3,800. And
+the true-positive count on those 1,477 files is **zero**, because there is no
+hallucinated dependency on this disk to find. Every true positive this tool has
+ever demonstrated is one of the three planted in `poisoned.package-lock.json`.
+That is the honest ceiling of the evidence and it is worth stating plainly: the
+ablation measures the rule's *shape* against a ground truth of three, and a
+sample of three is a sample of three.
+
+One thing the table does not support, which I expected it to: precision does not
+track corpus depth. npm has a corpus twenty-eight times deeper than crates.io and
+a slightly *worse* rate per package. Whatever governs this is not how many names
+you have.
+
+The `go` row is zero for a stated reason rather than a good one — there is no Go
+corpus, so clause 1 can never fail and the rule cannot fire at all. It is in
+LIMITS below, and a zero that comes from not looking is not a zero.
+
 **The corpus is a snapshot.** Taken 2026-08-28. A package published after that
 date looks exactly like a package that does not exist. The table above is, among
 other things, a measurement of how badly that ages.
