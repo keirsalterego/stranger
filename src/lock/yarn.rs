@@ -169,6 +169,24 @@ pub fn read(path: &Path, src: &str) -> Result<Tree> {
         entries.push(entry);
     }
 
+    // Nothing at column 0 means nothing was read, and at that point the only
+    // evidence left that this is a yarn.lock at all is the header yarn writes
+    // and nobody else does. Every other reader here refuses a file that is not
+    // the thing its name claims — `Cargo.lock` wants a `[[package]]`, `go.mod`
+    // wants a `module` — and this one accepted an empty file as a clean tree,
+    // which is the worst answer available: a `--fail-on` gate going green over
+    // a lockfile that was never read. The header is still not required of a
+    // file that has entries, because it is a comment and a hand-edited or
+    // concatenated lockfile can be missing it while the entries are perfectly
+    // good.
+    if entries.is_empty() && !src.lines().any(|l| l.trim_end() == "# yarn lockfile v1") {
+        return Err(Error::usage(format!(
+            "{}: no entries and no `# yarn lockfile v1` header; this is not the \
+             lockfile its name claims to be",
+            path.display()
+        )));
+    }
+
     let mut packages = Vec::with_capacity(entries.len());
     // Specifier -> index. Several specifiers point at one package, which is
     // the whole reason this map exists.

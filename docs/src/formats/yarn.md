@@ -75,6 +75,29 @@ stranger: /tmp/berry/yarn.lock: this is a Yarn Berry (v2+) lockfile; stranger re
 Berry is a real YAML document keyed `name@npm:range` with its own `__metadata`
 version counter. Same filename, different format.
 
+An empty file is the other one, and it used to be the worst answer this tool
+could give:
+
+```console
+$ mkdir -p /tmp/empty-yarn
+$ printf '' > /tmp/empty-yarn/yarn.lock
+$ ./target/release/stranger scan /tmp/empty-yarn/yarn.lock
+stranger: /tmp/empty-yarn/yarn.lock: no entries and no `# yarn lockfile v1` header; this is not the lockfile its name claims to be
+```
+
+Every other reader here refuses a file that is not the thing its name claims —
+`Cargo.lock` wants a `[[package]]`, `go.mod` wants a `module`, `poetry.lock`
+wants a `metadata.lock-version`. This one had no such check, because the v1
+header is a comment and a hand-edited or concatenated lockfile can be missing it
+while its entries are perfectly good. That reasoning holds for a file *with*
+entries and quietly fails for a file without any: a truncated or zero-byte
+`yarn.lock` read as a clean tree of nothing, `risk 0/100`, and a `--fail-on`
+gate went green over a lockfile nobody had read.
+
+So the header is required only when there is no other evidence. A project with
+no dependencies really does produce a header and nothing else, and that is still
+zero packages rather than an error.
+
 ## Nested blocks
 
 An entry's fields are `key value` pairs, except for the ones that are a bare
