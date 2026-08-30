@@ -96,7 +96,7 @@ make test        # the test suite
 make ablation    # the table below, regenerated
 make bench       # timings, with a fallback when hyperfine is absent
 make proof       # regenerate deps-proof.txt
-make sweep       # every lockfile on your disk, through the reader for it
+make sweep       # every lockfile on your disk, read twice and compared
 ```
 
 ## Point it at a repository

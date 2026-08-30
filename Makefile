@@ -28,13 +28,18 @@ ablation:
 repro:
 	@./scripts/repro.sh
 
-# Every lockfile on the machine this runs on, through the reader for it. Not
-# part of `make test` and cannot be: the corpus is whatever happens to be on
-# the disk, so it is neither fixed nor portable. That is also the point — it
+# Every lockfile on the machine this runs on, asked two questions: did the
+# reader get through it, and did it get the right answer. The second half reads
+# the same files in Python, from the format specs rather than from src/, so the
+# two implementations have to agree or one of them is wrong.
+#
+# Not part of `make test` and cannot be: the corpus is whatever happens to be
+# on the disk, so it is neither fixed nor portable. That is also the point — it
 # asks whether the readers handle the ordinary file, which the fixtures cannot,
 # and it is what found the four reader bugs fixed on 2026-08-30.
 sweep:
 	@./scripts/sweep.sh
+	@./scripts/crosscheck.py
 
 # The one target that needs something this repository does not ship. `mdbook` is
 # a documentation tool, not a dependency of the binary — `make`, `make test`,

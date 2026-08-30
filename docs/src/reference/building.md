@@ -21,7 +21,7 @@ Under three seconds cold, because there is nothing to compile except this crate.
 | `make bench` | 50 timed runs on the largest fixture |
 | `make proof` | regenerate `deps-proof.txt` |
 | `make repro` | [build twice, compare hashes](reproducible-builds.md) |
-| `make sweep` | every lockfile on this machine, through the reader for it |
+| `make sweep` | every lockfile on this machine, read twice and compared |
 | `make clean` | `cargo clean` |
 
 ## Tests
@@ -93,6 +93,29 @@ could not get through is a bug, and the script exits 1 on one.
 
 On the machine this was written on, 1,484 lockfiles across all eight formats:
 8 refused, 0 unread.
+
+### Getting through is not the same as being right
+
+That first pass catches a refusal and misses the worse failure: a reader that
+gets through a file and returns the wrong number. The fixtures cannot catch it
+either, because the expected counts in `tests/` were produced by this reader —
+a test written that way pins the behaviour, it does not check it.
+
+So the second half of `make sweep` counts the same files again in Python, from
+each format's spec rather than from `src/`:
+
+| | counted independently as |
+|---|---|
+| `Cargo.lock` | `[[package]]` blocks; one with no `source` is a workspace member |
+| `package-lock.json` | entries under `packages`, minus the root, workspace directories and links |
+| `yarn.lock` | entry headers, the only lines at column 0 |
+| the [drift rule](../rules/drift.md) | names holding more than one version, recomputed from the raw file |
+
+Python's own `json` module doing the npm parse is the point of that second row:
+the hand-rolled [`src/json.rs`](stdlib.md) and a mature implementation have to
+agree on a hundred real files, or one of them is wrong.
+
+1,206 lockfiles crosschecked, 0 mismatches.
 
 Getting there took four fixes, and this is the part worth stating plainly —
 every one of the four was in the ordinary case, and not one was reachable from
