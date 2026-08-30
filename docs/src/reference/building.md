@@ -226,7 +226,7 @@ acquired a dependency fails instead of quietly succeeding.
 ```console
 $ make docs
 checked 37 pages, no broken relative links
-checked 37 pages: 126 commands reproduce, 46 not runnable here (`-v` lists them)
+checked 37 pages: 126 commands reproduce, 48 not runnable here (`-v` lists them)
 ```
 
 Two checks, both standard-library-only Python, neither of which ever enters
@@ -244,11 +244,11 @@ README and compares what the tool actually prints against what the page says it
 prints. Elapsed milliseconds are the one thing allowed to differ, because they are
 a measurement rather than a claim.
 
-The 46 it reports as not runnable are the `make`, `cargo`, `jq` and `grep` lines
-in the same blocks — a `make ablation` inside a check that runs on every push
-would take two minutes to tell you something `make ablation` already tells you.
-Every `stranger` invocation against a fixture is checked; `-v` prints the rest by
-name so the gap is a list rather than a number.
+The ones it reports as not runnable are the `make`, `cargo`, `strings`, `jq` and
+`grep` lines in the same blocks — a `make ablation` inside a check that runs on
+every push would take two minutes to tell you what `make ablation` already tells
+you. Every `stranger` invocation against a fixture is checked, and `-v` prints the
+rest by name so the gap is a list rather than a number.
 
 It exists because two separate rots got through in one afternoon. The
 [risk score](../using/first-scan.md) changed from a capped sum to a band, which
