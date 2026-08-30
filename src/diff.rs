@@ -88,11 +88,15 @@ pub fn compare(old_path: &Path, new_path: &Path) -> crate::error::Result<Diff> {
     // somebody migrating actually wants.
     if old.ecosystem != new.ecosystem {
         return Err(crate::error::Error::usage(format!(
-            "{} and {} are different ecosystems ({:?} and {:?}); there is nothing to compare",
+            // `as_str`, not `{:?}`: the Debug name is `Crates` and every other
+            // thing this tool prints — the JSON `ecosystem` field included —
+            // says `crates.io`. An error is not the place to introduce a
+            // second name for the registry the user just named.
+            "{} and {} are different ecosystems ({} and {}); there is nothing to compare",
             old_path.display(),
             new_path.display(),
-            old.ecosystem,
-            new.ecosystem,
+            old.ecosystem.as_str(),
+            new.ecosystem.as_str(),
         )));
     }
     Ok(build(old, new))

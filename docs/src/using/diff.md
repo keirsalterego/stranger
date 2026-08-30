@@ -111,7 +111,7 @@ removed — a confident, detailed, meaningless answer.
 
 ```console
 $ ./target/release/stranger diff fixtures/cargo-s.Cargo.lock fixtures/npm-xs.package-lock.json
-stranger: fixtures/cargo-s.Cargo.lock and fixtures/npm-xs.package-lock.json are different ecosystems (Crates and Npm); there is nothing to compare
+stranger: fixtures/cargo-s.Cargo.lock and fixtures/npm-xs.package-lock.json are different ecosystems (crates.io and npm); there is nothing to compare
 ```
 
 Two *formats* of one ecosystem are fine, and that diff is the one somebody
