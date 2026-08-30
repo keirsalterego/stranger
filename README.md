@@ -32,6 +32,14 @@ until you ask with `-v`.
 That last number is the point. `stranger` is written for the Zero Dependency
 hackathon in Rust with the standard library and nothing else.
 
+**The submission is the tag [`v0.1.0-submission`](https://github.com/keirsalterego/stranger/releases/tag/v0.1.0-submission).**
+Anything committed after it is documentation written during the judging window,
+not code — the tag is where the freeze is, and `git diff v0.1.0-submission --stat
+-- src/ Cargo.toml Cargo.lock` is how to check that rather than take my word for
+it. There is a cookbook at **[keir.is-a.dev/stranger](https://keir.is-a.dev/stranger/)**
+which goes deeper than this file on every rule, every format and every number in
+it.
+
 ```
 $ cargo tree
 stranger v0.1.0 (/home/keir/stranger)
