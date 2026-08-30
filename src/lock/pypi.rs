@@ -34,7 +34,7 @@
 //! `roots` depends on two paragraphs below: a package mentioned by somebody's
 //! unrequested `docs` extra would stop looking like a root, when it is one.
 //!
-//! ponytail: that costs the slopsquat rule 295 pieces of real "a maintainer
+//! That costs the slopsquat rule 295 pieces of real "a maintainer
 //! has heard of this name" evidence in poetry-m, and losing evidence makes
 //! the rule fire *more*. The upgrade is a `mentioned` set on `Tree`, separate
 //! from `edges`, for clauses that want weaker evidence than an install edge —
@@ -307,6 +307,7 @@ impl Graph {
             edges: self.edges,
             roots: self.roots,
             records_edges: true,
+            records_install_scripts: false,
         }
     }
 }

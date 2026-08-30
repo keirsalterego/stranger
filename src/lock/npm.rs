@@ -141,6 +141,7 @@ pub fn read(path: &Path, src: &str) -> Result<Tree> {
         edges,
         roots,
         records_edges: true,
+        records_install_scripts: true,
     })
 }
 
@@ -193,7 +194,7 @@ fn dependency_names(entry: &Value) -> impl Iterator<Item = &str> {
 fn resolve(index: &HashMap<&str, usize>, from: &str, dep: &str) -> Option<usize> {
     let mut prefix = from;
     loop {
-        // ponytail: one allocation per probe. ~14k of them on the largest
+        // One allocation per probe. ~14k of them on the largest
         // fixture, which does not show up next to the JSON parse. A reused
         // String buffer is the upgrade if it ever does.
         let candidate = if prefix.is_empty() {

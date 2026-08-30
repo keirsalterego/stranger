@@ -84,12 +84,13 @@ impl Rule {
     /// A match, so a sixth rule does not compile until somebody has decided
     /// which files it can speak about.
     ///
-    /// ponytail: the *format* half is not compiler-enforced the way the rule
-    /// half is. An eighth reader can be added without revisiting these arms and
-    /// will silently inherit whatever `Format::of` returns for it. The upgrade
-    /// is a `records_install_scripts: bool` on `Tree` beside `records_edges`,
-    /// which does force every reader to answer — it just means editing all
-    /// seven readers, which is a bigger change than the bug.
+    /// The install-script arm used to be `format() == Some(Format::Npm)`, on the
+    /// grounds that a field on `Tree` was not worth editing seven readers for.
+    /// Reading pnpm 6 is what spent that:
+    /// `requiresBuild` exists at 6 and not at 9, both are `pnpm-lock.yaml`, and
+    /// no function of the filename can separate them. The field also does what
+    /// the note wanted — an eighth reader does not compile until somebody has
+    /// answered for it.
     pub fn applies_to(self, tree: &Tree) -> bool {
         match self {
             // Clause one is "not in the corpus", and Go has no corpus:
@@ -98,12 +99,12 @@ impl Rule {
             // honest behaviour — it is the report that was quiet about it.
             Rule::Slopsquat => !corpus::names(tree.ecosystem).is_empty(),
 
-            // Only `package-lock.json` writes the flag down. pnpm 9 dropped
-            // `requiresBuild` and did not replace it, `Cargo.lock` says
-            // nothing about `build.rs`, and neither PyPI lock format nor
-            // `go.mod` records whether a package runs code on install. Four of
-            // the seven, which is why this rule needed the answer first.
-            Rule::InstallScript => tree.format() == Some(Format::Npm),
+            // `package-lock.json` always writes the flag down and pnpm 6
+            // does; pnpm 9 dropped `requiresBuild` and did not replace it,
+            // `Cargo.lock` says nothing about `build.rs`, and neither PyPI
+            // lock format nor `go.mod` records whether a package runs code on
+            // install. The reader answers, because the filename cannot.
+            Rule::InstallScript => tree.records_install_scripts,
 
             // A lockfile answers this trivially: it records one resolved
             // version, so every entry is `Pin::Exact` and there is nothing to

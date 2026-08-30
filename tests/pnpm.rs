@@ -332,20 +332,16 @@ fn optional_comes_from_the_snapshot() {
 
 // -- refusals ---------------------------------------------------------------
 
-/// Version 6 and below keep the dependency graph inside `packages` and have no
-/// `snapshots` section, so this reader would find zero edges and report a tree
-/// where nothing depends on anything. Refusing by name beats that.
+/// Version 5 and below key their packages `/name/version`, so the last `@` a
+/// scoped name contains is part of the name and there is no version to find.
+/// Refusing by name beats splitting every key in the wrong place.
 #[test]
-fn older_lockfile_versions_are_refused() {
-    let err = read("lockfileVersion: '6.0'\npackages:\n  a@1: {}\n").unwrap_err();
-    assert!(
-        err.to_string()
-            .contains("lockfileVersion 6.0 is not supported")
-    );
+fn lockfile_versions_below_six_are_refused() {
     let err = read("lockfileVersion: '5.4'\n").unwrap_err();
-    assert!(err.to_string().contains("stranger reads 9"));
+    assert!(err.to_string().contains("stranger reads 9 and 6"));
     // pnpm 10 still writes 9.0.
     assert!(read("lockfileVersion: '9.0'\npackages:\n  a@1: {}\n").is_ok());
+    assert!(read("lockfileVersion: '6.0'\npackages:\n  /a@1: {}\n").is_ok());
 }
 
 #[test]
@@ -489,4 +485,122 @@ packages:
     let t = read(src).expect("should read");
     assert_eq!(t.direct(), 2);
     assert!(t.edges.is_empty());
+}
+
+// -- lockfileVersion 6 ------------------------------------------------------
+//
+// pnpm 8's format. The fixture is mongodb/mongo's own lockfile, 90 packages,
+// picked because it was on this machine rather than written for the test.
+
+fn load6() -> Tree {
+    let p = path("pnpm-v6.pnpm-lock.yaml");
+    let src = fs::read_to_string(&p).unwrap();
+    pnpm::read(&p, &src).unwrap_or_else(|e| panic!("v6: {e}"))
+}
+
+/// 89 keys in `packages`, one of which is a second peer resolution of a
+/// tarball already listed. v9 would have written that as one `packages` entry
+/// and two `snapshots`; collapsing to 90 is what makes the two counts mean the
+/// same thing.
+#[test]
+fn v6_packages_are_deduped_by_tarball() {
+    let t = load6();
+    assert_eq!(t.packages.len(), 90);
+    let mut keys: Vec<&str> = t.packages.iter().map(|p| p.key.as_str()).collect();
+    keys.sort_unstable();
+    let n = keys.len();
+    keys.dedup();
+    assert_eq!(keys.len(), n, "a key survived with its peer suffix on");
+    assert!(t.packages.iter().all(|p| !p.key.starts_with('/')));
+}
+
+/// The edges live inside the `packages` entries, and finding them is the whole
+/// reason this reader exists rather than refusing the file.
+#[test]
+fn v6_edges_come_out_of_packages() {
+    let t = load6();
+    assert!(t.records_edges);
+    assert!(!t.edges.is_empty());
+    let eslintrc = t
+        .packages
+        .iter()
+        .position(|p| p.name == "@eslint/eslintrc")
+        .expect("@eslint/eslintrc");
+    let espree = t
+        .packages
+        .iter()
+        .position(|p| p.name == "espree")
+        .expect("espree");
+    assert!(t.edges.contains(&(eslintrc, espree)));
+}
+
+/// No `importers` section: a single-project v6 file writes its manifest at the
+/// top level. Eight are declared and seven resolve — the eighth is
+/// `file:buildscripts/eslint-plugin-mongodb`, which has no `packages` entry to
+/// point at because it is not a stranger.
+#[test]
+fn v6_roots_come_from_the_top_level_manifest() {
+    let t = load6();
+    assert_eq!(t.roots.len(), 7);
+    let names: Vec<&str> = t
+        .roots
+        .iter()
+        .map(|&i| t.packages[i].name.as_str())
+        .collect();
+    assert!(names.contains(&"eslint"));
+    assert!(names.contains(&"prettier"));
+    assert!(!names.contains(&"eslint-plugin-mongodb"));
+}
+
+/// `dev` is per entry at v6 and absent at v9. 89 of the 90 are dev; the
+/// exception is the project's own `eslint-plugin-mongodb`, which is the only
+/// entry that arrived through `dependencies` rather than `devDependencies`.
+#[test]
+fn v6_records_dev() {
+    let t = load6();
+    assert_eq!(t.packages.iter().filter(|p| p.dev).count(), 89);
+    assert!(!find(&t, "eslint-plugin-mongodb").dev);
+    assert_eq!(load().packages.iter().filter(|p| p.dev).count(), 0);
+}
+
+/// A v6 `file:` dependency gets a real `packages` entry keyed by its path,
+/// which v9 never writes. Read literally that puts the project's own code in
+/// the report under the name `file:buildscripts/eslint-plugin-mongodb`, one
+/// edit from nothing and owned by nobody.
+#[test]
+fn v6_local_packages_are_first_party() {
+    let t = load6();
+    let own = find(&t, "eslint-plugin-mongodb");
+    assert!(own.first_party);
+    assert_eq!(own.key, "file:buildscripts/eslint-plugin-mongodb");
+    assert_eq!(own.origin, Origin::Elsewhere);
+    // It is the manifest under audit, so it is not one of its own roots.
+    assert!(!t.roots.iter().any(|&i| t.packages[i].first_party));
+    // And no rule may speak about it.
+    assert!(t.packages.iter().filter(|p| p.first_party).count() == 1);
+}
+
+/// The field v9 dropped. No file on this machine sets it — mongo's does not —
+/// so the flag is asserted against a written-out entry, and the fixture proves
+/// only that its absence reads as false.
+#[test]
+fn v6_records_requires_build() {
+    let t = read(
+        "lockfileVersion: '6.0'\n\
+         packages:\n\
+        \x20 /esbuild@0.21.5:\n\
+        \x20   requiresBuild: true\n\
+        \x20 /ms@2.1.3:\n\
+        \x20   dev: true\n",
+    )
+    .unwrap();
+    assert!(t.records_install_scripts);
+    let esbuild = find(&t, "esbuild");
+    assert!(esbuild.install_script);
+    assert!(!find(&t, "ms").install_script);
+    assert_eq!(esbuild.version, "0.21.5");
+
+    // v9 has no such field, and must not claim the question was asked.
+    assert!(!load().records_install_scripts);
+    assert!(!load6().packages.iter().any(|p| p.install_script));
 }

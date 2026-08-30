@@ -101,6 +101,7 @@ fn tree() -> Tree {
         edges: Vec::new(),
         roots: vec![0, 1],
         records_edges: true,
+        records_install_scripts: false,
     }
 }
 

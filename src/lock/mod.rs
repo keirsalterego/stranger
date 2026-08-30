@@ -134,6 +134,14 @@ pub struct Tree {
     /// A field rather than a match on the filename somewhere, so a seventh
     /// reader does not compile until it has answered the question.
     pub records_edges: bool,
+    /// Whether this file records that a package runs code at install time.
+    ///
+    /// Not derivable from the format any more, which is why it is a field and
+    /// not a `match` in `Rule::applies_to`: `package-lock.json` records it,
+    /// pnpm records it at lockfileVersion 6 and dropped it at 9, and the same
+    /// filename covers both. Every other reader answers `false`, and `false`
+    /// here means the file was never asked — never that the answer was no.
+    pub records_install_scripts: bool,
 }
 
 impl Tree {

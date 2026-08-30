@@ -54,7 +54,7 @@ pub fn read(path: &Path, src: &str) -> Result<Tree> {
     // real file indents its continuations, so the whitespace that separates
     // the tokens is already in the text.
     //
-    // ponytail: pip additionally lets a whole-line comment *terminate* a
+    // pip additionally lets a whole-line comment *terminate* a
     // continuation. Nobody writes that, and getting it wrong costs one
     // mis-joined line rather than a wrong graph. Match it if a real file ever
     // shows up that needs it.
@@ -93,6 +93,7 @@ pub fn read(path: &Path, src: &str) -> Result<Tree> {
         // not in the file to read, so `stranger tree` says the file has no
         // graph rather than printing an in-degree nobody measured.
         records_edges: false,
+        records_install_scripts: false,
     })
 }
 
@@ -109,7 +110,7 @@ fn requirement(logical: &str, line: u32, out: &mut Vec<Package>) -> Result<()> {
     // the fragment so the rest is findable.
     let col = body.chars().take_while(|c| c.is_whitespace()).count() as u32 + 1;
 
-    // ponytail: `-r base.txt` is not followed. An include means file IO,
+    // `-r base.txt` is not followed. An include means file IO,
     // relative-path resolution and cycle detection, and it quietly turns one
     // file's audit into a directory crawl. Point stranger at the other file.
     //

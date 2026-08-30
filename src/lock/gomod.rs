@@ -259,6 +259,7 @@ pub fn read(path: &Path, src: &str) -> Result<Tree> {
         // read an in-degree of 0 as a measurement.
         edges: Vec::new(),
         records_edges: false,
+        records_install_scripts: false,
         roots,
     })
 }

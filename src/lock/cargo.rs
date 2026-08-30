@@ -79,7 +79,7 @@
 //!   v2-and-later. Cargo v1 kept them in a `[metadata]` table keyed
 //!   `"checksum bytes 1.0.0 (registry+…)"`. This reader does not look there,
 //!   so a v1 file reads as having no integrity anywhere.
-//!   // ponytail: no v1 file in the corpus, and cargo has rewritten them on
+//!   // No v1 file in the corpus, and cargo has rewritten them on
 //!   every `cargo update` since 2019. Read the `[metadata]` keys if one ever
 //!   turns up.
 //!
@@ -194,6 +194,7 @@ pub fn read(path: &Path, src: &str) -> Result<Tree> {
         edges,
         roots,
         records_edges: true,
+        records_install_scripts: false,
     })
 }
 
