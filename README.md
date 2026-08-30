@@ -60,6 +60,26 @@ the lockfile's, and the auditor's — and they agree. `deps-proof.txt` regenerat
 all of it on demand with `make proof`, including a build with the network switched
 off.
 
+### GitHub says this repository has 22 vulnerabilities
+
+It does, and every one of them is in `fixtures/`. Nineteen are in
+`reqs-s.requirements.txt`, a real `requirements.txt` taken off disk with an old
+Pillow in it, and three are in `poisoned.requirements.txt`, which is poisoned on
+purpose. None are in `stranger`, because `stranger` has no dependencies to have
+vulnerabilities in.
+
+That is worth leaving switched on rather than silencing. A supply-chain auditor
+whose own test data is a pile of vulnerable packages is working as intended: the
+fixtures have to be real files with real problems or the tool is being tested
+against a fantasy. `.github/dependabot.yml` already turns off the *update* half,
+because Dependabot opened a pull request against `poisoned.requirements.txt`
+within an hour of this repository going public and would have bumped
+`python-dateutils==2.9.0` — a package that does not exist — quietly breaking the
+demo it was planted for. The alerts stay because they are true.
+
+The number to compare it against is the one in the scan output above: the
+dependencies used to *compute* the audit, which is zero.
+
 ## Build
 
 ```
