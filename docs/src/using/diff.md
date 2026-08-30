@@ -67,6 +67,20 @@ no change in risk.
 The cost is real: a package already flagged for a rule can change version and
 the new version's finding is not called new.
 
+## A finding can move without a package moving
+
+The two lockfiles do not have to be the same format — only the same ecosystem —
+and the formats do not all record the same things. npm records install scripts;
+[yarn v1](../formats/yarn.md) has no field for them. So migrating a project
+between the two changes the finding set while `added`, `removed` and `changed`
+are all empty, and that is a real result rather than a glitch: the packages did
+not move, but what is now *visible* about them did.
+
+`diff` prints those findings and gates on them. The alternative — deciding
+there is nothing to say because no package moved — is how it printed
+`no change to the dependency tree` and exited 1 at the same time, which in CI
+is a red build with nothing on screen to explain it.
+
 ## In CI
 
 ```console

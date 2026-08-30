@@ -54,8 +54,23 @@ impl Diff {
         self.introduced.iter().map(|f| f.severity).max()
     }
 
+    /// Nothing to report — which has to include the findings and not just the
+    /// package lists, because `report::diff_human` prints nothing at all when
+    /// this is true while `--fail-on` gates on [`worst`](Diff::worst).
+    ///
+    /// The two disagree whenever a finding moves without a package moving,
+    /// and that is not hypothetical: one tree read through two formats that
+    /// record different things — npm records install scripts, yarn v1 does
+    /// not — has identical `added`, `removed` and `changed` and a different
+    /// finding set. Counting only the package lists printed "no change to the
+    /// dependency tree" and exited 1, which is the worst pair of things a CI
+    /// gate can do at the same time.
     pub fn is_empty(&self) -> bool {
-        self.added.is_empty() && self.removed.is_empty() && self.changed.is_empty()
+        self.added.is_empty()
+            && self.removed.is_empty()
+            && self.changed.is_empty()
+            && self.introduced.is_empty()
+            && self.resolved.is_empty()
     }
 }
 
@@ -295,6 +310,24 @@ mod tests {
         assert_eq!(d.resolved.len(), 1);
         assert!(d.introduced.is_empty());
         assert!(d.worst().is_none());
+    }
+
+    /// The prose and the exit code must agree. One tree read through two
+    /// formats: yarn v1 does not record install scripts and npm does, so the
+    /// package lists are identical and the finding set is not. `is_empty` has
+    /// to see that, or `diff` prints "no change to the dependency tree" and
+    /// exits 1 in the same breath — a red build with nothing on screen.
+    #[test]
+    fn a_finding_moving_alone_is_not_an_empty_diff() {
+        let quiet = tree(vec![pkg("esbuild", "0.21.0")]);
+        let mut loud = tree(vec![pkg("esbuild", "0.21.0")]);
+        loud.packages[0].install_script = true;
+
+        let d = build(quiet, loud);
+        assert!(d.added.is_empty() && d.removed.is_empty() && d.changed.is_empty());
+        assert_eq!(d.introduced.len(), 1);
+        assert!(d.worst().is_some());
+        assert!(!d.is_empty(), "a diff that fails --fail-on must print why");
     }
 
     /// Two versions collapsing to one pads rather than inventing a pairing.
