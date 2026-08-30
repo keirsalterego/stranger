@@ -421,14 +421,69 @@ fn plain_scalars_refuse_a_bare_colon() {
     assert!(why("a:\n  - b: 1\n").starts_with("':' in a plain scalar"));
 }
 
+/// Literal block scalars, which pnpm writes for every `deprecated:` message
+/// in the tree. Refusing them refused the whole lockfile, so the reader
+/// reported a syntax error on a file that has none.
+///
+/// The three chomping modes are the whole surface: clip is the default and
+/// leaves exactly one newline, `-` strips them all, `+` keeps them.
+#[test]
+fn block_scalars() {
+    let get = |v: &Value, k: &str| v.get(k).and_then(Value::as_str).map(str::to_owned);
+
+    assert_eq!(
+        get(&parse("a: |\n  text\n"), "a").as_deref(),
+        Some("text\n")
+    );
+    assert_eq!(get(&parse("a: |-\n  text\n"), "a").as_deref(), Some("text"));
+    assert_eq!(
+        get(&parse("a: |+\n  text\n\n\n"), "a").as_deref(),
+        Some("text\n\n\n")
+    );
+
+    // Several lines, an interior blank one, and the margin taken from the
+    // first content line rather than assumed.
+    let many = parse("a: |-\n    one\n\n    two\nb: 1\n");
+    assert_eq!(get(&many, "a").as_deref(), Some("one\n\ntwo"));
+    // The scalar ended at the dedent and did not swallow its sibling.
+    assert_eq!(get(&many, "b").as_deref(), Some("1"));
+
+    // A line indented *past* the margin keeps the extra indentation.
+    assert_eq!(
+        get(&parse("a: |-\n  one\n    two\n"), "a").as_deref(),
+        Some("one\n  two")
+    );
+
+    // The shape pnpm actually writes: a `deprecated:` paragraph between two
+    // ordinary keys, one of which the reader depends on.
+    let pnpm = parse(concat!(
+        "q@1.5.1:\n",
+        "  resolution: {integrity: sha512-x}\n",
+        "  deprecated: |-\n",
+        "    You or someone you depend on is using Q.\n",
+        "\n",
+        "    (For a CapTP with native promises, see @endo/captp)\n",
+        "  engines: {node: '>=0.6.0'}\n",
+    ));
+    let q = pnpm.get("q@1.5.1").unwrap();
+    assert!(q.get("resolution").is_some());
+    assert!(q.get("engines").is_some(), "the scalar ate the next key");
+    assert!(
+        get(q, "deprecated").is_some_and(|s| s.contains("CapTP")),
+        "{:?}",
+        q.get("deprecated")
+    );
+}
+
 #[test]
 fn out_of_subset_constructs() {
-    // Block scalars.
+    // Folded block scalars, and an explicit indentation indicator on a
+    // literal one. The literal form itself is read — see `block_scalars`.
     assert_eq!(
-        why("a: |\n  text\n"),
+        why("a: >-\n  text\n"),
         "block scalars are not part of the supported YAML subset"
     );
-    assert!(!why("a: >-\n  text\n").is_empty());
+    assert!(why("a: |2\n   text\n").starts_with("an explicit block scalar indentation indicator"));
     // A sequence level with its key.
     assert_eq!(
         why("a:\n- one\n"),

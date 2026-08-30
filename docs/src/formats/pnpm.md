@@ -43,6 +43,35 @@ no graph, which is the failure mode that matters: the
 [detection rule](../detection/rule.md)'s third clause needs in-degree, and a tree
 with no edges makes every package look like a root.
 
+## `deprecated` is a block scalar
+
+The one field in that table that is not a flow collection or a scalar on its
+own line. pnpm copies the registry's deprecation message verbatim, and those
+run to paragraphs, so it writes them as a YAML literal block:
+
+```yaml
+  q@1.5.1:
+    resolution: {integrity: sha512-kV/CThkXo6xyFEZUugw…}
+    engines: {node: '>=0.6.0', teleport: '>=0.2.0'}
+    deprecated: |-
+      You or someone you depend on is using Q, the JavaScript Promise library
+      that gave JavaScript developers strong feelings about promises.
+
+      (For a CapTP with native promises, see @endo/eventual-send)
+```
+
+Nothing here reads the message. What matters is that the reader gets to the end
+of it and finds `engines:` again rather than treating an indented English
+sentence as structure — so [the YAML subset](../decisions.md) parses literal
+block scalars with all three chomping modes (`|`, `|-`, `|+`) rather than
+refusing them. Refusing meant refusing the whole lockfile, and any tree holding
+one deprecated package holds one of these.
+
+The folded form `>` is still refused by name, along with an explicit
+indentation indicator (`|2`). Neither appears in a lockfile, and a folded
+scalar that joins its lines slightly wrong still parses — which is the failure
+this subset is arranged against.
+
 ## Peer suffixes
 
 The same tarball can be installed more than once with different peers resolved, so

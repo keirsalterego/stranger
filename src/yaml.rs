@@ -37,11 +37,18 @@
 //! - a tab anywhere in a line's indentation (YAML forbids it, and it is the
 //!   one whitespace bug an editor will not show you)
 //! - a dedent that lands between two open levels
-//! - anchors `&a`, aliases `*a`, tags `!!str`, directives `%YAML`, block
-//!   scalars `|` and `>` — refused *by name*, at the indicator, in all four
-//!   places unquoted text is read, flow mapping keys included. The plain
-//!   scalar scanner would otherwise read `&anchor 1` as the string
-//!   "&anchor 1" and be wrong without saying so
+//! - anchors `&a`, aliases `*a`, tags `!!str`, directives `%YAML` — refused
+//!   *by name*, at the indicator, in all four places unquoted text is read,
+//!   flow mapping keys included. The plain scalar scanner would otherwise
+//!   read `&anchor 1` as the string "&anchor 1" and be wrong without saying
+//!   so
+//! - folded block scalars `>`, and an explicit indentation indicator on a
+//!   literal one (`|2`). The literal form `|` *is* read, with all three
+//!   chomping modes: pnpm writes one for every `deprecated:` message in the
+//!   tree, so refusing it refused any lockfile holding a deprecated package.
+//!   Folding is refused instead of guessed because a folded scalar that
+//!   joins its lines slightly wrong still parses, and a wrong answer that
+//!   parses is the failure this whole file is arranged against
 //! - a plain scalar or key opening with a flow indicator `{`, `}`, `[`, `]`
 //!   or `,`. YAML forbids that too, and it is what keeps `{a: 1}: 2` — a flow
 //!   mapping used as a key, which this subset does not have — from being read
@@ -448,6 +455,8 @@ impl<'a> Parser<'a> {
                     Some(deeper) if deeper > indent => self.block(deeper)?,
                     _ => Value::Null,
                 }
+            } else if self.peek() == Some(b'|') {
+                self.block_scalar(indent)?
             } else {
                 let v = self.inline_value()?;
                 self.end_of_line()?;
@@ -605,6 +614,88 @@ impl<'a> Parser<'a> {
             }
             _ => Ok(()),
         }
+    }
+
+    /// A literal block scalar (`|`) and the chomping mode on its header.
+    ///
+    /// pnpm writes one for every `deprecated:` message a package in the tree
+    /// carries, so refusing these meant refusing any lockfile that held a
+    /// deprecated package — and refusing it by reporting a syntax error, on a
+    /// file with no syntax error in it. Deprecated packages are ordinary.
+    ///
+    /// Two parts of the header stay refused, both because they change where
+    /// the content starts or how it joins, and neither appears in a lockfile.
+    /// An explicit indentation indicator (`|2`) moves the content margin off
+    /// the first line. A folded scalar (`>`) turns single line breaks into
+    /// spaces while keeping more-indented lines literal, which is a second
+    /// set of rules to get exactly right for a value nothing here reads —
+    /// and getting them subtly wrong is worse than saying no, because the
+    /// result parses.
+    ///
+    /// Content indentation comes from the first non-empty line, which is what
+    /// YAML does when the header does not say. `indent` is the *key's*
+    /// column, so a content line at or left of it ends the scalar.
+    fn block_scalar(&mut self, indent: usize) -> Result<Value> {
+        self.bump(1);
+        let chomp = match self.peek() {
+            Some(c @ (b'-' | b'+')) => {
+                self.bump(1);
+                c
+            }
+            _ => b' ',
+        };
+        if matches!(self.peek(), Some(b'0'..=b'9')) {
+            return Err(self.err(
+                "an explicit block scalar indentation indicator is not part of the supported YAML subset",
+            ));
+        }
+        self.end_of_line()?;
+
+        let mut out = String::new();
+        let mut margin: Option<usize> = None;
+        while !self.rest.is_empty() {
+            let spaces = self.rest.bytes().take_while(|&b| b == b' ').count();
+            let line = self.line();
+            if !line.get(spaces..).unwrap_or("").is_empty() {
+                match margin {
+                    // The first content line sets the margin, and it has to be
+                    // deeper than the key — otherwise the scalar is empty and
+                    // this line belongs to the enclosing block.
+                    None if spaces <= indent => break,
+                    None => margin = Some(spaces),
+                    Some(m) if spaces < m => break,
+                    Some(_) => {}
+                }
+            }
+            // A blank line belongs to the scalar wherever it sits: it has no
+            // indentation to compare against, and the trailing ones are
+            // exactly what the chomping mode below decides the fate of.
+            out.push_str(line.get(margin.unwrap_or(0)..).unwrap_or(""));
+            out.push('\n');
+            self.skip_line();
+        }
+
+        match chomp {
+            // Strip: no trailing newline at all.
+            b'-' => {
+                while out.ends_with('\n') {
+                    out.pop();
+                }
+            }
+            // Keep: every one of them.
+            b'+' => {}
+            // Clip, the default: exactly one, and none at all if the scalar
+            // turned out to have no content in it.
+            _ => {
+                while out.ends_with("\n\n") {
+                    out.pop();
+                }
+                if out == "\n" {
+                    out.clear();
+                }
+            }
+        }
+        Ok(Value::String(out))
     }
 
     /// A plain scalar in block context: everything to end of line, minus a
