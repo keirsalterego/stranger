@@ -42,7 +42,7 @@ of them. `tests/json.rs` tests exactly that list.
 
 **What I gave up:** `serde`'s derive machinery. There is no `#[derive(Deserialize)]`
 here — every lockfile reader walks a `Value` tree by hand and decides what to do
-with a missing field at the point it is missing. For seven readers that is fine
+with a missing field at the point it is missing. For eight readers that is fine
 and arguably clearer, since the "what if this key is absent" question gets answered
 where the answer matters instead of in an attribute. For a hundred types it would
 be miserable. I also gave up streaming: the whole file is parsed into memory, which

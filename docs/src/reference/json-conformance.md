@@ -77,8 +77,12 @@ a 100,000-digit exponent, a `\u` escape truncated at every offset, one whose
 fourth byte lands mid-codepoint, the depth cap at 127, 128 and 129, and error
 columns counted in characters behind multi-byte text. All correct.
 
-`tests/fuzz.rs` adds 1,356,800 mutants and 169,834 truncation prefixes across
-every parser and all seven readers, with no panic anywhere.
+`tests/fuzz.rs` adds 1,366,400 mutants and 282,563 truncation prefixes across
+every parser and all eight readers, with no panic anywhere. It said *seven*
+until 2026-08-30, and it was right: `READERS` had seven entries and the tool had
+eight. yarn is the one it was missing, and it is the reader that then needed two
+fixes in a day. The array length is spelled out now, so a ninth reader will not
+compile until it is in the campaign too.
 
 ## Python is dev-time tooling
 

@@ -351,7 +351,12 @@ fn fixture(name: &str) -> String {
 type Reader = fn(&Path, &str) -> stranger::error::Result<stranger::lock::Tree>;
 
 /// Every reader `lock::read` dispatches to, against the fixture it is for.
-const READERS: [(&str, Reader); 7] = [
+///
+/// The length is spelled out so that adding a reader without adding it here
+/// does not compile. yarn went in without it and was the only one of the eight
+/// this campaign never saw, which is exactly the reader that then took two
+/// fixes in one day.
+const READERS: [(&str, Reader); 8] = [
     ("npm-s.package-lock.json", stranger::lock::npm::read),
     ("pnpm-l.pnpm-lock.yaml", stranger::lock::pnpm::read),
     ("cargo-s.Cargo.lock", stranger::lock::cargo::read),
@@ -359,6 +364,7 @@ const READERS: [(&str, Reader); 7] = [
     ("uv-m.uv.lock", stranger::lock::pypi::uv),
     ("reqs-s.requirements.txt", stranger::lock::pip::read),
     ("gomod-m.go.mod", stranger::lock::gomod::read),
+    ("yarn-m.yarn.lock", stranger::lock::yarn::read),
 ];
 
 /// How much bigger than its fixture a reader mutant may get. Growth is the
