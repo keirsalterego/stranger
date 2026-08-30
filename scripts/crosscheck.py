@@ -15,6 +15,8 @@ rules written against each format's spec rather than against `src/`:
     package-lock.json   entries under `packages`, minus the root and minus
                         anything that is a workspace directory or a `link`
     yarn.lock           entry headers, which are the only lines at column 0
+    pnpm-lock.yaml      keys at one indent under `packages:`, counted by
+                        line rather than by parsing any YAML
     go.mod              module paths inside `require`, in both the block and
                         the one-line spelling, and no other directive
     poetry.lock         [[package]] blocks; poetry writes no block for the
@@ -41,7 +43,15 @@ import sys
 from collections import defaultdict
 
 BIN = "./target/release/stranger"
-NAMES = ("Cargo.lock", "package-lock.json", "yarn.lock", "go.mod", "poetry.lock", "uv.lock")
+NAMES = (
+    "Cargo.lock",
+    "package-lock.json",
+    "yarn.lock",
+    "pnpm-lock.yaml",
+    "go.mod",
+    "poetry.lock",
+    "uv.lock",
+)
 
 
 def scan(path):
@@ -125,6 +135,39 @@ def yarn(text):
         if l and not l[0].isspace() and not l.startswith("#") and l.endswith(":")
     )
     return {"packages": n} if n else None
+
+
+def pnpm(text):
+    """Keys one indent under `packages:`, counted without parsing YAML.
+
+    Deliberately line-based. `src/yaml.rs` is the thing under test here, and an
+    oracle that parsed the document with the same shape of parser would agree
+    with it for the same reasons it might both be wrong. A pnpm lockfile puts
+    its package keys at exactly one indent under a top-level `packages:` and
+    nothing else there, which a line scan can see and a YAML parser is not
+    needed for.
+
+    A key spelled `file:...` or `link:...` is a workspace directory rather than
+    a fetched package, in v6 and v9 alike.
+    """
+    top = None
+    n = local = 0
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        if not line[0].isspace():
+            top = line.rstrip()
+            continue
+        if top != "packages:":
+            continue
+        if not re.match(r"^  \S", line) or not line.rstrip().endswith(":"):
+            continue
+        key = line.strip().rstrip(":").strip("'\"")
+        if key.startswith(("file:", "link:")):
+            local += 1
+        else:
+            n += 1
+    return {"packages": n, "workspace": local} if n else None
 
 
 def gomod(text):
@@ -224,6 +267,7 @@ ORACLES = {
     "Cargo.lock": cargo,
     "package-lock.json": npm,
     "yarn.lock": yarn,
+    "pnpm-lock.yaml": pnpm,
     "go.mod": gomod,
     "poetry.lock": poetry,
     "uv.lock": uv,

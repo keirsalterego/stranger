@@ -131,6 +131,7 @@ each format's spec rather than from `src/`:
 | `Cargo.lock` | `[[package]]` blocks; one with no `source` is a workspace member |
 | `package-lock.json` | entries under `packages`, minus the root, workspace directories and links |
 | `yarn.lock` | entry headers, the only lines at column 0 |
+| `pnpm-lock.yaml` | keys at one indent under `packages:`, counted by line rather than parsed |
 | `go.mod` | paths under `require`, in both spellings, and under no other directive |
 | `poetry.lock` | `[[package]]` blocks — poetry writes none for the root, so all of them |
 | `uv.lock` | `[[package]]` blocks, minus the one whose `source` is not a registry |
@@ -141,10 +142,25 @@ the hand-rolled [`src/json.rs`](stdlib.md) and a mature implementation have to
 agree on a hundred real files, or one of them is wrong. The three TOML rows are
 the same argument aimed at [`src/toml.rs`](../formats/poetry-uv.md).
 
-1,360 lockfiles crosschecked, 0 mismatches: 1,058 `Cargo.lock`, 146 `go.mod`,
-107 `package-lock.json`, 41 `yarn.lock`, and four each of `poetry.lock` and
-`uv.lock`. Six of the eight readers now have a second opinion; pnpm and
-requirements.txt do not, and that is the honest gap in this check.
+The pnpm row is line-based on purpose. [`src/yaml.rs`](../formats/pnpm.md) is
+the thing under test, and an oracle that parsed the document with the same shape
+of parser could agree with it for the same reasons both were wrong. A pnpm
+lockfile puts its package keys at exactly one indent under a top-level
+`packages:` and nothing else there, which a line scan can see without a YAML
+parser at all.
+
+1,373 lockfiles crosschecked, 0 mismatches: 1,058 `Cargo.lock`, 146 `go.mod`,
+107 `package-lock.json`, 41 `yarn.lock`, 16 `pnpm-lock.yaml`, and four each of
+`poetry.lock` and `uv.lock`.
+
+Seven of the eight readers have a second opinion. `requirements.txt` is the one
+that does not, and deliberately: a line in it *is* a requirement, so any oracle
+simple enough to be independent gets the answer wrong. A naive one counts 361
+requirement lines across the 35 files on this machine where the reader counts
+197, and the reader is right — 162 of the difference are `--hash` continuation
+lines, which belong to the requirement above them. An oracle that knew that
+would be a second copy of the reader, and two copies of one idea agree with each
+other for free.
 
 Writing the oracles found a bug in an oracle rather than in a reader, which is
 the outcome that makes the exercise worth doing at all. Poetry puts
