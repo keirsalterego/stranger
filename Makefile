@@ -28,6 +28,11 @@ ablation:
 repro:
 	@./scripts/repro.sh
 
+# The submission demo, driven rather than typed live on camera. Runs the real
+# binary against the real fixtures; nothing in it is staged.
+demo:
+	@./scripts/demo.sh
+
 # Every lockfile on the machine this runs on, asked two questions: did the
 # reader get through it, and did it get the right answer. The second half reads
 # the same files in Python, from the format specs rather than from src/, so the

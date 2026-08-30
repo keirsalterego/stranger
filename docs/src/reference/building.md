@@ -21,6 +21,7 @@ Under three seconds cold, because there is nothing to compile except this crate.
 | `make bench` | 50 timed runs on the largest fixture |
 | `make proof` | regenerate `deps-proof.txt` |
 | `make repro` | [build twice, compare hashes](reproducible-builds.md) |
+| `make demo` | the twelve beats of the submission video, run rather than typed |
 | `make sweep` | every lockfile on this machine, read twice and compared |
 | `make clean` | `cargo clean` |
 
