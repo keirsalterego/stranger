@@ -6,6 +6,7 @@ pub mod npm;
 pub mod pip;
 pub mod pnpm;
 pub mod pypi;
+pub mod yarn;
 
 use std::path::PathBuf;
 
@@ -218,6 +219,7 @@ pub const KNOWN: &[&str] = &[
     "poetry.lock",
     "uv.lock",
     "go.mod",
+    "yarn.lock",
 ];
 
 /// Which file this is, as opposed to which registry it points at.
@@ -239,6 +241,7 @@ pub enum Format {
     Poetry,
     Uv,
     GoMod,
+    Yarn,
 }
 
 impl Format {
@@ -263,6 +266,7 @@ impl Format {
             ("poetry.lock", Format::Poetry),
             ("uv.lock", Format::Uv),
             ("go.mod", Format::GoMod),
+            ("yarn.lock", Format::Yarn),
         ];
         table
             .into_iter()
@@ -295,6 +299,7 @@ pub fn read(path: &std::path::Path) -> crate::error::Result<Tree> {
         Some(Format::Poetry) => pypi::poetry(path, &src),
         Some(Format::Uv) => pypi::uv(path, &src),
         Some(Format::GoMod) => gomod::read(path, &src),
+        Some(Format::Yarn) => yarn::read(path, &src),
         None => Err(crate::error::Error::usage(format!(
             "{name}: not a lockfile stranger knows. It reads: {}",
             KNOWN.join(", ")
@@ -350,7 +355,7 @@ pub fn discover(dir: &std::path::Path) -> crate::walk::Walk {
 mod tests {
     use super::*;
 
-    /// The two lists of suffixes have to name the same seven files. `KNOWN` is
+    /// The two lists of suffixes have to name the same eight files. `KNOWN` is
     /// what the walk matches on and what "looked for:" prints; `Format::of` is
     /// what picks a reader. A name in one and not the other is either a
     /// lockfile found and then refused, or one advertised and never seen.
@@ -372,7 +377,8 @@ mod tests {
     fn a_prefixed_fixture_still_picks_its_reader() {
         assert_eq!(Format::of("npm-xl.package-lock.json"), Some(Format::Npm));
         assert_eq!(Format::of("reqs-s.requirements.txt"), Some(Format::Pip));
-        assert_eq!(Format::of("yarn.lock"), None);
+        assert_eq!(Format::of("yarn-l.yarn.lock"), Some(Format::Yarn));
         assert_eq!(Format::of("packages.lock.json"), None);
+        assert_eq!(Format::of("bun.lockb"), None);
     }
 }

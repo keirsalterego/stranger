@@ -815,7 +815,7 @@ fn an_unreadable_subdirectory_exits_two_beside_a_readable_sibling() {
 fn lockfiles_with_no_reader_are_named_not_ignored() {
     let dir = scratch("cli_unsupported");
     for name in [
-        "yarn.lock",
+        "pubspec.lock",
         "go.sum",
         "Gemfile.lock",
         "composer.lock",
@@ -830,7 +830,7 @@ fn lockfiles_with_no_reader_are_named_not_ignored() {
     let o = run(&["scan", dir.to_str().unwrap(), "--fail-on", "critical"]);
     let out = stdout(&o);
     assert_eq!(o.status.code(), Some(0), "{out}");
-    for named in ["yarn.lock", "go.sum", "gradle.lockfile", "bun.lockb"] {
+    for named in ["pubspec.lock", "go.sum", "gradle.lockfile", "bun.lockb"] {
         assert!(out.contains(named), "{named} missing from:\n{out}");
     }
     assert!(out.contains("found but not read"), "{out}");
@@ -953,4 +953,142 @@ fn json_lists_the_rules_that_could_not_fire() {
         na("fixtures/cargo-s.Cargo.lock"),
         ["install-script", "pinning"]
     );
+}
+
+// -- diff -------------------------------------------------------------------
+
+/// The command's whole reason to exist: `poisoned` is `npm-l` with three names
+/// planted in it, so the diff between them is exactly those three and nothing
+/// else. A `scan` of the poisoned file reports 55 drift findings and 35 trivial
+/// ones as well, all of which were already there.
+#[test]
+fn diff_isolates_what_the_change_added() {
+    let out = stdout(&run(&[
+        "diff",
+        "fixtures/npm-l.package-lock.json",
+        "fixtures/poisoned.package-lock.json",
+    ]));
+    for planted in ["chalck@5.3.0", "expres@4.18.2", "lodahs@4.17.21"] {
+        assert!(out.contains(planted), "{planted} missing from:\n{out}");
+    }
+    assert!(out.contains("added       3"), "{out}");
+    assert!(!out.contains("removed"), "nothing was removed:\n{out}");
+}
+
+/// The asymmetry that makes this different from two scans. Adding the planted
+/// names fails the gate; taking them back out passes it, on a tree that
+/// `scan --fail-on high` fails in both directions.
+#[test]
+fn the_gate_reads_the_direction_of_the_change() {
+    let forward = run(&[
+        "diff",
+        "fixtures/npm-l.package-lock.json",
+        "fixtures/poisoned.package-lock.json",
+        "--fail-on",
+        "high",
+    ]);
+    assert_eq!(forward.status.code(), Some(1), "{}", stdout(&forward));
+
+    let backward = run(&[
+        "diff",
+        "fixtures/poisoned.package-lock.json",
+        "fixtures/npm-l.package-lock.json",
+        "--fail-on",
+        "high",
+    ]);
+    assert_eq!(backward.status.code(), Some(0), "{}", stdout(&backward));
+
+    // And the tree itself is failing either way, which is the point.
+    let scan = run(&[
+        "scan",
+        "fixtures/poisoned.package-lock.json",
+        "--fail-on",
+        "high",
+    ]);
+    assert_eq!(scan.status.code(), Some(1), "{}", stdout(&scan));
+}
+
+#[test]
+fn diff_of_a_file_against_itself_is_empty() {
+    let o = run(&[
+        "diff",
+        "fixtures/npm-l.package-lock.json",
+        "fixtures/npm-l.package-lock.json",
+    ]);
+    assert_eq!(o.status.code(), Some(0));
+    assert!(stdout(&o).contains("no change"), "{}", stdout(&o));
+}
+
+/// Every package added and every package removed is a confident, detailed,
+/// meaningless answer. Refused rather than rendered.
+#[test]
+fn diff_across_ecosystems_is_refused() {
+    let o = run(&[
+        "diff",
+        "fixtures/cargo-s.Cargo.lock",
+        "fixtures/npm-xs.package-lock.json",
+    ]);
+    assert_eq!(o.status.code(), Some(2), "{}", stdout(&o));
+    assert!(
+        stderr(&o).contains("different ecosystems"),
+        "{}",
+        stderr(&o)
+    );
+}
+
+/// Two npm formats are comparable, and that diff is the one somebody migrating
+/// from npm to pnpm wants.
+#[test]
+fn diff_across_two_readers_of_one_ecosystem_is_allowed() {
+    let o = run(&[
+        "diff",
+        "fixtures/npm-l.package-lock.json",
+        "fixtures/pnpm-l.pnpm-lock.yaml",
+    ]);
+    assert_eq!(o.status.code(), Some(0), "{}", stderr(&o));
+    assert!(stdout(&o).contains("added"), "{}", stdout(&o));
+}
+
+#[test]
+fn diff_needs_two_paths() {
+    for args in [
+        vec!["diff"],
+        vec!["diff", "fixtures/npm-l.package-lock.json"],
+    ] {
+        let o = run(&args);
+        assert_eq!(o.status.code(), Some(2), "{args:?}");
+        assert!(stderr(&o).contains("two lockfiles"), "{}", stderr(&o));
+    }
+}
+
+/// One object, not a stream: a diff is one comparison however many packages it
+/// touched.
+#[test]
+fn diff_json_is_a_single_object() {
+    let out = stdout(&run(&[
+        "diff",
+        "--format",
+        "json",
+        "fixtures/npm-l.package-lock.json",
+        "fixtures/poisoned.package-lock.json",
+    ]));
+    assert_eq!(out.trim().lines().count(), 1, "{out}");
+    let v = stranger::json::parse(out.trim()).expect("parses");
+    assert_eq!(v.get("added").and_then(|a| a.as_array()).unwrap().len(), 3);
+    assert_eq!(
+        v.get("introduced")
+            .and_then(|a| a.as_array())
+            .unwrap()
+            .len(),
+        4
+    );
+}
+
+/// A flag that belongs to another subcommand is named, not swept into
+/// "unknown option" — the same courtesy `tree` extends.
+#[test]
+fn diff_names_the_flags_that_are_not_its_own() {
+    let o = run(&["diff", "a", "b", "--depth", "3"]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(stderr(&o).contains("tree flag"), "{}", stderr(&o));
 }

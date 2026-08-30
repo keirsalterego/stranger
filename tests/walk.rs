@@ -195,28 +195,26 @@ fn an_unreadable_directory_comes_back_named() {
 }
 
 /// Eight lockfiles in a directory used to produce "no lockfile". Not reading
-/// yarn is a declared cut; telling somebody holding a `yarn.lock` that they
-/// have no lockfile is a wrong answer.
+/// bun is a declared cut; telling somebody holding a `bun.lock` that they have
+/// no lockfile is a wrong answer.
 #[test]
 fn a_lockfile_with_no_reader_is_still_named() {
     let t = Tree::new("walk_unsupported");
-    t.file("yarn.lock")
+    t.file("bun.lock")
         .file("go.sum")
         .file("pkg/Gemfile.lock")
         .file("notes.json");
     let w = t.walk();
     assert!(w.found.is_empty(), "{:?}", w.found);
-    assert_eq!(w.unsupported, vec!["Gemfile.lock", "go.sum", "yarn.lock"]);
+    assert_eq!(w.unsupported, vec!["Gemfile.lock", "bun.lock", "go.sum"]);
 }
 
-/// Deduped, or a monorepo with one `yarn.lock` per package names it ten times.
+/// Deduped, or a monorepo with one `bun.lock` per package names it ten times.
 #[test]
 fn one_unsupported_name_however_many_copies() {
     let t = Tree::new("walk_unsupported_dedup");
-    t.file("a/yarn.lock")
-        .file("b/yarn.lock")
-        .file("c/yarn.lock");
-    assert_eq!(t.walk().unsupported, vec!["yarn.lock"]);
+    t.file("a/bun.lock").file("b/bun.lock").file("c/bun.lock");
+    assert_eq!(t.walk().unsupported, vec!["bun.lock"]);
 }
 
 /// `go.mod` has a reader now. It sat on the unsupported list while it did not,
@@ -228,6 +226,22 @@ fn a_format_with_a_reader_is_never_called_unsupported() {
     let w = walk::lockfiles(&t.0, stranger::lock::KNOWN);
     assert_eq!(w.found.len(), 1, "{:?}", w.found);
     assert_eq!(w.unsupported, vec!["go.sum"]);
+}
+
+/// The general form of the test above, which only covered one pair. Writing a
+/// reader means deleting the name from `UNSUPPORTED`, and forgetting to leaves
+/// a file that is scanned *and* reported as unread — the two halves of the
+/// output contradicting each other. Adding yarn is what found this: three
+/// tests used `yarn.lock` as their example of a format with no reader, and
+/// only one of them was near the list.
+#[test]
+fn no_name_is_on_both_lists() {
+    let both: Vec<&str> = walk::UNSUPPORTED
+        .iter()
+        .copied()
+        .filter(|u| stranger::lock::KNOWN.contains(u))
+        .collect();
+    assert!(both.is_empty(), "claimed and disclaimed: {both:?}");
 }
 
 /// Every directory passed over on purpose is recorded with why, because a blind

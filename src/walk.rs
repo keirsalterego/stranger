@@ -59,14 +59,14 @@ const SKIP: &[&str] = &[
 /// Naming a file it will not read is not the same as reading it, and it is
 /// strictly better than the silence it replaces: eight lockfiles in a
 /// directory used to print "no lockfile in .", which tells somebody with a
-/// yarn project that their repository has no lockfile. Not reading `yarn.lock`
-/// is a declared cut in DECISIONS.md, and a cut the user can see is a
+/// bun project that their repository has no lockfile. A format this tool does
+/// not read is a declared cut in DECISIONS.md, and a cut the user can see is a
 /// different thing from one only the author knows about.
 ///
 /// Matched exactly, unlike `lock::KNOWN`, which matches on the end of the name
 /// because this repository keeps fixtures called `npm-xl.package-lock.json`.
 /// Nobody keeps an `old.yarn.lock` and needs to be told about it.
-const UNSUPPORTED: &[&str] = &[
+pub const UNSUPPORTED: &[&str] = &[
     "Gemfile.lock",
     "Pipfile.lock",
     "Podfile.lock",
@@ -80,7 +80,6 @@ const UNSUPPORTED: &[&str] = &[
     "packages.lock.json",
     "pdm.lock",
     "pubspec.lock",
-    "yarn.lock",
 ];
 
 /// How deep to go. A monorepo keeps its manifests within two or three levels of
