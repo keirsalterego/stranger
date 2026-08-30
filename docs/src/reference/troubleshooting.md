@@ -11,7 +11,7 @@ $ rm -rf /tmp/project && mkdir -p /tmp/project
 $ ./target/release/stranger scan /tmp/project
 
   no lockfile stranger reads in /tmp/project
-  looked for: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock, go.mod
+  looked for: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock, go.mod, yarn.lock
 ```
 
 The usual cause is a name like `requirements-dev.txt`, which ends in `.txt` and
@@ -65,7 +65,7 @@ and cannot be read the same way.
 $ mkdir -p /tmp/renametest
 $ printf 'flask==3.0.0\n' > /tmp/renametest/requirements-dev.txt
 $ ./target/release/stranger scan /tmp/renametest/requirements-dev.txt
-stranger: requirements-dev.txt: not a lockfile stranger knows. It reads: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock, go.mod
+stranger: requirements-dev.txt: not a lockfile stranger knows. It reads: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock, go.mod, yarn.lock
 ```
 
 Seven formats in this build, and the error lists them from the same constant

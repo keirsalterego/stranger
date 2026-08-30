@@ -105,7 +105,7 @@ $ stranger scan .
 ```
 
 The walk finds every lockfile under the directory and audits them on separate
-threads — seven formats and four ecosystems in one pass, if that is what is there.
+threads — eight formats and four ecosystems in one pass, if that is what is there.
 It does not descend into `node_modules`, `target`, `.venv` or `dist`, because a
 populated `node_modules` holds hundreds of vendored lockfiles belonging to other
 people and auditing those is worse than auditing nothing.
@@ -113,7 +113,7 @@ people and auditing those is worse than auditing nothing.
 Results come out in path order rather than whichever thread finished first. Two
 runs over one tree produce the same bytes, so a diff between scans is a diff.
 
-There is a second subcommand, and it answers the question the first one raises:
+There are two more subcommands. The first answers the question `scan` raises:
 
 ```
 $ stranger tree <pkg> [path]
@@ -123,6 +123,20 @@ $ stranger tree <pkg> [path]
 the same lockfiles, printing who depends on one name, how many of them there
 are, and what that name depends on. [Looking at clause 3](#looking-at-clause-3)
 is what it looks like on a planted name.
+
+The second is the one a pull request wants:
+
+```
+$ stranger diff old.lock new.lock --fail-on high
+```
+
+`scan --fail-on` gates on the state of the tree, so a repository that already
+has 211 trivial packages fails on every pull request until somebody turns the
+gate off. `diff --fail-on` gates on what the change *introduced*, so it fails on
+the pull request that added something. Run over the poisoned fixture it reports
+the three planted names and nothing else, and reversing the two arguments exits
+0 on the same pair — because taking a problem out is not putting one in, and
+that asymmetry is the whole reason the subcommand exists.
 
 ## What it looks for
 
@@ -287,7 +301,7 @@ $ rm -rf /tmp/empty-project && mkdir -p /tmp/empty-project
 $ stranger scan /tmp/empty-project
 
   no lockfile stranger reads in /tmp/empty-project
-  looked for: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock, go.mod
+  looked for: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock, go.mod, yarn.lock
 ```
 
 Exit code 0. `stranger` never executes `npm`, `pip`, `cargo`, `git` or anything

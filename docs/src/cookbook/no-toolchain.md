@@ -37,7 +37,7 @@ $ rm -rf /tmp/empty && mkdir -p /tmp/empty
 $ ./target/release/stranger scan /tmp/empty
 
   no lockfile stranger reads in /tmp/empty
-  looked for: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock, go.mod
+  looked for: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock, go.mod, yarn.lock
 
 $ echo $?
 0
@@ -67,7 +67,7 @@ rule that silently does nothing.
 $ mkdir -p /tmp/renametest
 $ printf 'flask==3.0.0\n' > /tmp/renametest/requirements-dev.txt
 $ ./target/release/stranger scan /tmp/renametest/requirements-dev.txt
-stranger: requirements-dev.txt: not a lockfile stranger knows. It reads: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock, go.mod
+stranger: requirements-dev.txt: not a lockfile stranger knows. It reads: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock, go.mod, yarn.lock
 $ echo $?
 2
 ```

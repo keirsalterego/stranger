@@ -194,18 +194,21 @@ $ ./target/release/stranger tree requests fixtures/poetry-s.poetry.lock
 
 A name that is not in the tree is an answer, not a failure. Exit 0, and a list of
 what is close, measured with the same Damerau-Levenshtein function and the same
-threshold the rule uses. One name in two files is two lines, because the
-question `tree` answers is "where is it", and `lodahs` really is in both:
+threshold the rule uses. One name in five files is five lines, because the
+question `tree` answers is "where is it", and the real `lodash` is in all five
+while the planted `lodahs` is in two:
 
 ```console
 $ ./target/release/stranger tree lodashh fixtures/
 
-  no package named `lodashh` in the 20 lockfiles under fixtures/
+  no package named `lodashh` in the 23 lockfiles under fixtures/
 
   close names that are there:
      lodash                   d=1 · fixtures/npm-s.package-lock.json
      lodash                   d=1 · fixtures/npm-xl.package-lock.json
      lodash                   d=1 · fixtures/pnpm-l.pnpm-lock.yaml
+     lodash                   d=1 · fixtures/yarn-l.yarn.lock
+     lodash                   d=1 · fixtures/yarn-m.yarn.lock
      lodahs                   d=2 · fixtures/hostile.package-lock.json
      lodahs                   d=2 · fixtures/poisoned.package-lock.json
 

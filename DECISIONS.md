@@ -304,11 +304,11 @@ The human report prints `41ms`, because that is half the pitch and nobody diffs 
 terminal. The machine-readable object does not, and that is a deliberate
 subtraction rather than an omission.
 
-This file offers `diff <(stranger scan a --format json) <(stranger scan b --format
-json)` as the reason `stranger diff` was cut — you do not need a subcommand for
-something two shell redirections already do. That recipe printed a difference on
-every single run, because `elapsed_ms` was the one field that changed between two
-scans of the same tree. Everything else was already byte-identical, including the
+This file used to offer `diff <(stranger scan a --format json) <(stranger scan b
+--format json)` as the reason `stranger diff` was cut — you do not need a
+subcommand for something two shell redirections already do. That recipe printed a
+difference on every single run, because `elapsed_ms` was the one field that
+changed between two scans of the same tree. Everything else was already byte-identical, including the
 order of the findings and the order of the files in a directory scan, both of
 which cost real design effort to guarantee.
 
@@ -507,23 +507,47 @@ Recorded here as decisions rather than omissions.
 The plan had a line through the build list: everything below it was to be cut at
 H30 if unstarted, by the clock rather than by feeling. Two of the four items below
 that line landed anyway — `yaml.rs` with the pnpm reader, and the parallel scan on
-`std::thread::scope`. Two did not: `yarn.lock` and `stranger diff`, both written
-up below. One thing above the line was cut outright as well.
+`std::thread::scope`. The other two, `yarn.lock` and `stranger diff`, were cut at
+H30 and then built after the verify pass came back clean with time left. Both cuts
+and both uncuts are written up below, because the reason a thing was cut is worth
+more than the fact that it eventually landed. One thing above the line was cut
+outright as well.
 
-**`yarn.lock` — cut, and it was the right call twice over.** It was below the line,
-and there is no yarn fixture on this machine, so it would have shipped tested
-against a file I wrote myself to match my own reading of the format. Every other
-reader here was built against real lockfiles from real projects, and three of them
-found something I had assumed wrong. A reader validated only against my
-assumptions would have been the one place in this repository where that check did
-not happen.
+**`yarn.lock` — cut, then uncut when the reason stopped being true.** The original
+call had two halves. It was below the line, and there was no yarn fixture on this
+machine, so it would have shipped tested against a file I wrote myself to match my
+own reading of the format. Every other reader here was built against real lockfiles
+from real projects, and three of them found something I had assumed wrong. A reader
+validated only against my assumptions would have been the one place in this
+repository where that check did not happen.
 
-**`stranger diff old.lock new.lock` — cut.** Below the line, and a whole second
-verb: two trees, a matching problem between them, and a report format nothing else
-uses. `--format json` already emits a stable, ordered object per lockfile, so
-`diff <(stranger scan a --format json) <(stranger scan b --format json)` covers the
-case without a subcommand. Ordering findings deterministically was the part worth
-doing, and that shipped.
+The second half is what changed. There are real yarn v1 lockfiles on this machine
+after all — npm packages ship their own inside their tarballs, and `pdf-lib` has a
+4,408-line one — so the reader is tested against three files nobody wrote for it.
+That fixture immediately earned its place: yarn resolves edges by **specifier**
+rather than by resolved version, and a reader that matches `"@babel/highlight"
+"^7.0.0"` against the target's `version: 7.0.0` finds nothing. It does not error.
+It returns a full package list with an empty edge set, which reads as "nothing
+depends on anything" and quietly turns every package into an in-degree-zero
+slopsquat candidate. That is exactly the failure the fixture rule exists to catch,
+and it is the one I would have shipped.
+
+**`stranger diff old.lock new.lock` — cut, then uncut, and the cut reasoning was
+wrong in an interesting way.** The original call: a whole second verb for something
+`diff <(stranger scan a --format json) <(stranger scan b --format json)` already
+does. Making the JSON byte-stable between runs was the part worth doing, and that
+shipped first.
+
+What that argument missed is that the two commands answer different questions. A
+`scan` gate fires on the state of the tree, so a repository that already has 211
+trivial packages fails `--fail-on` on every pull request until somebody turns the
+gate off. The shell recipe reproduces that: it shows two full reports and leaves
+the reviewer to work out which lines are new. `stranger diff --fail-on high` gates
+on what the change *introduced*, which means a pull request that adds nothing
+passes on a tree `scan` fails. That asymmetry is the whole product, and no amount
+of byte-stable JSON produces it — `tests/cli.rs::the_gate_reads_the_direction_of_
+the_change` runs both directions over the poisoned fixture and asserts 1 then 0
+while `scan` returns 1 for both.
 
 **`go.mod` — cut, then uncut, and the reason for the cut turned out to be the
 reason to ship.** The original call: the parser is trivial, the corpus is not.

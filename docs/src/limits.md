@@ -107,7 +107,7 @@ $ rm -rf /tmp/nolock && mkdir -p /tmp/nolock
 $ ./target/release/stranger scan /tmp/nolock
 
   no lockfile stranger reads in /tmp/nolock
-  looked for: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock, go.mod
+  looked for: package-lock.json, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock, go.mod, yarn.lock
 ```
 
 The match is on the *end* of the filename, so a prefixed copy is still found —
@@ -131,10 +131,10 @@ every name starting with `.` goes, not just the seven dotted names below — and
 Fourteen lockfile names are recognised and have no reader: `Gemfile.lock`,
 `Pipfile.lock`, `Podfile.lock`, `bun.lock`, `bun.lockb`, `composer.lock`,
 `conan.lock`, `go.sum`, `gradle.lockfile`, `mix.lock`, `packages.lock.json`,
-`pdm.lock`, `pubspec.lock` and `yarn.lock`. Finding one prints `found but not
+`pdm.lock` and `pubspec.lock`. Finding one prints `found but not
 read:` and exits 0. Naming a file it will not read is not the same as reading
 it, and it is a great deal better than what it replaces — eight lockfiles in a
-directory used to print "no lockfile", which tells somebody with a yarn project
+directory used to print "no lockfile", which tells somebody with a bun project
 that their repository has no lockfile.
 
 `walk::SKIP` names thirteen directories the walk will not enter — `node_modules`,

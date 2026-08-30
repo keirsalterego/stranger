@@ -41,10 +41,10 @@ without guessing:
 ```console
 $ rm -rf /tmp/blind && mkdir -p /tmp/blind/ok /tmp/blind/locked
 $ cp fixtures/npm-xs.package-lock.json /tmp/blind/ok/package-lock.json
-$ touch /tmp/blind/yarn.lock
+$ touch /tmp/blind/bun.lock
 $ chmod 000 /tmp/blind/locked
 $ ./target/release/stranger scan --format json /tmp/blind | head -1
-{"unreadable":["/tmp/blind/locked"],"unsupported":["yarn.lock"]}
+{"unreadable":["/tmp/blind/locked"],"unsupported":["bun.lock"]}
 $ chmod 755 /tmp/blind/locked
 ```
 
