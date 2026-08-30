@@ -119,14 +119,35 @@ pub fn nearest_in<'a>(names: &[&'a str], eco: Ecosystem, name: &str) -> Option<(
 /// every package in a `requirements.txt` reaches the sweep; and the corpus is
 /// a snapshot, so the absent set grows every day it is not regenerated.
 ///
-/// A `Vec<Vec<&str>>` filled by one pass, and nothing cleverer. The
-/// ceiling is the widest band — npm holds 7,075 thirteen-character names and
-/// 33,316 across eleven to fifteen, so a thirteen-character query still runs
-/// the table against a quarter of the list. The upgrade past that is a
-/// deletion-neighbourhood index, which wants more memory than a corpus already
-/// compiled into the binary can spare.
+/// The widest band is still wide — npm holds 7,075 thirteen-character names and
+/// 33,316 across eleven to fifteen — so each candidate in it also carries a
+/// 64-bit map of which characters it contains, and most of them are rejected by
+/// one XOR before the edit-distance table is ever allocated.
+///
+/// The bound is exact. Every edit changes the set of distinct characters by at
+/// most two: an insertion adds at most one, a deletion removes at most one, a
+/// substitution does both at once, and a transposition changes nothing. So a
+/// symmetric difference of `d` characters needs at least `d / 2` edits, and a
+/// candidate whose map differs in more than `2k` bits cannot be within `k`
+/// however the table would have filled in. Bits collide — a byte is mapped with
+/// `& 63`, so `'0'` and `'p'` share one — and a collision can only hide a
+/// difference, never invent one, which costs a skip and never an answer.
+///
+/// That is the cheap half of the upgrade this comment used to defer to a
+/// deletion-neighbourhood index. The index wants more memory than a corpus
+/// already compiled into the binary can spare; this wants eight bytes a name,
+/// built once. The 500-name corpus-miss benchmark went from 10,054 ms to
+/// 62.8 ms and the largest npm fixture from 230.3 ms to 37.2 ms, on the same
+/// machine within the hour. The widest band is still the ceiling and the index
+/// is still the thing that removes it; this only stops most of the band from
+/// reaching the table.
 pub struct ByLength<'a> {
-    buckets: Vec<Vec<&'a str>>,
+    buckets: Vec<Vec<(&'a str, u64)>>,
+}
+
+/// Which characters a name contains, one bit each, `& 63` so it fits.
+fn charmap(name: &str) -> u64 {
+    name.bytes().fold(0, |m, b| m | 1 << (b & 63))
 }
 
 impl<'a> ByLength<'a> {
@@ -134,7 +155,7 @@ impl<'a> ByLength<'a> {
         let longest = names.iter().map(|n| n.chars().count()).max().unwrap_or(0);
         let mut buckets = vec![Vec::new(); longest + 1];
         for &name in names {
-            buckets[name.chars().count()].push(name);
+            buckets[name.chars().count()].push((name, charmap(name)));
         }
         ByLength { buckets }
     }
@@ -153,8 +174,16 @@ impl<'a> ByLength<'a> {
         // A query longer than anything in the corpus, so `lo` is past the end.
         let buckets = self.buckets.get(lo..=hi)?;
 
+        let want = charmap(&normalized);
         let mut best: Option<(&'a str, usize)> = None;
-        for &candidate in buckets.iter().flatten() {
+        for &(candidate, map) in buckets.iter().flatten() {
+            // Two edits move at most four characters in or out of the set, so
+            // anything further apart than that cannot be reached and is not
+            // worth a table. See the type's doc comment for why this is a
+            // bound rather than a guess.
+            if (want ^ map).count_ones() as usize > 2 * k {
+                continue;
+            }
             let Some(d) = query.distance_to(candidate) else {
                 continue;
             };

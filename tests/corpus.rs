@@ -211,6 +211,11 @@ fn exhaustive(names: &[&'static str], eco: Ecosystem, name: &str) -> Option<(&'s
 /// character deleted, doubled or transposed. A fixed stride rather than a
 /// seeded sample, because a corpus sweep is slow enough that a flaky version
 /// of this would get deleted rather than debugged.
+///
+/// This is also what guards the character-map prefilter, which is the other
+/// thing `nearest_in` may now skip a candidate for. There is no separate test
+/// for it on purpose: a second copy of `exhaustive` under another name is two
+/// things to keep in step, and the question both would ask is the same one.
 fn probes(names: &[&'static str]) -> Vec<String> {
     let mut out = Vec::new();
     for (i, name) in names.iter().enumerate().step_by(4_001) {
@@ -233,6 +238,19 @@ fn probes(names: &[&'static str]) -> Vec<String> {
     // end of the index there and has to come back empty rather than panic.
     out.extend(["expres", "lodahs", "chalck", "ksni", "taze", "hy", "a", ""].map(String::from));
     out.push("z".repeat(400));
+    // Two shapes the mutations above never make, and the two the character-map
+    // prefilter is likeliest to get wrong: a name reversed, which keeps every
+    // character and so passes the map filter while being far away by edits,
+    // and a name sharing no characters with anything, which the filter should
+    // reject outright. If the `2k` bound were off by one, these are where it
+    // would show.
+    out.extend(
+        names
+            .iter()
+            .step_by(9_007)
+            .map(|n| n.chars().rev().collect::<String>()),
+    );
+    out.extend(["!!!!!!!!", "\u{e9}\u{e9}\u{e9}\u{e9}\u{e9}"].map(String::from));
     out
 }
 
