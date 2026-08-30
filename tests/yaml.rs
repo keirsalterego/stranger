@@ -596,7 +596,7 @@ fn the_fixture_parses() {
 /// valid document or a positioned error; none of them may panic. A truncated
 /// lockfile is not hypothetical — it is what a killed `pnpm install` leaves.
 ///
-// ponytail: every offset in the first 8 KB, then every 1,024th. Truncation is
+// Every offset in the first 8 KB, then every 1,024th. Truncation is
 // quadratic and the file is 254 KB, so the exhaustive sweep is about twenty
 // minutes in a debug build for coverage of the same handful of constructs. The
 // dense window covers `importers` and the start of `packages`, which is where

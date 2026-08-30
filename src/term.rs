@@ -139,7 +139,7 @@ fn is_control(c: char) -> bool {
 
 /// Display width of a cell: one column per Unicode scalar.
 ///
-/// ponytail: `chars().count()` — wrong for three things. East Asian wide and
+/// `chars().count()` — wrong for three things. East Asian wide and
 /// fullwidth forms take two columns, combining marks take zero, and an emoji
 /// ZWJ sequence takes two however many scalars it is built from. Getting those
 /// right means shipping a table derived from `EastAsianWidth.txt` — tens of

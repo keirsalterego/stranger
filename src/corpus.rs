@@ -119,7 +119,7 @@ pub fn nearest_in<'a>(names: &[&'a str], eco: Ecosystem, name: &str) -> Option<(
 /// every package in a `requirements.txt` reaches the sweep; and the corpus is
 /// a snapshot, so the absent set grows every day it is not regenerated.
 ///
-/// ponytail: a `Vec<Vec<&str>>` filled by one pass, and nothing cleverer. The
+/// A `Vec<Vec<&str>>` filled by one pass, and nothing cleverer. The
 /// ceiling is the widest band — npm holds 7,075 thirteen-character names and
 /// 33,316 across eleven to fifteen, so a thirteen-character query still runs
 /// the table against a quarter of the list. The upgrade past that is a

@@ -268,8 +268,8 @@ joined before it returns.
 **What I gave up:** `rayon`'s work-stealing scheduler and its parallel iterators.
 This spawns one thread per lockfile, which is wrong for four hundred files and
 right for the single digits the walk actually produces — `node_modules` is
-skipped, so a real repo has a handful. The `// ponytail:` marker names the
-upgrade: chunk across `available_parallelism()`. From `crossbeam-channel` I gave
+skipped, so a real repo has a handful. The comment on it names the upgrade:
+chunk across `available_parallelism()`. From `crossbeam-channel` I gave
 up `select!` and the multi-consumer end; one producer per thread into one
 consumer is all this needs.
 
@@ -382,8 +382,8 @@ on Linux, where they do not arise.
 The width measurement is `chars().count()`, which is wrong for East Asian
 wide forms, combining marks and emoji ZWJ sequences. Correcting it means shipping
 a table generated from `EastAsianWidth.txt` and tracking a Unicode version, to
-align package names that npm, PyPI and crates.io all restrict to ASCII. Marked
-`// ponytail:` with that upgrade path named.
+align package names that npm, PyPI and crates.io all restrict to ASCII. The
+comment on it names that upgrade path.
 
 ---
 

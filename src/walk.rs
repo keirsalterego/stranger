@@ -120,7 +120,7 @@ pub struct Walk {
 /// Every lockfile `stranger` knows how to read under `root`, and everything it
 /// passed over on the way.
 ///
-/// ponytail: returns a `Walk` of `Vec`s rather than an iterator. The result is
+/// Returns a `Walk` of `Vec`s rather than an iterator. The result is
 /// a handful of paths that get iterated once, and a lazy walker would mean
 /// threading the stack and the depth through a struct to save allocating six
 /// `PathBuf`s.

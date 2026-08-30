@@ -198,7 +198,7 @@ struct Graph {
 }
 
 impl Graph {
-    /// ponytail: rebuilt per hit, so a name at four versions in one lockfile
+    /// Rebuilt per hit, so a name at four versions in one lockfile
     /// walks the edge list four times. That is O(V+E) on a list of a few
     /// thousand and it is not the slow part of anything; hoist it into the
     /// caller if a lockfile ever turns up where it is.

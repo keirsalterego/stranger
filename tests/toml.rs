@@ -431,7 +431,7 @@ fn error_positions_point_at_the_problem() {
 /// halfway through `{ url = "…", hash = "…"` is not the same bug as a cut
 /// halfway through `[[package]]`.
 ///
-// ponytail: capped at the first 4 KB of each file — truncation is quadratic,
+// Capped at the first 4 KB of each file — truncation is quadratic,
 // and the whole 29 KB `cargo-s` alone takes 50s in a debug build for coverage
 // of the same constructs. Raise the cap if a crash ever turns up past it.
 #[test]

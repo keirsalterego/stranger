@@ -419,7 +419,7 @@ fn tree(opts: TreeOptions) -> Result<ExitCode> {
 /// is what keeps that true, which is a smaller guarantee than "one file's
 /// problem stays one file's problem" and is the one actually on offer.
 ///
-/// ponytail: one thread per lockfile, not a pool. A repo with four hundred
+/// One thread per lockfile, not a pool. A repo with four hundred
 /// lockfiles would spawn four hundred threads, and the fix then is to chunk the
 /// slice across `available_parallelism()` — but the walk skips `node_modules`,
 /// so the realistic count is single digits and a pool would be scaffolding for
