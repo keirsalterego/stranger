@@ -125,9 +125,17 @@ jobs:
       - name: The docs still reproduce
         run: ./docs/check-output.py
 
-      # Not `cargo test --include-ignored` — the ablation scans six fixtures
-      # against a 140,000-name corpus ten times and takes about two minutes.
-      # It runs here because the README quotes its numbers.
+      # The step above now runs this too, and diffs every number it prints
+      # against the ones the README and the book publish. This stays because
+      # the two say different things when they fail: that one means a published
+      # figure is stale, this one means the rule itself stopped holding its
+      # invariants — clause 3 costing recall, or making precision worse.
+      #
+      # It scans six fixtures against a 140,000-name corpus ten times and used
+      # to take two minutes, which is why it was kept out of `cargo test`. The
+      # character-map prefilter in `corpus::ByLength` took it to four seconds
+      # and it is still separate, because a corpus sweep is not something to
+      # pay on every `cargo test`.
       - name: Ablation
         run: cargo test --release --test ablation -- --include-ignored
 
