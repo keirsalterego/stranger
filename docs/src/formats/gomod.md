@@ -78,6 +78,31 @@ Refusing an unknown directive rather than skipping it is the same call the
 quietly ignores what it has not heard of will one day quietly ignore a `require`
 spelled slightly wrong.
 
+## Module paths may be quoted
+
+The go grammar reads a module path as a Go string literal when it is written as
+one, in either spelling. This is not a corner of the format —
+`gopkg.in/yaml.v3`, one of the most depended-on modules in the ecosystem, ships
+a go.mod that quotes every path in it:
+
+```text
+module "gopkg.in/yaml.v3"
+
+require (
+	"gopkg.in/check.v1" v0.0.0-20161208181325-20d25e280405
+)
+```
+
+The quotes come off the path rather than travelling with it. That part is not
+cosmetic: a package named `"gopkg.in/check.v1"` — quotes included — is absent
+from every corpus and scores as a stranger on the strength of its own
+punctuation.
+
+What stays refused is a path holding a Go string *escape*. The module proxy
+URL-encodes the path it fetches, so a path that needs an escape resolves to
+nothing, and reading `\n` as two characters would invent a package name no
+registry holds. Refusing it is the same call as the unknown directive above.
+
 ## go.sum is not read
 
 It was the obvious next file and it earns nothing. Three reasons, in ascending

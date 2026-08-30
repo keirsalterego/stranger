@@ -286,9 +286,60 @@ fn stray_punctuation_is_refused() {
         (4, 3)
     );
     assert_eq!(at("module m\nrequire ( example.com/x v1.0.0 )\n"), (2, 11));
-    // Legal go.mod, and stranger refuses it rather than reading the quotes as
-    // part of the path.
-    assert_eq!(at("module m\nrequire \"example.com/x\" v1.0.0\n"), (2, 9));
+    // An opening quote with no closing one is a real syntax error, and stays
+    // one now that terminated quotes are read.
+    assert_eq!(at("module m\nrequire \"example.com/x v1.0.0\n"), (2, 9));
+}
+
+/// A quoted module path is ordinary go.mod, not a corner of it: `gopkg.in/
+/// yaml.v3` ships one, and this reader used to refuse the file outright with
+/// a comment claiming nothing in the wild wrote them.
+///
+/// Both string forms, in both the directive and the block, and the quotes
+/// must come off the path rather than travel with it — a package named
+/// `"example.com/x"` would be absent from every corpus and score as a
+/// stranger on the strength of its own punctuation.
+#[test]
+fn quoted_module_paths_are_read() {
+    let t = parse(concat!(
+        "module \"example.com/m\"\n",
+        "go 1.21\n",
+        "require (\n",
+        "\t\"example.com/x\" v1.0.0\n",
+        "\t`example.com/y` v2.0.0 // indirect\n",
+        ")\n",
+        "require \"example.com/z\" v3.0.0\n",
+    ));
+    let mut names: Vec<&str> = t.packages.iter().map(|p| p.name.as_str()).collect();
+    names.sort_unstable();
+    assert_eq!(names, ["example.com/x", "example.com/y", "example.com/z"]);
+    assert!(t.packages.iter().all(|p| !p.name.contains(['"', '`'])));
+    // `// indirect` still lands, so unquoting did not eat the comment split.
+    assert_eq!(t.roots.len(), 2);
+}
+
+/// The one quoted path that stays refused. A Go string escape cannot survive
+/// the module proxy, which URL-encodes the path it fetches, so a path needing
+/// one resolves to nothing — and reading `\n` as two characters would invent
+/// a package name no registry holds.
+#[test]
+fn an_escaped_path_is_still_refused() {
+    let err = reject("module m\nrequire \"example.com/\\x\" v1.0.0\n");
+    assert!(err.to_string().contains("string escape"), "{err}");
+}
+
+/// The real file that exposed the bug, byte for byte.
+#[test]
+fn the_yaml_v3_header_parses() {
+    let t = parse(concat!(
+        "module \"gopkg.in/yaml.v3\"\n",
+        "\n",
+        "require (\n",
+        "\t\"gopkg.in/check.v1\" v0.0.0-20161208181325-20d25e280405\n",
+        ")\n",
+    ));
+    assert_eq!(t.packages.len(), 1);
+    assert_eq!(t.packages[0].name, "gopkg.in/check.v1");
 }
 
 /// Fixtures are named `gomod-m.go.mod`, so dispatch has to match on the suffix

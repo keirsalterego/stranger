@@ -109,24 +109,44 @@ pub fn read(path: &Path, src: &str) -> Result<Tree> {
             Some(at) => (&raw[..at], raw[at + 2..].trim()),
             None => (raw, ""),
         };
-        let toks = tokens(body);
+        let mut toks = tokens(body);
+        // A module path may be quoted, and the go lexer reads Go string
+        // literals when it is. `gopkg.in/yaml.v3` — one of the most
+        // depended-on modules in the ecosystem — ships a go.mod that quotes
+        // every path in it, so this is the grammar being used, not a corner
+        // of it.
+        //
+        // The unquoting is the delimiters and nothing else. A path holding an
+        // escape is still refused rather than mis-read, and that costs
+        // nothing real: the module proxy URL-encodes the path it fetches, so
+        // a path needing a Go string escape is a path nothing can resolve.
+        for (tok, at) in &mut toks {
+            let inner = match tok.as_bytes() {
+                [b'`', .., b'`'] | [b'"', .., b'"'] => &tok[1..tok.len() - 1],
+                [b'"' | b'`', ..] => {
+                    return Err(syntax(
+                        format!("`{tok}` is not a terminated string literal"),
+                        line,
+                        *at,
+                    ));
+                }
+                _ => continue,
+            };
+            if inner.contains('\\') {
+                return Err(syntax(
+                    format!("`{tok}` uses a string escape and stranger does not read those"),
+                    line,
+                    *at,
+                ));
+            }
+            *tok = inner;
+        }
         // Blank, or nothing but a comment. Both are legal anywhere, including
         // between the entries of a block, and `retract` blocks are full of
         // them.
         let Some(&(first, col)) = toks.first() else {
             continue;
         };
-        // A module path may be quoted, and the go lexer reads Go string
-        // literals when it is. Nothing in the wild does this — a path that
-        // needs escaping is a path the proxy cannot fetch — so refusing beats
-        // shipping an unescaper for a case with no caller.
-        if let Some(&(quoted, at)) = toks.iter().find(|(t, _)| t.starts_with(['"', '`'])) {
-            return Err(syntax(
-                format!("`{quoted}` is a quoted path and stranger does not read those"),
-                line,
-                at,
-            ));
-        }
 
         match open {
             // Inside a block every line is an entry of the directive that
