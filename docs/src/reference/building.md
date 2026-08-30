@@ -94,6 +94,21 @@ could not get through is a bug, and the script exits 1 on one.
 On the machine this was written on, 1,484 lockfiles across all eight formats:
 8 refused, 0 unread.
 
+Getting there took four fixes, and this is the part worth stating plainly —
+every one of the four was in the ordinary case, and not one was reachable from
+the fixtures:
+
+| | what refused a valid file |
+|---|---|
+| [yarn](../formats/yarn.md) | a bare `peerDependencies:` header |
+| [yaml](../formats/pnpm.md) | a `deprecated: \|-` block scalar |
+| [go.mod](../formats/gomod.md) | a quoted module path — `gopkg.in/yaml.v3` ships one |
+| [diff](../using/diff.md) | printed `no change` and exited 1 in the same breath |
+
+Two of them had a comment beside the bug asserting the case did not arise. The
+go.mod one said *nothing in the wild does this*, and the counterexample was
+already on the disk.
+
 ### Getting through is not the same as being right
 
 That first pass catches a refusal and misses the worse failure: a reader that
@@ -116,21 +131,6 @@ the hand-rolled [`src/json.rs`](stdlib.md) and a mature implementation have to
 agree on a hundred real files, or one of them is wrong.
 
 1,206 lockfiles crosschecked, 0 mismatches.
-
-Getting there took four fixes, and this is the part worth stating plainly —
-every one of the four was in the ordinary case, and not one was reachable from
-the fixtures:
-
-| | what refused a valid file |
-|---|---|
-| [yarn](../formats/yarn.md) | a bare `peerDependencies:` header |
-| [yaml](../formats/pnpm.md) | a `deprecated: \|-` block scalar |
-| [go.mod](../formats/gomod.md) | a quoted module path — `gopkg.in/yaml.v3` ships one |
-| [diff](../using/diff.md) | printed `no change` and exited 1 in the same breath |
-
-Two of them had a comment beside the bug asserting the case did not arise. The
-go.mod one said *nothing in the wild does this*, and the counterexample was
-already on the disk.
 
 The sweep is not in `cargo test` and cannot be: its corpus is whatever happens
 to be on the machine, so it is neither fixed nor portable, and a test that
