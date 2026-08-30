@@ -184,6 +184,72 @@ fn both_registry_hosts_are_the_registry() {
     assert_eq!(find(&t, "c").origin, Origin::Elsewhere);
 }
 
+/// Every nested block a v1 entry can carry, not just the two that hold edges.
+///
+/// `peerDependencies:` is a bare header with no value on its line, and the
+/// field scanner used to hand it to the `key value` splitter, which refused
+/// it. The effect was a syntax error on a lockfile that has no syntax error
+/// in it — and peer dependencies are ordinary, so this was most of the real
+/// yarn v1 files in existence, not a corner.
+#[test]
+fn every_block_header_is_tolerated() {
+    for block in [
+        "peerDependencies",
+        "engines",
+        "os",
+        "cpu",
+        "dependenciesMeta",
+        "peerDependenciesMeta",
+    ] {
+        let src = format!("a@^1.0.0:\n  version \"1.0.0\"\n  {block}:\n    x \"1\"\n");
+        let t = read(&src).unwrap_or_else(|e| panic!("{block}: {e}"));
+        assert_eq!(t.packages.len(), 1, "{block}");
+        assert_eq!(find(&t, "a").version, "1.0.0", "{block}");
+    }
+}
+
+/// Which blocks are edges, and which are not.
+///
+/// `peerDependencies` is an edge here because it is one in `npm.rs`, and both
+/// readers are `Ecosystem::Npm` — `stranger diff` will put an npm lockfile
+/// against a yarn one for the same project, and a name whose in-degree
+/// changed with the reader would report a slopsquat finding as introduced by
+/// a migration that introduced nothing.
+///
+/// `engines` is the counter-case: `node ">=6"` is the same two-token shape as
+/// a dependency line and names no package at all.
+#[test]
+fn the_block_decides_whether_a_line_is_an_edge() {
+    let edges_for = |block: &str| {
+        read(&format!(
+            "a@^1.0.0:\n  version \"1.0.0\"\n  {block}:\n    x \"^1.0.0\"\nx@^1.0.0:\n  version \"1.0.0\"\n"
+        ))
+        .unwrap_or_else(|e| panic!("{block}: {e}"))
+        .edges
+        .len()
+    };
+    for block in ["dependencies", "optionalDependencies", "peerDependencies"] {
+        assert_eq!(edges_for(block), 1, "{block} should be an edge");
+    }
+    for block in ["engines", "os", "cpu", "dependenciesMeta"] {
+        assert_eq!(edges_for(block), 0, "{block} should not be an edge");
+    }
+}
+
+/// A block that reopens `dependencies` after another block closed it still
+/// reads as edges: the header sets the mode, it is not a one-shot latch.
+#[test]
+fn a_block_after_another_block_still_reads() {
+    let t = read(concat!(
+        "a@^1.0.0:\n  version \"1.0.0\"\n",
+        "  peerDependencies:\n    ignored \"^1.0.0\"\n",
+        "  dependencies:\n    x \"^1.0.0\"\n",
+        "x@^1.0.0:\n  version \"1.0.0\"\n",
+    ))
+    .unwrap();
+    assert_eq!(t.edges.len(), 1, "{:?}", t.edges);
+}
+
 // -- refusals ---------------------------------------------------------------
 
 /// Berry is a real YAML document keyed `name@npm:range`. Same filename,

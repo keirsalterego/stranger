@@ -75,6 +75,35 @@ stranger: /tmp/berry/yarn.lock: this is a Yarn Berry (v2+) lockfile; stranger re
 Berry is a real YAML document keyed `name@npm:range` with its own `__metadata`
 version counter. Same filename, different format.
 
+## Nested blocks
+
+An entry's fields are `key value` pairs, except for the ones that are a bare
+`name:` opening a block indented under it. Six of them turn up:
+
+| block | read as |
+|---|---|
+| `dependencies`, `optionalDependencies`, `peerDependencies` | graph edges |
+| `engines`, `os`, `cpu`, `dependenciesMeta`, `peerDependenciesMeta` | consumed and dropped |
+
+`peerDependencies` is an edge for [the same reason it is one in npm](npm.md): a
+peer dep is a real maintainer writing down a real name, which is the evidence
+[the detection rule](../detection/rule.md) wants, and an in-edge can only make
+that rule quieter. Both readers produce `Ecosystem::Npm` and
+[`stranger diff`](../using/diff.md) will put one against the other, so a name
+with in-degree 1 under npm must not have in-degree 0 under yarn — otherwise
+migrating a project between the two reports findings the migration did not
+introduce.
+
+`engines` is the counter-case and the reason the block matters rather than the
+line: `node ">=6"` is the same two-token shape as a dependency line and names
+no package at all.
+
+The bare header itself is the trap. `peerDependencies:` has no value on its
+line, so a field scanner that splits every line into `key value` has nothing to
+split and reports a syntax error — against a file that has none, and against
+most of the real yarn v1 lockfiles in existence, since peer dependencies are
+ordinary.
+
 ## What the format does not record
 
 **The root manifest.** Direct dependencies live in `package.json`, which is not

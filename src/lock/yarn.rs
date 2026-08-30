@@ -111,12 +111,33 @@ pub fn read(path: &Path, src: &str) -> Result<Tree> {
             if trimmed.is_empty() || trimmed.starts_with('#') {
                 continue;
             }
-            match trimmed {
-                "dependencies:" | "optionalDependencies:" => {
-                    entry.in_deps = true;
-                    continue;
-                }
-                _ => {}
+            // A bare `name:` with nothing after it opens a nested block.
+            // Three of them hold `name range` pairs and are edges; the rest —
+            // `engines`, `os`, `cpu`, and the two `…Meta` blocks — hold things
+            // this tool does not report, and their contents fall through to
+            // the `key value` arm below and are dropped there by name.
+            //
+            // `peerDependencies` counts as an edge for the reason `npm.rs`
+            // counts it: a peer dep is a real maintainer writing down a real
+            // name, which is the evidence the detection rule wants, and an
+            // in-edge can only make that rule quieter. Both readers are
+            // `Ecosystem::Npm` and `stranger diff` will put one against the
+            // other, so a name with in-degree 1 under npm must not have
+            // in-degree 0 under yarn.
+            //
+            // What none of these headers may do is reach `pair`, which wants a
+            // value and errors when a header has none. That is what refused
+            // every real lockfile carrying a peer dependency: a syntax error,
+            // reported against a file that has none.
+            if let Some(block) = trimmed
+                .strip_suffix(':')
+                .filter(|b| !b.contains(char::is_whitespace))
+            {
+                entry.in_deps = matches!(
+                    block,
+                    "dependencies" | "optionalDependencies" | "peerDependencies"
+                );
+                continue;
             }
             // A dependency line is nested one level deeper than the block
             // header that opened it. Depth is what separates
