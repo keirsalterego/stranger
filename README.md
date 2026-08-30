@@ -319,14 +319,14 @@ it twice and prints what it got:
 
 ```
 $ make repro
-commit:  81716ac9e2ffa8178af1780378fe1591186d9870
+commit:  915951c68705be35816afde598b1a489a7a82b28
 rustc:   rustc 1.98.0 (88d9e12ae 2026-08-18)
 epoch:   1787940000
 
-build A  /tmp/stranger-repro.102959/a
-         a7cb6a024249a28bd48884023406518e5fe3773a00bf8bb00f40cca84a2614de
-build B  /tmp/stranger-repro.102959/b-with-a-deliberately-longer-name
-         a7cb6a024249a28bd48884023406518e5fe3773a00bf8bb00f40cca84a2614de
+build A  /tmp/stranger-repro.162272/a
+         4403ffad63d28fbbdd6379b443e3c29456bdee59bfd66c61a3f4dea4fe93993f
+build B  /tmp/stranger-repro.162272/b-with-a-deliberately-longer-name
+         4403ffad63d28fbbdd6379b443e3c29456bdee59bfd66c61a3f4dea4fe93993f
 
 MATCH — byte-identical across two directories
 ```
@@ -350,8 +350,18 @@ cargo build --release --locked
 ```
 
 `SOURCE_DATE_EPOCH` is the hackathon kickoff. `CARGO_INCREMENTAL=0` because
-incremental artifacts are not deterministic. The remap is what makes two
-directories produce one binary.
+incremental artifacts are not deterministic. The remap rewrites the build
+directory out of anything carrying it.
+
+None of the three is actually load-bearing here, and saying so is better than
+letting a flag take the credit: two plain `cargo build --release --locked` runs in
+two directories of different lengths, with none of the settings, give the same
+binary and the same hash. Cargo compiles the local crate through a relative path,
+so `panic!` locations come out as `src/main.rs` and there is no absolute path to
+remap; the absolute paths in the binary are the standard library's and point into
+the rustup toolchain, which is the same on one machine and different on another —
+exactly the boundary the FAQ draws. The settings stay because they are what keeps
+it true the day something does embed the build directory.
 
 ## Package Killer: `serde_json`
 

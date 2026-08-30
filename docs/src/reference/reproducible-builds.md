@@ -4,14 +4,14 @@ Same commit, same toolchain, two different directories, one binary.
 
 ```console
 $ make repro
-commit:  81716ac9e2ffa8178af1780378fe1591186d9870
+commit:  915951c68705be35816afde598b1a489a7a82b28
 rustc:   rustc 1.98.0 (88d9e12ae 2026-08-18)
 epoch:   1787940000
 
-build A  /tmp/stranger-repro.102959/a
-         a7cb6a024249a28bd48884023406518e5fe3773a00bf8bb00f40cca84a2614de
-build B  /tmp/stranger-repro.102959/b-with-a-deliberately-longer-name
-         a7cb6a024249a28bd48884023406518e5fe3773a00bf8bb00f40cca84a2614de
+build A  /tmp/stranger-repro.162272/a
+         4403ffad63d28fbbdd6379b443e3c29456bdee59bfd66c61a3f4dea4fe93993f
+build B  /tmp/stranger-repro.162272/b-with-a-deliberately-longer-name
+         4403ffad63d28fbbdd6379b443e3c29456bdee59bfd66c61a3f4dea4fe93993f
 
 MATCH — byte-identical across two directories
 ```
@@ -50,8 +50,37 @@ value is the hackathon kickoff, 2026-08-28 18:00 UTC.
 
 `CARGO_INCREMENTAL=0` because incremental artifacts are not deterministic.
 
-`--remap-path-prefix` is what makes two directories produce one binary. `-C
-debuginfo=0` drops the rest of the path leakage that lives in debug info.
+`--remap-path-prefix` rewrites the build directory out of anything that carries
+it, and `-C debuginfo=0` drops the rest of the path leakage that lives in debug
+info.
+
+Neither turns out to be load-bearing, and the honest thing is to say so rather
+than let the flag take credit. Two plain `cargo build --release --locked` runs in
+two directories of different lengths, with none of the three settings, produce the
+same binary and the same hash as `make repro` does. The reason is that Cargo
+compiles the local crate through a *relative* path, so `panic!` locations come out
+as `src/main.rs` and there is no absolute path for the remap to rewrite:
+
+```console
+$ strings target/release/stranger | grep -E '^src/[a-z]+\.rs$' | head -3
+src/tree.rs
+src/main.rs
+src/toml.rs
+```
+
+The absolute paths that *are* in the binary belong to the standard library, and
+they point into the rustup toolchain rather than into this repository:
+
+```console
+$ strings target/release/stranger | grep -c "$HOME/.rustup"
+20
+```
+
+Those are identical for every build on one machine and different on another, which
+is exactly the boundary the FAQ draws. The settings stay because they are what
+stops this from silently ceasing to be true — a `include_str!(concat!(env!("...")))`
+or a build script would put the build directory in the binary tomorrow, and the
+flag is already there when it does.
 
 ## How the check works
 
